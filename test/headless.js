@@ -752,6 +752,35 @@ console.log('§14 volley and charge; your horse');
   }
 }
 
+console.log('§15 the battle builder');
+{
+  const { Builder, QUALITY } = X;
+  const army = Builder.starter();
+  chk('the starter armies are within a 350 budget', Builder.total(army.mine) <= 350 && Builder.total(army.theirs) <= 350, Builder.total(army.mine) + ' / ' + Builder.total(army.theirs));
+  chk('better men, more men and heavier horse cost more',
+    Builder.cost({ arm: 'foot', size: 24, kind: 'battalion', quality: 'veteran' }) > Builder.cost({ arm: 'foot', size: 24, kind: 'battalion', quality: 'raw' })
+    && Builder.cost({ arm: 'foot', size: 40, kind: 'battalion', quality: 'trained' }) > Builder.cost({ arm: 'foot', size: 24, kind: 'battalion', quality: 'trained' })
+    && Builder.cost({ arm: 'cav', size: 24, type: 'cuirassiers', quality: 'trained' }) > Builder.cost({ arm: 'cav', size: 24, type: 'chasseurs', quality: 'trained' }));
+  chk('each side buys its own horse', Builder.horseFor('british').every(k => CAV_TYPES[k].faction === 'british') && Builder.horseFor('french').includes('cuirassiers') && !Builder.horseFor('british').includes('cuirassiers'));
+  army.mine.units.push({ arm: 'cav', size: 24, type: 'heavy_dragoons', quality: 'veteran' }, { arm: 'gun', guns: 2, quality: 'trained' });
+  army.theirs.units.push({ arm: 'gun', guns: 2, quality: 'trained' });
+  let ok = true, ends = 0;
+  for (const map of BATTLE_POOL.concat(SETPIECE_POOL, 'finale')) {
+    const B = Battle.create({ scenario: map, seed: 2001, army, company: Builder.company(army.mine.own, 2001) });
+    const mine = B.units.filter(u => u.team === TEAM_PLAYER), theirs = B.units.filter(u => u.team === TEAM_ENEMY);
+    // every man on open ground, everyone where the builder put them, both sides as built
+    const stuck = B.units.some(u => u.men.some(m => !Field.passable(B.field, m.x, m.y)));
+    if (stuck || mine.length !== army.mine.units.length + 1 || theirs.length !== army.theirs.units.length || B.hq
+      || !mine.every(u => u.isPlayer || u.cy > B.field.h / 2) || !theirs.every(u => u.cy < B.field.h / 2)) { ok = false; console.log('   ', map, stuck, mine.length, theirs.length, !!B.hq); }
+  }
+  chk('built armies deploy on every field: ours south, theirs north, nobody in a wall, no headquarters', ok);
+  const B = Battle.create({ scenario: 'plain', seed: 2002, army, company: Builder.company(army.mine.own, 2002), commander: { hp: 3, maxHp: 3, horse: true } });
+  chk('…your company is as you built it, and on its horse if you said so', B.player.startSize === army.mine.own.size && B.player.men.filter(m => m.weapon === 'rifle').length === army.mine.own.rifles && !!B.cmd.horse);
+  chk('…with British horse and guns on our side', B.units.some(u => u.team === TEAM_PLAYER && u.cav === CAV_TYPES.heavy_dragoons) && B.units.some(u => u.team === TEAM_PLAYER && u.arm === 'gun'));
+  run(B, CFG.NIGHTFALL);
+  chk('…and the battle plays out to an end', B.over, B.result && B.result.how);
+}
+
 console.log('§8 music & the page');
 chk('every tune note is a real pitch', Object.values(TUNES).every(t => t.melody.every(([n]) => n === 'R' || noteFreq(n) > 200)));
 chk('every order has a drum call', ['follow', 'line', 'advance', 'halt', 'ready', 'fire', 'atwill', 'cease', 'charge', 'fallback', 'skirmish', 'rally'].every(k => DRUM_CALLS[k]));

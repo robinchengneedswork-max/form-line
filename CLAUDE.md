@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 170 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 177 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -43,6 +43,7 @@ export line). A headless check asserts that index.html's script order matches.
 | `data/setpieces.js` | the big battles (bigger `size`, `setpiece: true`): The Long Ridge, The Village on the Stream, and the finale |
 | `place.js` | **drag to place** (the user asked for it): a stroke gives centre (midpoint) + alignment; the company faces across it toward the nearest enemy you can see, else away from you; at most `PLACE_RANGE` from where it stands. Mouse = left-drag (keeps the current shape); touch = Form → Line/Skirmish/Column arms it, the next drag places, a tap forms on the spot, a hold re-opens the wheel. Pure `plan()` is in the headless sim |
 | `touch.js` | phone controls: tap = walk, hold = two-level order wheel (Fire up / Bayonet right / Form down / Move left), drag = look, pinch = zoom |
+| `builder.js` | the battle builder: unit costs in renown, budgets, auto-deployment of two built armies |
 | `battle.js` | create / fixed-step tick / per-team fog of war / end check. Pure: emits `events` (sound) + `fx` (picture) |
 | `campaign.js` | route map (11 rows, StS-style), renown, rank, roster persistence, camp/shop/events |
 | `render.js` `audio.js` `input.js` `ui.js` `main.js` | the browser side. `Sound`, not `Audio` (that is a DOM global) |
@@ -136,6 +137,16 @@ The agreed roadmap for a rewarding progression curve: **cavalry + square first, 
 - **Cover, explained** (the user found the grey wall lines opaque): cover only protects the man IN it — `Field.coverFor(target, shooter)` = the target's ground (woods 0.55, orchard 0.75, wheat 0.9, standing on a wall 0.35) or a wall within 2.5–4.5 m of the target toward the shooter (0.35). Your fire OUT of cover is unaffected. Walls do not block sight; they slow men to 0.35. The HUD now has a line: "Behind a wall — they hit you a third as often / In cover / In the open · they are in cover" (`UI.coverLine`).
 - **Quick battle** expanded: skirmishes + set-piece battles + finale; stage (Early/Middle/Late/Waterloo → `level`), company size 24–48, company type, mounted. `Campaign.quickCompany` builds a seasoned company to match (NCOs, rifles, drill).
 - **Future topics the user raised (not started):** a points-based battle builder (renown as the budget) as groundwork for PvP; asymmetric factions; runners + bugle for commanding allies; named NCOs leading detachments (e.g. a rifle party) that can be reabsorbed.
+
+## Battle builder (round 7 — the user: "start with battle builder so we can have the sandbox")
+
+The user's reasoning: commanding more than ~2 units needs campaign power-scaling to reach it in time, so a sandbox comes first; it is also the groundwork for a future **PvP** mode (renown-points armies) and **asymmetric factions**.
+
+- `builder.js` (sim, after command.js): `Builder.cost(spec, own)` in renown (foot: size × `QUALITY[q].cost` (+8 for light/line/grenadier); horse: size × `CAV_TYPES[t].price` × quality; guns: 45/gun × quality; your company + 4/rifle + 15 mounted). `QUALITY` raw/trained/veteran/guard → drill, nerve, campaign stage. `BUDGETS` per side (0 = no limit).
+- `Builder.deploy(army, sc, field, rng)` returns a scenario-style `{player, allies, enemies}`: ours along the south edge, theirs the north; foot in 110 m slots out from the centre (a second line 75 m back when full), guns between and a little forward, horse on the wings; `Builder.open` nudges every anchor onto open ground. `Battle.create({army})` uses it instead of `sc.deploy`, and **skips headquarters** on set-piece maps (no tasks).
+- `Builder.company(own, seed)` = `Campaign.quickCompany` + quality/rifles.
+- Horse is per faction now (`CAV_TYPES[k].faction`, `.price`): British **light_dragoons** and **heavy_dragoons** added; British gunners/batteries in factions.js. Allied horse and guns use the same AI as the French.
+- UI: title → **Battle builder** (`UI.builder`, `#screen-builder`); the army is saved per viewer in `localStorage['formline.army']` (`App.loadArmy/saveArmy`, try/catch'd). `App.builderBattle`.
 
 ## Company customization (campaign)
 

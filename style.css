@@ -167,3 +167,20 @@ button.mini { font-size: 12px; padding: 2px 8px; }
   font: 700 17px Georgia, serif; padding: 10px 22px; background: #2d4a2b; color: #f1e8d2; border: 2px solid #e8be50; border-radius: 6px; cursor: pointer; }
 #btn-leavefield.show { display: block; }
 body.touch #btn-leavefield { bottom: 84px; }
+
+/* ── the battle builder ── */
+.bhead { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 14px; }
+.bsides { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 760px) { .bsides { grid-template-columns: 1fr; } }
+.bside { border-top: 1px solid rgba(43,32,22,0.3); padding-top: 6px; }
+.brow { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px dashed rgba(43,32,22,0.18); }
+.bcells { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.brow select { font-size: 13px; padding: 3px; max-width: 150px; }
+.brow .arm { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-2); width: 44px; }
+.brow.own .arm { color: var(--red); font-weight: 600; }
+.brow .bl { font-size: 13px; }
+.brow .cost { font-size: 14px; min-width: 28px; text-align: right; }
+.badd { display: flex; gap: 6px; margin-top: 8px; }
+.btot { font-weight: 600; margin-top: 8px; }
+.btot.over { color: var(--red); }
+.bfoot { display: flex; align-items: center; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }

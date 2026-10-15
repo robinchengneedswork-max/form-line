@@ -16,6 +16,8 @@ const FACTIONS = {
     cry: 'Huzzah!',
     companies: ['Light Coy, 1/43rd', 'No. 4 Coy, 1/52nd', 'No. 7 Coy, 2/95th', 'Grenadier Coy, 1/28th',
                 'No. 3 Coy, 1/88th', 'No. 6 Coy, 1/45th', 'No. 2 Coy, 1/7th Fusiliers'],
+    gunners: { coat: '#1f2f5e', facings: '#b3202b', trousers: '#1f2f5e' },   // Royal Artillery: blue faced red
+    batteries: ['Captain Sandham\u2019s Coy, RA', 'Bull\u2019s Troop, RHA', 'Ross\u2019s Troop, RHA', 'Captain Bolton\u2019s Coy, RA'],
   },
   french: {
     name: 'French', adj: 'French',
@@ -41,15 +43,22 @@ const SURNAMES = ['Harris', 'Costello', 'Hopkins', 'Plunket', 'Green', 'Tanner',
 // HORSE — French squadrons (a company's worth of troopers). The campaign brings the heavier ones in later.
 //   melee: with the sabre/lance · mass: weight at the gallop · armour: × chance a ball hits home
 const CAV_TYPES = {
-  chasseurs: { name: 'Chasseurs à cheval', short: 'Chasseurs', coat: '#2f5a35', facings: '#c0262b', hat: '#121212', horse: 0,
+  chasseurs: { faction: 'french', price: 2.2, name: 'Chasseurs à cheval', short: 'Chasseurs', coat: '#2f5a35', facings: '#c0262b', hat: '#121212', horse: 0,
     melee: 1.0, mass: 1.0, armour: 1, speed: 1.05, weapon: 'sabre', nerve: 0,
     names: ['2e Esc., 7e Chasseurs', '1er Esc., 13e Chasseurs', '3e Esc., 20e Chasseurs'] },
-  lancers: { name: 'Lanciers', short: 'Lancers', coat: '#1c2f6e', facings: '#c0262b', hat: '#c0262b', horse: 1,
+  lancers: { faction: 'french', price: 2.6, name: 'Lanciers', short: 'Lancers', coat: '#1c2f6e', facings: '#c0262b', hat: '#c0262b', horse: 1,
     melee: 1.15, mass: 1.05, armour: 1, speed: 1.0, weapon: 'lance', nerve: 2, pursuit: 1.4,
     names: ['1er Esc., 2e Chevau-légers lanciers', '2e Esc., 5e Lanciers', 'Lanciers polonais de la Garde'] },
-  cuirassiers: { name: 'Cuirassiers', short: 'Cuirassiers', coat: '#233f8c', facings: '#c0262b', hat: '#c9ced2', horse: 2,
+  cuirassiers: { faction: 'french', price: 3.4, name: 'Cuirassiers', short: 'Cuirassiers', coat: '#233f8c', facings: '#c0262b', hat: '#c9ced2', horse: 2,
     melee: 1.3, mass: 1.4, armour: 0.75, speed: 0.92, weapon: 'sabre', nerve: 5, cuirass: true,
     names: ['1er Esc., 4e Cuirassiers', '2e Esc., 9e Cuirassiers', '3e Esc., 12e Cuirassiers'] },
+  // ours, for the battle builder (and one day the campaign)
+  light_dragoons: { faction: 'british', price: 2.2, name: 'Light Dragoons', short: 'Light Dragoons', coat: '#1c2a52', facings: '#d8c27a', hat: '#121212', horse: 0,
+    melee: 1.0, mass: 1.0, armour: 1, speed: 1.05, weapon: 'sabre', nerve: 0,
+    names: ['A Troop, 16th Light Dragoons', 'B Troop, 14th Light Dragoons', 'C Troop, 23rd Light Dragoons'] },
+  heavy_dragoons: { faction: 'british', price: 3.0, name: 'Heavy Dragoons', short: 'Dragoons', coat: '#b3202b', facings: '#24306a', hat: '#121212', horse: 1,
+    melee: 1.25, mass: 1.3, armour: 1, speed: 0.95, weapon: 'sabre', nerve: 4,
+    names: ['A Troop, 2nd (Royal North British) Dragoons', 'B Troop, 1st Royal Dragoons', 'E Troop, 6th Inniskilling Dragoons'] },
 };
 const HORSE_COATS = ['#5a3a22', '#3d2a1c', '#6b4a2c', '#2a201a', '#7a5a3a', '#4a3424'];
 

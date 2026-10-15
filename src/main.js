@@ -37,6 +37,16 @@ const App = {
       commander: { name: 'You', hp: 3, maxHp: 3, horse: !!q.horse } }, null);
   },
 
+  // the battle builder's armies, saved per viewer so you can come back to a setup
+  builderBattle(army) {
+    App.quick = true; App.run = null;
+    const seed = (Math.random() * 1e9) >>> 0;
+    App.startBattle({ scenario: army.map, seed, army, company: Builder.company(army.mine.own, seed),
+      commander: { name: 'You', hp: 3, maxHp: 3, horse: !!army.mine.own.mounted } }, null);
+  },
+  loadArmy() { try { const a = JSON.parse(localStorage.getItem('formline.army') || 'null'); return a && a.mine && a.theirs && SCENARIOS[a.map] ? a : null; } catch (e) { return null; } },
+  saveArmy() { try { localStorage.setItem('formline.army', JSON.stringify(App.army)); } catch (e) { /* storage unavailable */ } },
+
   startBattle(opts, node) {
     const B = Battle.create(opts);
     UI.brief(B.scenario, B.deploy, node, () => {

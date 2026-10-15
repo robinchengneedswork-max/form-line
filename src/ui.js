@@ -21,6 +21,7 @@ const UI = {
   init() {
     $('btn-new').onclick = () => App.newCampaign();
     $('btn-continue').onclick = () => App.continueCampaign();
+    $('btn-builder').onclick = () => UI.builder();
     $('btn-quick').onclick = () => App.quickBattle($('quick-scenario').value, {
       stage: +$('quick-stage').value, size: +$('quick-size').value, type: $('quick-type').value || null, horse: $('quick-horse').checked });
     // the small fields, then the big battles
@@ -148,6 +149,65 @@ const UI = {
   },
 
   // ── battle HUD ──
+  // ── the battle builder ──
+  builder() {
+    const A = App.army = App.army || App.loadArmy() || Builder.starter();
+    const opt = (v, cur, label) => `<option value="${v}"${String(v) === String(cur) ? ' selected' : ''}>${esc(label)}</option>`;
+    const sel = (side, i, k, cur, pairs) => `<select data-side="${side}" data-i="${i}" data-k="${k}">${pairs.map(([v, l]) => opt(v, cur, l)).join('')}</select>`;
+    const quals = Object.keys(QUALITY).map(k => [k, QUALITY[k].name]);
+    const kinds = Object.keys(FOOT_KINDS).map(k => [k, FOOT_KINDS[k]]);
+    const sizes = n => n.map(v => [v, v + (v === 1 ? '' : '')]);
+    const row = (side, s, i, faction) => {
+      let cells;
+      if (s.arm === 'foot') cells = sel(side, i, 'kind', s.kind, kinds) + sel(side, i, 'size', s.size, [16, 24, 32, 40].map(v => [v, v + ' men'])) + sel(side, i, 'quality', s.quality, quals)
+        + sel(side, i, 'posture', s.posture, [['attack', 'Attacks'], ['hold', 'Holds']]);
+      else if (s.arm === 'cav') cells = sel(side, i, 'type', s.type, Builder.horseFor(faction).map(k => [k, CAV_TYPES[k].name])) + sel(side, i, 'size', s.size, [16, 24, 32].map(v => [v, v + ' troopers'])) + sel(side, i, 'quality', s.quality, quals);
+      else cells = `<span class="bl">Battery</span>` + sel(side, i, 'guns', s.guns, [1, 2, 3].map(v => [v, v + (v > 1 ? ' guns' : ' gun')])) + sel(side, i, 'quality', s.quality, quals);
+      return `<div class="brow"><span class="arm">${{ foot: 'Foot', cav: 'Horse', gun: 'Guns' }[s.arm]}</span><span class="bcells">${cells}</span><b class="cost">${Builder.cost(s)}</b><button class="mini" data-del="${side}" data-i="${i}" title="Remove">✕</button></div>`;
+    };
+    const side = (key, title, faction) => {
+      const S = A[key], tot = Builder.total(S), over = A.budget && tot > A.budget;
+      const own = S.own ? `<div class="brow own"><span class="arm">You</span><span class="bcells">${sel(key, 'own', 'kind', S.own.kind, kinds)}${sel(key, 'own', 'size', S.own.size, [24, 32, 40, 48].map(v => [v, v + ' men']))}${sel(key, 'own', 'quality', S.own.quality, quals.slice(0, 3))}${sel(key, 'own', 'rifles', S.own.rifles, [0, 2, 4, 6].map(v => [v, v + ' rifles']))}<label class="quick-horse"><input type="checkbox" data-side="${key}" data-i="own" data-k="mounted"${S.own.mounted ? ' checked' : ''}> Mounted</label></span><b class="cost">${Builder.cost(S.own, true)}</b></div>` : '';
+      return `<div class="bside"><h3>${title}</h3>${own}${S.units.map((s, i) => row(key, s, i, faction)).join('')}
+        <div class="badd"><button class="mini" data-add="${key}" data-arm="foot">+ Foot</button><button class="mini" data-add="${key}" data-arm="cav">+ Horse</button><button class="mini" data-add="${key}" data-arm="gun">+ Guns</button></div>
+        <p class="btot${over ? ' over' : ''}">${tot}${A.budget ? ` / ${A.budget}` : ''} renown</p></div>`;
+    };
+    const maps = `<optgroup label="Skirmishes">${BATTLE_POOL.map(k => opt(k, A.map, SCENARIOS[k].name)).join('')}</optgroup><optgroup label="Battles (a bigger field)">${SETPIECE_POOL.concat('finale').map(k => opt(k, A.map, SCENARIOS[k].name)).join('')}</optgroup>`;
+    const bad = A.budget && (Builder.total(A.mine) > A.budget || Builder.total(A.theirs) > A.budget);
+    $('builder').innerHTML = `<h1>Battle builder</h1>
+      <p class="hint">Any field, any armies. Everything costs renown; give both sides the same budget for a fair fight, or none for a sandbox. You command your own company; the rest fight by their own lights.</p>
+      <div class="bhead"><label>Field <select id="b-map">${maps}</select></label>
+        <label>Budget each <select id="b-budget">${BUDGETS.map(b => opt(b, A.budget, b ? b + ' renown' : 'No limit')).join('')}</select></label></div>
+      <div class="bsides">${side('mine', 'Your side', 'british')}${side('theirs', 'The French', 'french')}</div>
+      <div class="bfoot"><button id="b-back">Back</button><button id="b-reset" class="mini">Start again</button><button id="b-go" class="big"${bad ? ' disabled' : ''}>${bad ? 'Over budget' : 'Into the field'}</button></div>`;
+    const B = $('builder');
+    B.onchange = e => {
+      const el = e.target;
+      if (el.id === 'b-map') A.map = el.value;
+      else if (el.id === 'b-budget') A.budget = +el.value;
+      else if (el.dataset.side) {
+        const S = A[el.dataset.side], u = el.dataset.i === 'own' ? S.own : S.units[+el.dataset.i];
+        const v = el.type === 'checkbox' ? el.checked : el.value;
+        u[el.dataset.k] = ['size', 'guns', 'rifles'].includes(el.dataset.k) ? +v : v;
+      }
+      App.saveArmy(); UI.builder();
+    };
+    B.onclick = e => {
+      const el = e.target;
+      if (el.dataset.add) {
+        const fac = el.dataset.add === 'mine' ? 'british' : 'french', arm = el.dataset.arm;
+        A[el.dataset.add].units.push(arm === 'foot' ? { arm, size: 24, kind: 'battalion', quality: 'trained', posture: el.dataset.add === 'mine' ? 'hold' : 'attack' }
+          : arm === 'cav' ? { arm, size: 24, type: Builder.horseFor(fac)[0], quality: 'trained' } : { arm, guns: 2, quality: 'trained' });
+      } else if (el.dataset.del) A[el.dataset.del].units.splice(+el.dataset.i, 1);
+      else if (el.id === 'b-back') return UI.title();
+      else if (el.id === 'b-reset') App.army = Builder.starter();
+      else if (el.id === 'b-go') return App.builderBattle(A);
+      else return;
+      App.saveArmy(); UI.builder();
+    };
+    showScreen('screen-builder');
+  },
+
   // what the ground is doing for your men against the nearest enemy you can see. Cover only ever
   // protects the man IN it: your shots out of it are not affected — but a wall or wood in front of
   // THEM spoils your aim at them exactly the same way

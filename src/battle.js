@@ -13,7 +13,8 @@ const Battle = {
     const [FW, FH] = sc.size || [CFG.FIELD_W, CFG.FIELD_H];
     const field = makeField(FW, FH);
     sc.build(field, makeRng(seed ^ 0x9e3779b9));
-    const dep = sc.deploy(rng, opts.level || 0);
+    // a battle from the builder brings its own armies; otherwise the scenario decides who is here
+    const dep = opts.army ? Builder.deploy(opts.army, sc, field, rng) : sc.deploy(rng, opts.level || 0);
     const windA = rng() * Math.PI * 2, windS = rng.range(0.4, 1.6);
     const B = {
       seed, rng, t: 0, field, scenario: sc, scenarioId: opts.scenario, deploy: dep,
@@ -52,7 +53,7 @@ const Battle = {
     // nobody starts inside a wall or a house: step him out to the nearest open ground
     for (const u of B.units) for (const m of u.men) Battle.unstick(field, m);
     for (const u of B.units) Unit.survey(u);
-    if (sc.setpiece) Command.init(B);
+    if (sc.setpiece && !opts.army) Command.init(B);
     Battle.visibility(B);
     Battle.log(B, `${sc.name}. ${dep.note || ''}`.trim());
     return B;
