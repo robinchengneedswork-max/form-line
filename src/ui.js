@@ -33,10 +33,17 @@ const UI = {
     $('btn-mute').onclick = () => UI.toggleMute();
     $('btn-help-close').onclick = () => UI.toggleHelp();
     $('hud-orders').innerHTML = ORDER_KEYS.map(o => `<button class="order" data-cmd="${o.cmd}"><kbd>${o.key}</kbd>${esc(o.label)}</button>`).join('');
+    // the strip of your units: tap one to command it; detach / recall
+    $('unit-strip').onclick = e => {
+      const B = App.B, el = e.target.closest('button'); if (!B || B.over || !el) return;
+      if (el.dataset.unit) B.selected = B.units.find(u => u.id === +el.dataset.unit) || B.player;
+      else if (el.dataset.cmd) Orders.shout(B, el.dataset.cmd);
+      UI.strip(B, true);
+    };
     $('hud-orders').querySelectorAll('button').forEach(b => b.onclick = () => {
       if (!App.B || App.B.over) return;
       let cmd = b.dataset.cmd;
-      if (cmd === 'skirmish' && App.B.player.form.kind === 'skirmish') cmd = 'close';
+      if (cmd === 'skirmish' && Detach.commanded(App.B).form.kind === 'skirmish') cmd = 'close';
       Orders.shout(App.B, cmd);
     });
     UI.title();
@@ -106,7 +113,12 @@ const UI = {
       const p = Campaign.promotion(run, s);
       const promo = p ? `<button class="mini" data-promote="${s.id}" ${p.ok ? '' : 'disabled'} title="needs ${p.xp} xp">→ ${Campaign.RANK_NAMES[p.to]} (${p.cost})</button>` : '';
       const rifle = s.weapon === 'rifle' ? '<b class="rifle">Baker rifle</b>' : co.rifles ? `<button class="mini" data-rifle="${s.id}">give rifle</button>` : 'musket';
-      return `<tr class="${s.rank}"><td>${esc(s.name)}</td><td>${Campaign.RANK_NAMES[s.rank]}</td><td>${rifle}</td><td>${s.battles}</td><td>${s.kills}</td><td>${s.xp}</td><td>${Math.round(s.aim * 100)}</td><td>${promo}</td></tr>`;
+      // a sergeant can be renamed and leads a party; anyone else can be put in a sergeant's party
+      const sgts = co.soldiers.filter(x => x.rank === 'sgt');
+      const party = s.rank === 'sgt' ? `<small>leads ${co.soldiers.filter(x => x.party === s.id).length}</small>`
+        : sgts.length ? `<select class="mini" data-party="${s.id}"><option value="">—</option>${sgts.map(g => `<option value="${g.id}"${s.party === g.id ? ' selected' : ''}>${esc(g.name.split(' ').slice(-1)[0])}</option>`).join('')}</select>` : '';
+      const name = s.rank === 'sgt' ? `<input class="rename" data-rename="${s.id}" value="${esc(s.name)}" maxlength="28" title="Rename your sergeant">` : esc(s.name);
+      return `<tr class="${s.rank}"><td>${name}</td><td>${party}</td><td>${Campaign.RANK_NAMES[s.rank]}</td><td>${rifle}</td><td>${s.battles}</td><td>${s.kills}</td><td>${s.xp}</td><td>${Math.round(s.aim * 100)}</td><td>${promo}</td></tr>`;
     }).join('');
     $('company').innerHTML = `<h1>${esc(co.name)}</h1>${typeBlock}
       <div class="facts"><span>Drill <b>${Math.round(co.drill * 100)}</b></span><span>Renown <b>${run.renown}</b></span>
@@ -114,13 +126,16 @@ const UI = {
         <span>Rifles <b>${co.soldiers.filter(s => s.weapon === 'rifle').length}/${co.rifles}</b> <small>(max ${Campaign.rifleCap(co)})</small></span>
         <span>Surgeon's mates <b>${co.surgeons || 0}/3</b></span><span>Recruiting party <b>${co.recruiters || 0}/3</b></span></div>
       <div class="chips">${drills}</div>
+      <p class="hint"><b>Parties:</b> put men in a sergeant's party and in battle <kbd>Y</kbd> sends every party out under its sergeant, a unit you can command on its own (pick it on the strip at the top); <kbd>U</kbd> recalls them. Orders reach a party by your voice, your bugler (simple calls, if you have one) or a runner. Sergeants' names are yours to change.</p>
       <p class="hint">Sergeants steady the men round them, close the ranks quicker, call back stragglers and take up fallen colours. Corporals help a little. Promotion needs experience: 3 for corporal, 6 for sergeant.</p>
-      <div class="tablewrap"><table class="roster"><tr><th>Name</th><th>Rank</th><th>Arms</th><th>Fights</th><th>Down</th><th>XP</th><th>Aim</th><th></th></tr>${rows}</table></div>
+      <div class="tablewrap"><table class="roster"><tr><th>Name</th><th>Party</th><th>Rank</th><th>Arms</th><th>Fights</th><th>Down</th><th>XP</th><th>Aim</th><th></th></tr>${rows}</table></div>
       <button id="btn-company-back" class="big">Back to the road</button>`;
     const again = () => { App.saveRun(); UI.company(run, back); };
     $('company').querySelectorAll('[data-type]').forEach(b => b.onclick = () => { Campaign.chooseType(run, b.dataset.type); again(); });
     $('company').querySelectorAll('[data-promote]').forEach(b => b.onclick = () => { Campaign.promote(run, +b.dataset.promote); again(); });
     $('company').querySelectorAll('[data-rifle]').forEach(b => b.onclick = () => { Campaign.toggleRifle(run, +b.dataset.rifle); again(); });
+    $('company').querySelectorAll('[data-party]').forEach(sl => sl.onchange = () => { Campaign.setParty(run, +sl.dataset.party, sl.value === '' ? null : +sl.value); again(); });
+    $('company').querySelectorAll('[data-rename]').forEach(inp => inp.onchange = () => { Campaign.rename(run, +inp.dataset.rename, inp.value); again(); });
     $('btn-company-back').onclick = back;
     showScreen('screen-company');
   },
@@ -230,8 +245,23 @@ const UI = {
     return `<div class="row wide"><span>${mine}${theirs > 0.4 ? ' · <b class="warn">they are in cover</b>' : ''}</span></div>`;
   },
 
+  // your company and its parties, at the top of the screen; redrawn only when something on it changes
+  strip(B, force) {
+    const mine = Detach.mine(B), sel = Detach.commanded(B), parties = !mine.some(u => u.isDetachment) && Detach.parties(B).length;
+    const key = mine.map(u => u.id + Unit.moraleWord(u) + u.formed).join() + sel.id + parties + (B.runnersOut || 0);
+    if (!force && key === UI._stripKey) return;
+    UI._stripKey = key;
+    const short = u => u === B.player ? 'Company' : u.name.replace(/\u2019s party$/, '');
+    const runners = B.runners != null ? B.runners : CFG.RUNNERS;
+    $('unit-strip').innerHTML = (mine.length > 1 ? mine.map(u => `<button data-unit="${u.id}" class="${u === sel ? 'sel' : ''} ${u.routed ? 'bad' : u.morale < CFG.SHAKEN ? 'warn' : ''}">${esc(short(u))} <small>${u.formed}</small></button>`).join('') : '')
+      + (parties ? '<button data-cmd="detach" class="act">Detach parties <kbd>Y</kbd></button>' : '')
+      + (mine.length > 1 ? `<button data-cmd="recall" class="act">Recall <kbd>U</kbd></button><span class="runners" title="runners free">${'🏃'.repeat(Math.max(0, runners - (B.runnersOut || 0)))}${B.bugle ? ' 📯' : ''}</span>` : '');
+    $('unit-strip').classList.toggle('show', !!(mine.length > 1 || parties));
+  },
+
   hud(B) {
-    const u = B.player, c = B.cmd;
+    UI.strip(B);
+    const u = Detach.commanded(B), c = B.cmd;
     const loaded = u.men.filter(m => m.role === 'line' && m.state === 'formed' && m.m !== 'reloading').length;
     const pres = u.men.filter(m => m.state === 'formed' && m.m === 'present').length;
     const word = Unit.moraleWord(u);

@@ -159,6 +159,8 @@ const Sound = {
         const u = B.units.find(v => v.id === e.unit);
         if (u && u.arm === 'cav') { Sound.trumpet(u.cx, u.cy, true); Sound.hooves(u.cx, u.cy); }
         else if (u) Sound.roar(u.cx, u.cy);
+      } else if (e.type === 'bugle') {
+        Sound.trumpet(e.x, e.y, false);
       } else if (e.type === 'cannon') {
         Sound.cannon(e.x, e.y);
       } else if (e.type === 'trumpet') {

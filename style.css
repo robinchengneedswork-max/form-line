@@ -184,3 +184,16 @@ body.touch #btn-leavefield { bottom: 84px; }
 .btot { font-weight: 600; margin-top: 8px; }
 .btot.over { color: var(--red); }
 .bfoot { display: flex; align-items: center; gap: 10px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
+
+/* ── your units: the strip at the top ── */
+#unit-strip { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 60vw; z-index: 6; }
+#unit-strip.show { display: flex; }
+#unit-strip button { background: rgba(28,24,18,0.82); color: #f1e6c8; border: 1px solid rgba(241,230,200,0.35); font-size: 14px; padding: 5px 10px; }
+#unit-strip button.sel { border-color: #ffe08a; box-shadow: 0 0 0 1px #ffe08a; }
+#unit-strip button.warn small { color: #d8c27a; }
+#unit-strip button.bad { color: #e88a6a; }
+#unit-strip button.act { background: rgba(120,30,30,0.85); }
+#unit-strip kbd { font-size: 10px; opacity: 0.7; }
+#unit-strip .runners { align-self: center; font-size: 14px; text-shadow: 0 1px 2px #000; }
+body.touch #unit-strip kbd { display: none; }
+.rename { font-family: var(--serif); font-size: 14px; width: 150px; background: transparent; border: 0; border-bottom: 1px dashed var(--ink-2); }

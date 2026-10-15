@@ -179,6 +179,12 @@ const CFG = {
   VOICE_RANGE: 48,         // beyond this the men hear only the drum
   VOICE_DELAY: 0.4,
   DRUM_DELAY: 1.8,
+  BUGLE_RANGE: 350,        // your bugler's calls reach any party of yours this far off…
+  BUGLE_DELAY: 1.2,
+  RUNNERS: 2,              // …anything else to a party out of earshot goes by runner
+  RUNNER_SPEED: 4.2,       // m/s
+  RUNNER_RISK: 80,         // a runner passing this close to a company of theirs may be shot…
+  RUNNER_LOSS: 0.3,        // …this likely, per company he passes
   PLACE_RANGE: 90,         // a dragged line may stand at most this far from where the company is
   PLACE_MIN: 4,            // a stroke shorter than this (metres) is a tap, not a placement
 

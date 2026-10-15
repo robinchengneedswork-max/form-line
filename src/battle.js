@@ -31,6 +31,7 @@ const Battle = {
     // a quick battle's company knows every drill; a campaign company only what it has learned
     const co = opts.company || Object.assign(Campaign.defaultCompany(rng), { drills: Object.keys(LEARNED_DRILLS) });
     const cm = opts.commander || { name: 'You', hp: 3, maxHp: 3 };
+    B.bugle = !!(co.bugler || co.type === 'light');   // light companies always had a bugle
     const p = dep.player;
     B.cmd = { id: NEXT_ID++, team: TEAM_PLAYER, isCommander: true, x: p.x, y: p.y + 7, facing: p.facing, aim: p.facing,
       hp: cm.hp, maxHp: cm.maxHp, state: 'formed', dest: null, mvx: 0, mvy: 0, run: false, sprint: false, wind: 1, moving: 0, rallyCd: 0,
@@ -63,6 +64,7 @@ const Battle = {
     if (B.over) return;
     B.t += dt;
     Orders.deliver(B);
+    Detach.step(B);
     AI.cmdRoute(B);
     Move.commander(B, B.cmd, dt);
     Command.step(B);
@@ -149,6 +151,8 @@ const Battle = {
 
   finish(B, how) {
     if (B.over) return;
+    // the parties are the company's men: back on its roll before anyone is counted
+    Detach.reabsorbAll(B);
     B.over = true;
     // withdrawing: whoever is still on the field takes his chances
     let captured = 0;

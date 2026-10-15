@@ -130,6 +130,9 @@ const Render = {
       g.beginPath(); g.moveTo(C.x, C.y); g.lineTo(C.dest.x, C.dest.y); g.stroke(); g.setLineDash([]);
       g.beginPath(); g.arc(C.dest.x, C.dest.y, 1.2, 0, 7); g.stroke();
     }
+    // the unit you are commanding, if it is not the company: a ring round it
+    const S = Detach.commanded(B);
+    if (S !== B.player && S.formed) { g.strokeStyle = 'rgba(255,225,140,0.7)'; g.lineWidth = 2 / z; g.setLineDash([5 / z, 4 / z]); g.beginPath(); g.arc(S.cx, S.cy, 9 + S.formed * 0.3, 0, 7); g.stroke(); g.setLineDash([]); }
     // where "Form line" would put them: a ghost bar in front of you, facing the cursor
     const u = B.player;
     if (u && C.state === 'formed' && ui && ui.ghost) {
@@ -366,6 +369,11 @@ const Render = {
         // the spray of a tin of balls
         g.strokeStyle = `rgba(255,235,190,${0.5 * (1 - age / 0.25)})`; g.lineWidth = 0.12;
         for (let k = -4; k <= 4; k++) { const a = f.a + k * CFG.CANISTER_SPREAD / 4; g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.x + Math.cos(a) * f.r * (age / 0.25 + 0.3), f.y + Math.sin(a) * f.r * (age / 0.25 + 0.3)); g.stroke(); }
+      } else if (f.kind === 'runner' && age < f.dur * (f.stop || 1)) {
+        // your runner, a small red figure at the double
+        const k = Math.min(age / f.dur, f.stop || 1), x = f.x0 + (f.x1 - f.x0) * k, y = f.y0 + (f.y1 - f.y0) * k;
+        g.fillStyle = '#b3202b'; g.beginPath(); g.arc(x, y, 0.5, 0, 7); g.fill();
+        g.strokeStyle = 'rgba(255,240,200,0.6)'; g.lineWidth = 0.15; g.setLineDash([0.6, 0.6]); g.beginPath(); g.moveTo(x, y); g.lineTo(f.x1, f.y1); g.stroke(); g.setLineDash([]);
       } else if (f.kind === 'ball' && age < f.dur + 0.6) {
         // the ball in flight, a spurt of earth where it grazes, and its skips beyond
         const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0), s = Math.min(L, age * CFG.BALL_SPEED), k = s / L;

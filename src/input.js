@@ -25,6 +25,8 @@ const ORDER_KEYS = [
   { code: 'KeyR', key: 'R', cmd: 'rally', label: 'Rally' },
   { code: 'KeyT', key: 'T', cmd: 'reform', label: 'Re-form' },
   { code: 'KeyE', key: 'E', cmd: 'square', label: 'Form square' },
+  { code: 'KeyY', key: 'Y', cmd: 'detach', label: 'Detach parties' },
+  { code: 'KeyU', key: 'U', cmd: 'recall', label: 'Recall parties' },
 ];
 
 const Input = {
@@ -65,7 +67,7 @@ const Input = {
     let k = ORDER_KEYS.find(o => o.code === e.code || o.alt === e.code);
     if (!k) return;
     let cmd = k.cmd;
-    if (cmd === 'skirmish' && B.player.form.kind === 'skirmish') cmd = 'close';
+    if (cmd === 'skirmish' && Detach.commanded(B).form.kind === 'skirmish') cmd = 'close';
     Orders.shout(B, cmd);
   },
 
@@ -81,9 +83,10 @@ const Input = {
       [wx, wy] = Render.toWorld(e.offsetX, e.offsetY);
     } else {
       // left-drag: draw where the company should stand
-      if (e.button === 0 && B.player && !B.player.routed) {
+      const U = Detach.commanded(B);
+      if (e.button === 0 && U && !U.routed) {
         const [ax, ay] = Render.toWorld(e.offsetX, e.offsetY);
-        Place.cur = { cmd: Place.dragCmd(B.player), ax, ay, bx: ax, by: ay };
+        Place.cur = { cmd: Place.dragCmd(U), ax, ay, bx: ax, by: ay };
         Input.dragging = true;
       }
       return;

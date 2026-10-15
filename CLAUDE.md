@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 185 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 200 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -44,6 +44,7 @@ export line). A headless check asserts that index.html's script order matches.
 | `place.js` | **drag to place** (the user asked for it): a stroke gives centre (midpoint) + alignment; the company faces across it toward the nearest enemy you can see, else away from you; at most `PLACE_RANGE` from where it stands. Mouse = left-drag (keeps the current shape); touch = Form → Line/Skirmish/Column arms it, the next drag places, a tap forms on the spot, a hold re-opens the wheel. Pure `plan()` is in the headless sim |
 | `touch.js` | phone controls: tap = walk, hold = two-level order wheel (Fire up / Bayonet right / Form down / Move left), drag = look, pinch = zoom |
 | `builder.js` | the battle builder: unit costs in renown, budgets, auto-deployment of two built armies |
+| `detach.js` | sergeants' parties: split off, command (voice / bugle / runner), recall and merge |
 | `battle.js` | create / fixed-step tick / per-team fog of war / end check. Pure: emits `events` (sound) + `fx` (picture) |
 | `campaign.js` | three ACTS, each a 9-row StS-style route ending in a great battle, winter quarters between, renown, rank, roster persistence, camp/shop/events |
 | `render.js` `audio.js` `input.js` `ui.js` `main.js` | the browser side. `Sound`, not `Audio` (that is a DOM global) |
@@ -154,6 +155,13 @@ The user's reasoning: commanding more than ~2 units needs campaign power-scaling
 - `Campaign.level(row, act, rows)` = (act + row/(rows−1)) / 3 — the enemy gets better across the whole campaign, so horse (level ≥0.3) arrives in Act II and guns/cuirassiers in Act III. Act bosses +0.08.
 - Win an act's great battle → `run.winter` → `UI.winter` (= the camp screen with a winter header, no Rest): `Campaign.winterQuarters` heals you, sends recruits for half the gap to capacity, drill +0.03; then one camp choice → `Campaign.nextAct` (new map). Lose any act's great battle → the campaign is lost. Saves made during winter resume into winter quarters. Old saves migrate into Act I (the UI sizes the map from `run.map.length`, so an old 11-row map still draws).
 - ⚠ Only two set-piece maps exist for 3 acts × (3 set pieces + boss): they repeat a lot. More set-piece maps are the obvious content gap.
+
+## Sergeants' parties, the bugle and runners (round 9 — the user: "name ncos of some of the vets… assign them some men to split my group… a skirmisher corp with the rifles that i can command seperately but also reabsorb"; "runners for anything complex and maybe a bugle… charge or follow me")
+
+- Campaign: `soldier.party` = a sergeant's soldier id (`Campaign.setParty`), sergeants renamable (`Campaign.rename`); company sheet has a Party column + name inputs. Quartermaster sells a **bugler** (`co.bugler`; light companies always have one) → `B.bugle`.
+- `detach.js` (after battle.js): `Detach.split` (order `detach`, Y, or the strip) makes one unit per sergeant with ≥2 party men: `isDetachment`, `parent`, `commanded` (no AI unless autoplayer), leader = the sergeant (role → officer), skirmish order if mostly rifles/light. With no parties set, the riflemen + best shots (to 6) go out under the senior sergeant. `B.selected` / `Detach.commanded(B)` is the unit your orders, drag-to-place, the wheel and the HUD panel act on; pick it on `#unit-strip` (`UI.strip`, redrawn only when its key changes).
+- Orders to a party (`Orders.toParty`): **voice** within VOICE_RANGE (+horse) → **bugle** for `BUGLE_CALLS` (no placement) within `BUGLE_RANGE` 350 m, 1.2 s → else a **runner** (`Detach.runner`): `CFG.RUNNERS` 2, `RUNNER_SPEED` 4.2 m/s, returns after 2× the trip; each enemy company within `RUNNER_RISK` 80 m of his path adds `RUNNER_LOSS` 0.3 to the chance he is shot (then the order never arrives and you have one runner fewer). Drawn as a red dot (`runner` fx).
+- `recall` (U) / `rejoin` (Follow me to a party) marches the party in column after its sergeant to the company and `Detach.merge`s it back (startSize restored). `Battle.finish` calls `Detach.reabsorbAll` first, so the campaign counts every man.
 
 ## Company customization (campaign)
 

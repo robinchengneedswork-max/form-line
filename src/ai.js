@@ -23,7 +23,7 @@
 const AI = {
   step(B) {
     for (const u of B.units) {
-      if (u.isPlayer && !B.autoPlayer) continue;
+      if ((u.isPlayer || u.commanded) && !B.autoPlayer) continue;
       if (B.t < u.ai.next) continue;
       u.ai.next = B.t + 1 + B.rng() * 0.3;
       AI.think(B, u);

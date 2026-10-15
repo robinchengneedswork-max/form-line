@@ -264,6 +264,19 @@ const Campaign = {
     if (s.rank === 'cpl') return { to: 'sgt', cost: 12, xp: 6, ok: sl.sgtUsed < sl.sgt && s.xp >= 6 && run.renown >= 12 };
     return null;
   },
+  // a man into a sergeant's party (or out of it, with sgtId null)
+  setParty(run, id, sgtId) {
+    const co = run.company, s = co.soldiers.find(x => x.id === id), g = sgtId == null ? null : co.soldiers.find(x => x.id === sgtId && x.rank === 'sgt');
+    if (!s || s.rank === 'sgt' || (sgtId != null && !g)) return false;
+    s.party = g ? g.id : null;
+    return true;
+  },
+  rename(run, id, name) {
+    const s = run.company.soldiers.find(x => x.id === id), n = String(name || '').replace(/[<>]/g, '').trim().slice(0, 28);
+    if (!s || !n) return false;
+    s.name = n; return true;
+  },
+
   promote(run, id) {
     const s = run.company.soldiers.find(x => x.id === id), p = s && Campaign.promotion(run, s);
     if (!p || !p.ok) return false;
@@ -337,6 +350,7 @@ const Campaign = {
       { key: 'drill', name: 'Drill sergeant', desc: `Faster loading (drill ${Math.round(co.drill * 100)} → ${Math.round(Math.min(0.95, co.drill + 0.06) * 100)}).`, cost: 22, ok: co.drill < 0.95 },
       { key: 'rifle', name: 'Baker rifle', desc: `Twice the reach, half the rate of fire. Goes to your best shot (${co.rifles}/${Campaign.rifleCap(co)}).`, cost: 20, ok: co.rifles < Campaign.rifleCap(co) },
       { key: 'drummer', name: 'Drummer boy', desc: 'Carries your orders beyond shouting range. Steadies the men.', cost: 14, ok: !co.drummer },
+      { key: 'bugler', name: 'Bugler', desc: 'Sounds the simple calls — advance, halt, skirmish, charge, square, the recall — to your sergeants\u2019 parties up to 350 m off. Without one, a runner must go.', cost: 12, ok: !co.bugler && co.type !== 'light' },
       { key: 'fifer', name: 'Fifer', desc: 'Music in the ranks. Morale recovers faster.', cost: 12, ok: !co.fifer },
       { key: 'colours', name: 'New colours', desc: 'The regiment will not forget the old ones.', cost: 30, ok: !co.colours },
       ...Object.entries(Campaign.ESTAB).map(([k, E]) => {
@@ -357,6 +371,7 @@ const Campaign = {
     if (key === 'drill') co.drill = clamp(co.drill + 0.06, 0, 0.95);
     if (key === 'rifle') { co.rifles++; Campaign.armRifles(co); }
     if (key === 'drummer') co.drummer = true;
+    if (key === 'bugler') co.bugler = true;
     if (key === 'fifer') co.fifer = true;
     if (key === 'colours') co.colours = true;
     if (Campaign.ESTAB[key]) co[key] = (co[key] || 0) + 1;

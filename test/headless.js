@@ -812,6 +812,67 @@ console.log('§16 the acts');
   chk('older saves load into Act I', old.act === 0 && old.winter === false);
 }
 
+console.log('§17 sergeants\u2019 parties, the bugle and runners');
+{
+  const { Detach } = X;
+  // on the company sheet: men into a sergeant's party; a sergeant renamed
+  const camp = Campaign.newRun(401), co = camp.company;
+  const sg = co.soldiers[0]; sg.rank = 'sgt';
+  const men = co.soldiers.slice(1, 7);
+  chk('men can be put in a sergeant\u2019s party', men.every(s => Campaign.setParty(camp, s.id, sg.id)) && men.every(s => s.party === sg.id));
+  chk('…but a sergeant cannot be put in another\u2019s', !Campaign.setParty(camp, sg.id, sg.id));
+  chk('a sergeant can be renamed', Campaign.rename(camp, sg.id, 'Patrick Harper') && sg.name === 'Patrick Harper' && !Campaign.rename(camp, sg.id, '  '));
+  camp.renown = 50;
+  chk('a bugler can be bought', Campaign.buy(camp, 'bugler') && co.bugler);
+  // in battle: Detach sends the party out as a unit of its own, under its sergeant, and you command it
+  const quiet = B => { for (const e of B.units) if (e.team === TEAM_ENEMY) e.delay = 1e9; };
+  const B = Battle.create({ scenario: 'plain', seed: 402, level: 0.3, company: co }); quiet(B);
+  const P = B.player, n0 = P.men.length;
+  chk('the bugler comes into battle with you', B.bugle);
+  const ok = Orders.shout(B, 'detach'), D = B.units.find(u => u.isDetachment);
+  chk('Detach: the party goes out under its sergeant', ok && D && D.leader && D.leader.src === sg && D.men.length === 7 && P.men.length === n0 - 7 && D.name.includes('Harper'));
+  chk('…and your orders now go to it', Detach.commanded(B) === D);
+  run(B, 1);
+  // out of earshot without a bugle: a runner; and only so many runners
+  B.bugle = false; B.cmd.x = D.cx - 150; B.cmd.y = D.cy;
+  const s1 = Orders.shout(B, 'halt'), s2 = Orders.shout(B, 'advance'), s3 = Orders.shout(B, 'cease');
+  chk('out of earshot, a runner carries the order — and you only have two', s1 && s2 && !s3 && B.runnersOut === 2 && B.fx.some(f => f.kind === 'runner'));
+  const due = B.pending.find(p => p.unit === D);
+  chk('…and he takes his time getting there', due && due.at - B.t > 150 / CFG.RUNNER_SPEED - 1);
+  // with the bugle, a simple call is there at once — but placing them still needs a runner
+  const B2 = Battle.create({ scenario: 'plain', seed: 403, level: 0.3, company: co }); quiet(B2);
+  Orders.shout(B2, 'detach'); const D2 = B2.units.find(u => u.isDetachment); run(B2, 1);
+  B2.cmd.x = D2.cx - 200;
+  Orders.shout(B2, 'advance');
+  const b = B2.pending.find(p => p.unit === D2);
+  chk('the bugle carries a simple call to a party 200 m off in a second', b && b.at - B2.t <= CFG.BUGLE_DELAY + 0.01 && !B2.runnersOut);
+  Orders.shout(B2, 'line', { x: D2.cx + 20, y: D2.cy, facing: -Math.PI / 2 });
+  chk('…but "form there" needs a runner', B2.runnersOut === 1);
+  // a runner who runs past the enemy may never arrive
+  let lost = 0;
+  for (let k = 0; k < 20; k++) {
+    const b3 = Battle.create({ scenario: 'plain', seed: 410 + k, level: 0.3, company: co }); quiet(b3);
+    Orders.shout(b3, 'detach'); const d3 = b3.units.find(u => u.isDetachment);
+    const E = b3.units.find(u => u.team === TEAM_ENEMY);
+    b3.bugle = false; b3.cmd.x = d3.cx - 160; b3.cmd.y = d3.cy;
+    for (const m of E.men) { m.x += (d3.cx - 80) - E.cx; m.y += d3.cy - E.cy; } Unit.survey(E); b3.seen[TEAM_PLAYER].add(E.id);
+    Orders.shout(b3, 'halt');
+    if (!b3.pending.some(p => p.unit === d3)) lost++;
+  }
+  chk('a runner sent past the enemy is sometimes shot down', lost >= 2 && lost <= 16, lost + '/20');
+  // Recall: they march back and fall in; at the end of a battle everyone is on the company's roll
+  B.selected = D; B.bugle = true;
+  Orders.shout(B, 'recall');
+  for (let i = 0; i < 120 && B.units.includes(D); i++) run(B, 1);
+  chk('Recall: the party marches back into the ranks', !B.units.includes(D) && P.men.length === n0 && Detach.commanded(B) === P);
+  const B4 = Battle.create({ scenario: 'plain', seed: 404, level: 0.3, company: co }); quiet(B4);
+  Orders.shout(B4, 'detach'); B4.over = false; Battle.finish(B4, 'won');
+  chk('…and a party still out at the end is counted with the company', B4.player.men.length === n0 && !B4.units.some(u => u.isDetachment));
+  // a quick battle with rifles and no parties set: the rifles go out under the senior sergeant
+  const qc = Campaign.quickCompany(5, { stage: 0.6, size: 32 }), B5 = Battle.create({ scenario: 'plain', seed: 405, level: 0.3, company: qc }); quiet(B5);
+  chk('with no parties set, the riflemen and best shots go out under the senior sergeant', Orders.shout(B5, 'detach') && B5.units.some(u => u.isDetachment && u.men.some(m => m.weapon === 'rifle')));
+}
+
 console.log('§8 music & the page');
 chk('every tune note is a real pitch', Object.values(TUNES).every(t => t.melody.every(([n]) => n === 'R' || noteFreq(n) > 200)));
 chk('every order has a drum call', ['follow', 'line', 'advance', 'halt', 'ready', 'fire', 'atwill', 'cease', 'charge', 'fallback', 'skirmish', 'rally'].every(k => DRUM_CALLS[k]));

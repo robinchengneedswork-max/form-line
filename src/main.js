@@ -57,7 +57,7 @@ const App = {
     const B = Battle.create(opts);
     UI.brief(B.scenario, B.deploy, node, () => {
       Sound.resume();
-      App.B = B; App.mode = 'battle'; App.paused = false; App.acc = 0; App.speed = 1;
+      App.B = B; App.mode = 'battle'; UI._stripKey = null; App.paused = false; App.acc = 0; App.speed = 1;
       Render.terrainFor = null;
       Render.cam.x = B.cmd.x; Render.cam.y = B.cmd.y - 30; Render.cam.zoom = 5.5;
       Input.camOff.x = Input.camOff.y = 0;

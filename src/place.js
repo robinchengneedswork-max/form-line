@@ -19,7 +19,7 @@ const Place = {
 
   // what a stroke from a to b would make. Pure; no DOM.
   plan(B, cmd, ax, ay, bx, by) {
-    const u = B.player, c = B.cmd;
+    const u = Detach.commanded(B), c = B.cmd;
     let x = (ax + bx) / 2, y = (ay + by) / 2;
     // the men will only re-form so far from where they stand
     const d = dist(x, y, u.cx, u.cy), clamped = d > CFG.PLACE_RANGE;

@@ -97,7 +97,7 @@ const Touch = {
       const opt = w.group >= 0 && w.opt >= 0 ? WHEEL_GROUPS[w.group].opts[w.opt] : null;
       if (opt && App.B && !App.B.over && !App.paused) {
         // a formation waits for its stroke (unless it is a drill they cannot do — then say so now)
-        if (PLACE_KINDS[opt.cmd] && knowsDrill(App.B.player, opt.cmd)) { Place.armed = { cmd: opt.cmd, B: App.B }; Touch.buzz(10); }
+        if (PLACE_KINDS[opt.cmd] && knowsDrill(Detach.commanded(App.B), opt.cmd)) { Place.armed = { cmd: opt.cmd, B: App.B }; Touch.buzz(10); }
         else Orders.shout(App.B, opt.cmd);
       }
       return;
@@ -182,7 +182,7 @@ const Touch = {
     if (w.group >= 0) {
       const G = WHEEL_GROUPS[w.group];
       G.opts.forEach((o, i) => {
-        const a = optAngle(G, i), on = i === w.opt, locked = App.B && !knowsDrill(App.B.player, o.cmd);
+        const a = optAngle(G, i), on = i === w.opt, locked = App.B && !knowsDrill(Detach.commanded(App.B), o.cmd);
         wedge(RING_OUT0, RING_OUT1, a - OPT_SPAN / 2 + 0.02, a + OPT_SPAN / 2 - 0.02);
         g.fillStyle = on ? (o.hot ? 'rgba(190,30,45,0.95)' : 'rgba(176,138,46,0.95)') : 'rgba(20,16,10,0.8)'; g.fill();
         g.fillStyle = locked ? 'rgba(241,232,210,0.35)' : on ? '#fff' : (o.hot ? '#ffb9b0' : '#f1e8d2');

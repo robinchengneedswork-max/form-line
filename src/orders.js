@@ -10,7 +10,7 @@ const ORDER_TEXT = {
   follow: 'Follow me!', line: 'Form line!', advance: 'Advance!', halt: 'Halt!',
   ready: 'Make ready!', fire: 'Present — FIRE!', atwill: 'Fire at will!', cease: 'Cease fire!',
   charge: 'Fix bayonets — CHARGE!', fallback: 'Fall back!', skirmish: 'Extend — skirmish order!',
-  close: 'Close order!', rally: 'Rally! Rally on me!',
+  close: 'Close order!', rally: 'Rally! Rally on me!', detach: 'Sergeants — take your parties out!', recall: 'Sound the recall!', rejoin: 'Rejoin the company!',
   byrank: 'Fire by rank!', attackcol: 'Column of attack!', square: 'Form square! Prepare to receive cavalry!', ride: 'Trot!', retire: 'Retire! To the rear!', reform: 'Re-form! Re-form on the colours!',
 };
 
@@ -23,11 +23,15 @@ const knowsDrill = (u, cmd) => !LEARNED_DRILLS[cmd] || !u.drills || u.drills.inc
 const Orders = {
   // the player shouts. Returns false if nobody could hear.
   shout(B, cmd, opts = {}) {
-    const c = B.cmd, u = B.player;
+    const c = B.cmd, u = Detach.commanded(B);
     if (c.state !== 'formed') return false;
     B.fx.push({ kind: 'say', x: c.x, y: c.y, text: ORDER_TEXT[cmd] || cmd, t: B.t, team: 0 });
     B.events.push({ type: 'shout', order: cmd });
     if (cmd === 'rally') { Morale.rally(B); return true; }
+    if (cmd === 'detach') return Detach.split(B);
+    if (cmd === 'recall') { if (B.bugle) B.events.push({ type: 'bugle', x: c.x, y: c.y }); return Detach.recallAll(B); }
+    // a party of yours: your voice, the bugle, or a runner
+    if (u.isDetachment) return Orders.toParty(B, u, cmd === 'follow' ? 'rejoin' : cmd, opts);
     if (!u || u.routed && cmd !== 'rally') { Battle.log(B, 'They are running — get among them and rally them (R).', 'bad'); return false; }
     if (!knowsDrill(u, cmd)) { Battle.log(B, `Your company has never learned ${LEARNED_DRILLS[cmd].toLowerCase()} — drill it in camp.`, 'bad'); return false; }
     const d = dist(c.x, c.y, u.cx, u.cy);
@@ -45,6 +49,27 @@ const Orders = {
     }
     B.pending.push({ at: B.t + delay, unit: u, cmd, opts });
     return true;
+  },
+
+  toParty(B, u, cmd, opts) {
+    const c = B.cmd;
+    if (u.routed) { Battle.log(B, `${u.name} is running — get among them and rally them (R).`, 'bad'); return false; }
+    if (!knowsDrill(u, cmd)) { Battle.log(B, `They have never learned ${LEARNED_DRILLS[cmd].toLowerCase()}.`, 'bad'); return false; }
+    const d = dist(c.x, c.y, u.cx, u.cy), near = d <= CFG.VOICE_RANGE + (c.horse ? CFG.HORSE_VOICE : 0);
+    // geometry: in earshot, where you point; otherwise where they stand, facing the way you face
+    if (cmd === 'line' || cmd === 'advance' || cmd === 'skirmish' || cmd === 'close' || cmd === 'attackcol') {
+      const placed = opts.x != null, a = c.aim != null ? c.aim : c.facing;
+      if (!placed) { if (near) { opts.x = c.x + Math.cos(a) * 5; opts.y = c.y + Math.sin(a) * 5; } else { opts.x = u.cx; opts.y = u.cy; } }
+      if (opts.facing == null) opts.facing = a;
+      opts.placed = placed;
+    }
+    if (near) { B.pending.push({ at: B.t + CFG.VOICE_DELAY, unit: u, cmd, opts }); return true; }
+    if (B.bugle && d <= CFG.BUGLE_RANGE && BUGLE_CALLS.has(cmd) && !opts.placed) {
+      B.events.push({ type: 'bugle', x: c.x, y: c.y });
+      B.pending.push({ at: B.t + CFG.BUGLE_DELAY, unit: u, cmd, opts });
+      return true;
+    }
+    return Detach.runner(B, u, cmd, opts);
   },
 
   // AI officers: a short delay, no drum needed (they stand with their men)
@@ -86,6 +111,7 @@ const Orders = {
 
   apply(B, u, cmd, o) {
     const f = u.form;
+    if (u.isDetachment && cmd !== 'rejoin') u.rejoining = false;
     const toLine = (x, y, facing) => Unit.setForm(u, 'line', x, y, facing);
     switch (cmd) {
       case 'follow':
@@ -182,6 +208,7 @@ const Orders = {
         Unit.setForm(u, 'line', u.cx, u.cy, Math.atan2(o.y - u.cy, o.x - u.cx));
         break;
       }
+      case 'rejoin': Detach.rejoin(B, u); break;
       case 'close':
         u.order = 'hold';
         toLine(o.x != null ? o.x : u.cx, o.y != null ? o.y : u.cy, o.facing != null ? o.facing : f.facing);
