@@ -76,6 +76,8 @@ const CFG = {
   VOICE_RANGE: 48,         // beyond this the men hear only the drum
   VOICE_DELAY: 0.4,
   DRUM_DELAY: 1.8,
+  PLACE_RANGE: 90,         // a dragged line may stand at most this far from where the company is
+  PLACE_MIN: 4,            // a stroke shorter than this (metres) is a tap, not a placement
 
   // ── visibility ──
   SIGHT: 480,

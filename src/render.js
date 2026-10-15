@@ -338,6 +338,7 @@ const Render = {
       g.beginPath(); g.arc(sx, sy, k * CFG.RALLY_RANGE * Render.cam.zoom, 0, 7); g.stroke();
     }
     Render.minimap(B, g);
+    Place.draw(g, B);
     Touch.draw(g);
   },
   coarse() { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); },

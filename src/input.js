@@ -3,6 +3,7 @@
 //  INPUT — e.code throughout. You are one man on foot:
 //    right-click   walk there        WASD  walk      Shift  run
 //    mouse         where you look — "Form line" faces this way
+//    left-drag     draw where the company should stand (place.js)
 //    1-9, F/Space, C, R   orders (see ORDER_KEYS)
 //    wheel zoom · arrows look around · V re-centre · Tab speed · P/Esc pause · M mute
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -24,14 +25,18 @@ const ORDER_KEYS = [
 ];
 
 const Input = {
-  held: new Set(), mx: 0, my: 0, camOff: { x: 0, y: 0 },
+  held: new Set(), mx: 0, my: 0, camOff: { x: 0, y: 0 }, dragging: false,
   init(canvas) {
     window.addEventListener('keydown', Input.down);
     window.addEventListener('keyup', e => Input.held.delete(e.code));
     window.addEventListener('blur', () => Input.held.clear());
-    canvas.addEventListener('mousemove', e => { Input.mx = e.offsetX; Input.my = e.offsetY; });
+    canvas.addEventListener('mousemove', e => {
+      Input.mx = e.offsetX; Input.my = e.offsetY;
+      if (Place.cur && Input.dragging) [Place.cur.bx, Place.cur.by] = Render.toWorld(e.offsetX, e.offsetY);
+    });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
     canvas.addEventListener('mousedown', Input.click);
+    window.addEventListener('mouseup', Input.release);
     canvas.addEventListener('wheel', e => {
       e.preventDefault();
       const c = Render.cam;
@@ -69,9 +74,25 @@ const Input = {
       wx = (e.offsetX - mr.x0) / mr.sc; wy = (e.offsetY - mr.y0) / mr.sc;
     } else if (e.button === 2) {
       [wx, wy] = Render.toWorld(e.offsetX, e.offsetY);
-    } else return;
+    } else {
+      // left-drag: draw where the company should stand
+      if (e.button === 0 && B.player && !B.player.routed) {
+        const [ax, ay] = Render.toWorld(e.offsetX, e.offsetY);
+        Place.cur = { cmd: Place.dragCmd(B.player), ax, ay, bx: ax, by: ay };
+        Input.dragging = true;
+      }
+      return;
+    }
     B.cmd.dest = { x: clamp(wx, 1, B.field.w - 1), y: clamp(wy, 1, B.field.h - 1) };
     B.fx.push({ kind: 'mark', x: wx, y: wy, t: B.t });
+  },
+
+  release(e) {
+    if (!Input.dragging || e.button !== 0) return;
+    Input.dragging = false;
+    const p = Place.cur, B = App.B;
+    Place.cur = null;
+    if (p && B && App.mode === 'battle' && !App.paused && !B.over && Place.isStroke(p)) Place.commit(B, p);
   },
 
   // every frame: legs, eyes, camera

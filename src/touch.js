@@ -8,6 +8,8 @@
 //                      Holding also sets where you LOOK — so "Line" faces the
 //                      spot you held.
 //    one-finger drag   look around          pinch   zoom
+//    Form → Line / Skirmish / Column: the NEXT drag draws where they stand
+//                      (place.js); a tap forms on the spot; a hold re-opens the wheel
 //
 //  Directions are fixed so they become muscle memory:
 //    up = Fire · right = Bayonet · down = Form · left = Move
@@ -51,11 +53,16 @@ const Touch = {
     if (!Touch.active) { Touch.active = true; document.body.classList.add('touch'); }
     Touch.pts.set(e.pointerId, { x: e.offsetX, y: e.offsetY, x0: e.offsetX, y0: e.offsetY, t0: performance.now() });
     if (Touch.pts.size === 1) {
+      if (Place.armed && Place.armed.B === App.B) {
+        const [ax, ay] = Render.toWorld(e.offsetX, e.offsetY);
+        Place.cur = { cmd: Place.armed.cmd, ax, ay, bx: ax, by: ay, id: e.pointerId };
+      }
       clearTimeout(Touch.hold);
       Touch.hold = setTimeout(() => Touch.openWheel(e.pointerId), HOLD_MS);
     } else {
       Touch.cancelHold();
       Touch.wheel = null;
+      Place.cur = null;                    // a second finger means zoom, not a stroke
       const [a, b] = [...Touch.pts.values()];
       Touch.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: Render.cam.zoom };
     }
@@ -68,6 +75,7 @@ const Touch = {
     p.x = e.offsetX; p.y = e.offsetY;
     if (Touch.wheel) { Touch.pick(p.x, p.y); return; }
     if (Math.hypot(p.x - p.x0, p.y - p.y0) > TAP_SLOP) Touch.cancelHold();
+    if (Place.cur && Place.cur.id === e.pointerId) { [Place.cur.bx, Place.cur.by] = Render.toWorld(p.x, p.y); return; }
     if (Touch.pts.size === 2 && Touch.pinch) {
       const [a, b] = [...Touch.pts.values()];
       Render.cam.zoom = clamp(Touch.pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, Touch.pinch.d), 1.4, 12);
@@ -86,14 +94,28 @@ const Touch = {
     if (Touch.wheel) {
       const w = Touch.wheel; Touch.wheel = null;
       const opt = w.group >= 0 && w.opt >= 0 ? WHEEL_GROUPS[w.group].opts[w.opt] : null;
-      if (opt && App.B && !App.B.over && !App.paused) Orders.shout(App.B, opt.cmd);
+      if (opt && App.B && !App.B.over && !App.paused) {
+        // a formation waits for its stroke (unless it is a drill they cannot do — then say so now)
+        if (PLACE_KINDS[opt.cmd] && knowsDrill(App.B.player, opt.cmd)) { Place.armed = { cmd: opt.cmd, B: App.B }; Touch.buzz(10); }
+        else Orders.shout(App.B, opt.cmd);
+      }
+      return;
+    }
+    if (Place.cur && Place.cur.id === e.pointerId) {
+      const st = Place.cur, B = App.B;
+      Place.cur = null; Place.armed = null;
+      Touch.cancelHold();
+      if (B && !B.over && !App.paused) {
+        if (Place.isStroke(st)) Place.commit(B, st);
+        else Orders.shout(B, st.cmd);       // a tap: form on the spot, facing where you held
+      }
       return;
     }
     const wasHold = Touch.hold;
     Touch.cancelHold();
     if (wasHold && Math.hypot(p.x - p.x0, p.y - p.y0) <= TAP_SLOP && performance.now() - p.t0 < HOLD_MS) Touch.tap(p.x, p.y);
   },
-  cancel(e) { Touch.pts.delete(e.pointerId); Touch.cancelHold(); Touch.wheel = null; Touch.pinch = null; },
+  cancel(e) { Touch.pts.delete(e.pointerId); Touch.cancelHold(); Touch.wheel = null; Touch.pinch = null; Place.cur = null; },
   cancelHold() { clearTimeout(Touch.hold); Touch.hold = null; },
 
   tap(sx, sy) {
@@ -110,6 +132,7 @@ const Touch = {
     Touch.hold = null;
     const p = Touch.pts.get(id), B = App.B;
     if (!p || App.mode !== 'battle' || !B || App.paused || B.over) return;
+    Place.armed = null; Place.cur = null;  // holding instead of dragging: choose again
     // the held spot is where you are looking
     const [wx, wy] = Render.toWorld(p.x, p.y);
     if (dist(wx, wy, B.cmd.x, B.cmd.y) > 3) B.cmd.aim = Math.atan2(wy - B.cmd.y, wx - B.cmd.x);

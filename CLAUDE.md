@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 87 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 98 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -39,6 +39,7 @@ export line). A headless check asserts that index.html's script order matches.
 | `ai.js` | every non-player captain (enemy AND allied): doctrines attack / hold / skirmish. Several ideas borrowed from DoDoCat's *Day of Slaughter* NW AI mod (spread targets, march until the centres can see each other, a firing distance kills push in and losses push out, sideways realignment with a deadzone, troop-ratio retreat/charge) |
 | `command.js` | brigade **headquarters** for set pieces: every company has a task (hold / reserve / attack); waves, reserves committed to retake a lost post, general advance; YOUR task arrives as a dispatch and obedience is scored |
 | `data/setpieces.js` | the big battles (bigger `size`, `setpiece: true`): The Long Ridge, The Village on the Stream, and the finale |
+| `place.js` | **drag to place** (the user asked for it): a stroke gives centre (midpoint) + alignment; the company faces across it toward the nearest enemy you can see, else away from you; at most `PLACE_RANGE` from where it stands. Mouse = left-drag (keeps the current shape); touch = Form → Line/Skirmish/Column arms it, the next drag places, a tap forms on the spot, a hold re-opens the wheel. Pure `plan()` is in the headless sim |
 | `touch.js` | phone controls: tap = walk, hold = two-level order wheel (Fire up / Bayonet right / Form down / Move left), drag = look, pinch = zoom |
 | `battle.js` | create / fixed-step tick / per-team fog of war / end check. Pure: emits `events` (sound) + `fx` (picture) |
 | `campaign.js` | route map (11 rows, StS-style), renown, rank, roster persistence, camp/shop/events |

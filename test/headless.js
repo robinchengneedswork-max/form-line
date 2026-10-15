@@ -8,7 +8,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const { load, SIM_FILES } = require('./load');
 const { X } = load();
-const { knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
+const { TEAM_PLAYER, TEAM_ENEMY, angDiff, knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
 
 let pass = 0, fail = 0;
 const chk = (name, cond, extra) => {
@@ -300,6 +300,44 @@ chk('every order has a drum call', ['follow', 'line', 'advance', 'halt', 'ready'
   chk('lifting on a category alone shouts nothing', T.App.B.fx.length === nfx);
   sb.__now = 1000; T.Touch.down(ev(2, 700, 500)); sb.__now = 1100; T.Touch.up(ev(2, 702, 501));
   chk('a quick tap walks you there', !!T.App.B.cmd.dest && T.App.B.cmd.dest.x > T.App.B.cmd.x);
+
+  // drag to place the line
+  const P = vm.runInContext(`App.B = Battle.create({scenario:'plain', seed: 6}); Render.cam.x = App.B.cmd.x; Render.cam.y = App.B.cmd.y; Render.cam.zoom = 5; ({ Place, Input, B: App.B })`, ctx);
+  const B = P.B, c = B.cmd;
+  sb.__now = 5000; T.Touch.down(ev(4, 500, 300)); timers.splice(0).forEach(f => f && f());
+  T.Touch.move(ev(4, 500, 345)); T.Touch.move(ev(4, 500, 410));
+  const np = B.pending.length; T.Touch.up(ev(4, 500, 410));
+  chk('down-then-down (Form → Line) waits for a stroke instead of shouting', P.Place.armed && P.Place.armed.cmd === 'line' && B.pending.length === np);
+  T.Touch.down(ev(5, 300, 200)); T.Touch.move(ev(5, 500, 200)); T.Touch.move(ev(5, 700, 200));
+  chk('…a drag sketches the company where it will stand', P.Place.cur && P.Place.isStroke(P.Place.cur));
+  T.Touch.up(ev(5, 700, 200));
+  const po = B.pending.find(p => p.cmd === 'line');
+  chk('…and lifting forms them along it, facing away from you (no enemy in sight)', po && Math.abs(po.opts.y - (c.y - 30)) < 1.5 && Math.abs(po.opts.x - c.x) < 1.5 && Math.abs(angDiff(po.opts.facing, -Math.PI / 2)) < 0.05,
+    po && `${(po.opts.x - c.x).toFixed(1)},${(po.opts.y - c.y).toFixed(1)} @${po.opts.facing.toFixed(2)}`);
+  chk('…and the wheel is not left armed', !P.Place.armed && !P.Place.cur);
+  // either way you draw it, they face the enemy you can see
+  const E = B.units.find(u => u.team === TEAM_ENEMY); B.seen[TEAM_PLAYER].add(E.id);
+  const u = B.player, yN = Math.min(u.cy, E.cy) + 10;
+  const f1 = P.Place.plan(B, 'line', u.cx - 20, u.cy - 10, u.cx + 20, u.cy - 10).facing, f2 = P.Place.plan(B, 'line', u.cx + 20, u.cy - 10, u.cx - 20, u.cy - 10).facing;
+  const toE = Math.atan2(E.cy - u.cy, E.cx - u.cx);
+  chk('a stroke drawn either way faces the enemy you can see', Math.abs(angDiff(f1, f2)) < 0.01 && Math.abs(angDiff(f1, toE)) < Math.PI / 2, f1.toFixed(2) + ' ' + f2.toFixed(2));
+  const far = P.Place.plan(B, 'line', u.cx - 300, u.cy + 300, u.cx - 260, u.cy + 300);
+  chk('…and the men will not re-form further than PLACE_RANGE away', far.clamped && dist(far.x, far.y, u.cx, u.cy) <= CFG.PLACE_RANGE + 0.01);
+  chk('…the sketch has a place for every man', far.slots.length === u.men.filter(m => m.role === 'line' && m.state === 'formed').length);
+  // armed, then a tap: form on the spot
+  T.Touch.down(ev(6, 500, 300)); timers.splice(0).forEach(f => f && f());
+  T.Touch.move(ev(6, 500, 345)); T.Touch.move(ev(6, 500 + 110 * Math.cos(Math.PI / 2 + 0.72), 300 + 110 * Math.sin(Math.PI / 2 + 0.72))); T.Touch.up(ev(6, 0, 0));
+  chk('Form → Skirmish waits too (a Light drill, known in a quick battle)', P.Place.armed && P.Place.armed.cmd === 'skirmish', P.Place.armed && P.Place.armed.cmd);
+  const n2 = B.pending.length; T.Touch.down(ev(7, 600, 600)); T.Touch.up(ev(7, 601, 600));
+  chk('…and a tap forms them on the spot instead', B.pending.length === n2 + 1 && B.pending[n2].cmd === 'skirmish' && !P.Place.armed);
+  // the mouse: left-drag
+  B.pending.length = 0;
+  P.Input.click({ button: 0, offsetX: 400, offsetY: 250 });
+  [P.Place.cur.bx, P.Place.cur.by] = vm.runInContext('Render.toWorld(600, 250)', ctx);
+  P.Input.release({ button: 0 });
+  chk('mouse: a left-drag places the company too', B.pending.length === 1 && B.pending[0].cmd === 'line' && B.pending[0].opts.facing != null);
+  run(B, 2);
+  chk('…and they take it up', u.form.kind === 'line' && !B.pending.length && Math.abs(angDiff(u.form.facing, toE)) < Math.PI / 2);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
