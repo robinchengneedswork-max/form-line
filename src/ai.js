@@ -122,8 +122,10 @@ const AI = {
     // the bayonet
     const inRange = u.ai.inRangeT ? B.t - u.ai.inRangeT : 0;
     const keen = u.melee > 1 ? 1.25 : 1;
+    // a garrison behind its wall does not leave it for the bayonet unless the enemy in front is already breaking
+    const sallyOk = !(u.doctrine === 'hold' && AI.inCover(B, u)) || (E.morale < CFG.SHAKEN && d < 45);
     // no captain sends blown men in again: let them get their breath first
-    if (u.form.kind !== 'column' && u.inSlot > 0.5 && u.morale > CFG.STEADY - 8 && u.wind > CFG.AI_CHARGE_BREATH &&
+    if (sallyOk && u.form.kind !== 'column' && u.inSlot > 0.5 && u.morale > CFG.STEADY - 8 && u.wind > CFG.AI_CHARGE_BREATH &&
         d < (u.doctrine === 'attack' ? 95 * keen : 65) &&
         (E.morale < CFG.SHAKEN + 6 || ratio > 1.8 || (inRange > 180 / keen && u.morale > E.morale + 12))) {
       Orders.give(B, u, 'charge'); return;
@@ -171,7 +173,8 @@ const AI = {
       // a holding company keeps its ground (and its wall) unless the threat is well off its front
       else if (off > (AI.inCover(B, u) ? 0.9 : CFG.FIRE_CONE * 0.8) && d < 260) Orders.give(B, u, 'line', { x: u.form.x, y: u.form.y, facing: face });
       // against a column, hold the volley until it is close — then it breaks them
-      else AI.shoot(B, u, d, E.form.kind === 'attack' ? 60 : u.drill > 0.5 ? 70 : 90);
+      // …but a march column crossing in front of us (a bridge, a ford) is the best target there is
+      else AI.shoot(B, u, d, E.form.kind === 'attack' ? 60 : E.form.kind === 'column' ? 120 : u.drill > 0.5 ? 70 : 90);
     } else if (u.doctrine === 'skirmish') {
       if (u.form.kind !== 'skirmish' || off > 0.7) Orders.give(B, u, 'skirmish', { x: u.cx, y: u.cy, facing: face });
       else if (d < 70) Orders.give(B, u, 'fallback');

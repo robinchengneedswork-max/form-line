@@ -48,6 +48,8 @@ const Battle = {
     B.units.push(pu);
     for (const a of dep.allies) B.units.push(makeUnit(Object.assign({ faction: 'british' }, a), rng));
     for (const e of dep.enemies) B.units.push(makeUnit(Object.assign({ faction: 'french' }, e), rng));
+    // nobody starts inside a wall or a house: step him out to the nearest open ground
+    for (const u of B.units) for (const m of u.men) Battle.unstick(field, m);
     for (const u of B.units) Unit.survey(u);
     if (sc.setpiece) Command.init(B);
     Battle.visibility(B);
@@ -125,6 +127,14 @@ const Battle = {
     if (mineOut || theirsOut) { B.endT += 1; } else B.endT = 0;
     if (B.endT >= 6) return Battle.finish(B, theirsOut ? 'won' : 'lost');
     if (nightfall) Battle.finish(B, 'nightfall');
+  },
+
+  unstick(f, m) {
+    if (Field.passable(f, m.x, m.y)) return;
+    for (let r = 1; r <= 24; r++) for (let k = 0; k < 16; k++) {
+      const x = m.x + Math.cos(k * Math.PI / 8) * r, y = m.y + Math.sin(k * Math.PI / 8) * r;
+      if (Field.inside(f, x, y) && Field.passable(f, x, y)) { m.x = x; m.y = y; return; }
+    }
   },
 
   atRetreat(B, x, y) { const r = B.retreat; return dist2(x, y, r.x, r.y) < r.r * r.r; },

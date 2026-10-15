@@ -96,6 +96,8 @@ The user chose: **keep ~1 round/min and fix the charge instead**; a **retreat zo
 - **Company type** at Captain: Light (skirmish learned, 0.42× hits in skirmish order, +10% speed), Grenadier (melee ×1.2, nerve +6, shock ×1.25), Line (reload ×0.92, volley bonus +0.1, drill +5).
 - `Campaign.migrate` upgrades older saves.
 
+**The Village on the Stream was broken** (user: "a 0 win scen"): its garrison posts sat on the houses + north wall, so up to 23/25 men spawned inside buildings, never reached their slots and never fired while the French crossed the bridge. Houses now sit back from the north wall and the garrison lines it; the 95th watches the west ford (the flank that rolled the garrison up); enemy ×0.68. `Battle.unstick` steps anyone spawned in a wall onto open ground, and a headless check covers men + slots on every map. Also: garrisons in cover do not sally with the bayonet unless the enemy is breaking, and holders open at 120 m on a march column (a crossing). 0–4–2 → 4–2.
+
 ## Progression (round 4: "we keep losing men and barely make enough to add back")
 
 - The depot sends a **free draft after every battle**: 2 men (4 after a set piece) + recruiters, up to capacity.

@@ -76,10 +76,11 @@ Object.assign(SCENARIOS, {
       Paint.line(f, cs[1][0], cs[1][1] - 14, cs[1][0], cs[1][1] + 14, T.BRIDGE, 2.5);
       Paint.line(f, 500, 0, 500, cs[1][1] - 15, T.ROAD, 2.5, t => t !== T.WATER);
       Paint.line(f, 500, cs[1][1] + 15, 500, f.h, T.ROAD, 2.5, t => t !== T.WATER);
-      // the village: houses either side of the road, garden walls, a church
-      Paint.rect(f, 480, 350, 520, 380, T.BUILDING);
+      // the village: houses either side of the road, garden walls, a church. The houses sit back from
+      // the north wall so the garrison can line it, facing the stream (they once spawned inside them)
+      Paint.rect(f, 515, 355, 545, 385, T.BUILDING);
       for (let k = 0; k < 10; k++) {
-        const side = k % 2 ? 1 : -1, y = 310 + Math.floor(k / 2) * 26 + rng.range(-4, 4);
+        const side = k % 2 ? 1 : -1, y = 332 + Math.floor(k / 2) * 22 + rng.range(-3, 3);
         const hx = 500 + side * rng.range(30, 70), hw = rng.range(6, 10), hh = rng.range(5, 7);
         Paint.rect(f, hx - hw, y - hh, hx + hw, y + hh, T.BUILDING);
       }
@@ -87,14 +88,14 @@ Object.assign(SCENARIOS, {
       Paint.disc(f, 200, 400, 55, T.WOODS);
     },
     deploy(rng, lv) {
-      const e = enemyStrength(lv, rng), sz = Math.round(e.size * 0.75);
+      const e = enemyStrength(lv, rng), sz = Math.round(e.size * 0.68);
       const you = reserve(470, 600, 'Stand in reserve behind the village. When I send for you, go in hard.');
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
-          post(0, hold(440, 308, 'hold the village'), 22, 0.45, { name: 'No. 3 Coy, 1/88th', fifer: false }),
-          post(0, hold(565, 308, 'hold the village'), 22, 0.45, { name: 'No. 6 Coy, 1/45th', fifer: false }),
-          post(0, hold(210, 380, 'hold the wood'), 20, 0.5, { name: 'Light Coy, 2/95th', fifer: false, colours: false }),
+          post(0, hold(458, 306, 'line the village wall'), 22, 0.45, { name: 'No. 3 Coy, 1/88th', fifer: false }),
+          post(0, hold(542, 306, 'line the village wall'), 22, 0.45, { name: 'No. 6 Coy, 1/45th', fifer: false }),
+          post(0, hold(300, 305, 'watch the west ford'), 20, 0.5, { name: 'Light Coy, 2/95th', fifer: false, colours: false }),
           post(0, reserve(640, 610, 'in reserve'), 24, 0.5, { name: 'No. 2 Coy, 1/7th Fusiliers', fifer: false }),
         ],
         enemies: [

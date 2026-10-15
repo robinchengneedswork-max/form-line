@@ -20,7 +20,7 @@ const fresh = (scenario = 'plain', seed = 11, extra = {}) => Battle.create(Objec
 
 console.log('§1 loading');
 chk('every scenario builds and deploys', BATTLE_POOL.concat('finale').every(k => { const B = fresh(k); return B.units.length >= 2 && B.player.formed > 0; }));
-chk('every deployment starts on passable ground', BATTLE_POOL.concat('finale').every(k => { const B = fresh(k); return B.units.every(u => u.men.filter(m => Field.passable(B.field, m.x, m.y)).length >= u.men.length * 0.9); }));
+chk('every deployment starts on open ground — men and their places in the line, big battles too (village garrisons once spawned in houses)', BATTLE_POOL.concat(SETPIECE_POOL, 'finale').every(k => [1, 2, 3, 4, 5].every(sd => { const B = fresh(k, sd); return B.units.every(u => u.men.every(m => Field.passable(B.field, m.x, m.y)) && u.men.filter(m => m.role === 'line' && !Field.passable(B.field, m.sx, m.sy)).length <= 1); })));
 {
   const a = fresh('plain', 99), b = fresh('plain', 99);
   run(a, 200); run(b, 200);
