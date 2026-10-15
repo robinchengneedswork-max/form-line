@@ -9,7 +9,19 @@
 //  lead. Your men are individuals: they gain experience, keep their kill
 //  tallies, and die. If you fall, or your company is gone, the run ends.
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const MAP_ROWS = 11;
+const MAP_ROWS = 9;    // stages in one act's route, the last being the act's great battle
+
+// THE ACTS — like Slay the Spire's: each its own route, ending in a great battle, then winter quarters.
+// The enemy gets better across the whole campaign (Campaign.level), so horse turns up in Act II and
+// guns and cuirassiers in earnest in Act III.
+const ACTS = [
+  { name: 'Act I — The Peninsula, 1810', short: 'The Peninsula', road: 'The Road to Busaco', boss: 'sp_ridge', bossName: 'Busaco',
+    blurb: 'Masséna is coming into Portugal. Wellington means to stand on a ridge and let him come.' },
+  { name: 'Act II — Spain, 1812–13', short: 'Spain', road: 'The Road to Vitoria', boss: 'sp_village', bossName: 'Vitoria',
+    blurb: 'The army is going forward at last. The French have horse now, and they know how to use it.' },
+  { name: 'Act III — The Hundred Days, 1815', short: 'The Hundred Days', road: 'The Road to Brussels', boss: 'finale', bossName: 'Waterloo',
+    blurb: 'He is back from Elba. One more battle, the biggest of them all.' },
+];
 
 const Campaign = {
   newSoldier(rng, vet = 0) {
@@ -59,7 +71,8 @@ const Campaign = {
       seed, renown: 0, total: 0, battles: 0, wins: 0, over: null,
       company: Campaign.defaultCompany(rng),
       commander: { hp: 3, maxHp: 3 },
-      map: Campaign.genMap(rng), at: null, row: -1, log: [], fallen: [],
+      act: 0, winter: false,
+      map: Campaign.genMap(rng, 0), at: null, row: -1, log: [], fallen: [],
       rngN: 1,
     };
     return run;
@@ -70,6 +83,7 @@ const Campaign = {
     const co = run.company;
     co.drills = co.drills || []; co.rifles = co.rifles || 0; co.type = co.type || null;
     co.surgeons = co.surgeons || 0; co.recruiters = co.recruiters || 0;
+    run.act = run.act || 0; run.winter = !!run.winter;
     for (const s of co.soldiers) { s.rank = s.rank || 'pte'; s.weapon = s.weapon || 'musket'; }
     return run;
   },
@@ -77,10 +91,12 @@ const Campaign = {
   rng(run) { run.rngN++; return makeRng((run.seed * 7919 + run.rngN * 104729) >>> 0); },
   rank(run) { let r = RANKS[0]; for (const k of RANKS) if (run.total >= k.renown) r = k; return r; },
   nextRank(run) { return RANKS.find(k => k.renown > run.total) || null; },
-  level(row) { return clamp(row / (MAP_ROWS - 1), 0, 1); },
+  // how good the enemy is: climbs across the whole campaign, not just one act
+  level(row, act = 0, rows = MAP_ROWS) { return clamp((act + row / (rows - 1)) / ACTS.length, 0, 1); },
+  act(run) { return ACTS[Math.min(run.act || 0, ACTS.length - 1)]; },
 
   // ── the route ──
-  genMap(rng) {
+  genMap(rng, act = 0) {
     const rows = [];
     for (let r = 0; r < MAP_ROWS; r++) {
       const n = r === 0 ? 2 : r === MAP_ROWS - 1 ? 1 : rng.int(2, 4);
@@ -98,7 +114,7 @@ const Campaign = {
         }
         row.push({
           id: `${r}-${i}`, row: r, x: (i + 0.5) / n + (n > 1 ? rng.range(-0.08, 0.08) : 0), type,
-          scenario: type === 'finale' ? 'finale' : type === 'setpiece' ? rng.pick(SETPIECE_POOL) : (type === 'battle' || type === 'elite') ? rng.pick(BATTLE_POOL) : null,
+          scenario: type === 'finale' ? ACTS[act].boss : type === 'setpiece' ? rng.pick(SETPIECE_POOL) : (type === 'battle' || type === 'elite') ? rng.pick(BATTLE_POOL) : null,
           seed: Math.floor(rng() * 1e9), edges: [], done: false,
         });
       }
@@ -130,7 +146,7 @@ const Campaign = {
     Campaign.armRifles(run.company);
     return {
       scenario: node.scenario, seed: node.seed,
-      level: Campaign.level(node.row) + (node.type === 'elite' ? 0.18 : 0),
+      level: Campaign.level(node.row, run.act || 0, run.map.length) + (node.type === 'elite' ? 0.18 : node.type === 'finale' ? 0.08 : 0),
       company: run.company, commander: run.commander,
     };
   },
@@ -205,8 +221,30 @@ const Campaign = {
     run.log.push(`${SCENARIOS[node.scenario].name}: ${R.how}`);
     if (R.how === 'fell') run.over = 'fell';
     else if (!co.soldiers.length) run.over = 'destroyed';
-    else if (node.type === 'finale') run.over = R.won ? 'victory' : 'defeat';
+    else if (node.type === 'finale') {
+      // an act's great battle: lose it and the campaign is lost; win it and it is winter quarters (or victory)
+      if (!R.won) run.over = 'defeat';
+      else if ((run.act || 0) < ACTS.length - 1) run.winter = true;
+      else run.over = 'victory';
+    }
     return rep;
+  },
+
+  // winter quarters between acts: wounds heal, the depot fills half the gap in the ranks, the men drill
+  winterQuarters(run) {
+    const co = run.company, rng = Campaign.rng(run), lines = [];
+    run.commander.hp = run.commander.maxHp;
+    lines.push('Your wounds have closed over the winter.');
+    const room = Campaign.capacity(run) - co.soldiers.length, n = Math.max(0, Math.ceil(room / 2));
+    for (let i = 0; i < n; i++) co.soldiers.push(Campaign.newSoldier(rng));
+    if (n) lines.push(`The depot sends ${n} recruit${n > 1 ? 's' : ''} to fill the ranks.`);
+    co.drill = clamp(co.drill + 0.03, 0, 0.95);
+    lines.push('A winter of drill: the men load a little faster.');
+    return lines;
+  },
+  nextAct(run) {
+    run.act = (run.act || 0) + 1; run.winter = false;
+    run.map = Campaign.genMap(Campaign.rng(run), run.act); run.at = null; run.row = -1;
   },
 
   // ── between battles ──

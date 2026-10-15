@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 177 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 185 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -45,7 +45,7 @@ export line). A headless check asserts that index.html's script order matches.
 | `touch.js` | phone controls: tap = walk, hold = two-level order wheel (Fire up / Bayonet right / Form down / Move left), drag = look, pinch = zoom |
 | `builder.js` | the battle builder: unit costs in renown, budgets, auto-deployment of two built armies |
 | `battle.js` | create / fixed-step tick / per-team fog of war / end check. Pure: emits `events` (sound) + `fx` (picture) |
-| `campaign.js` | route map (11 rows, StS-style), renown, rank, roster persistence, camp/shop/events |
+| `campaign.js` | three ACTS, each a 9-row StS-style route ending in a great battle, winter quarters between, renown, rank, roster persistence, camp/shop/events |
 | `render.js` `audio.js` `input.js` `ui.js` `main.js` | the browser side. `Sound`, not `Audio` (that is a DOM global) |
 
 ## Rules that are load-bearing
@@ -147,6 +147,13 @@ The user's reasoning: commanding more than ~2 units needs campaign power-scaling
 - `Builder.company(own, seed)` = `Campaign.quickCompany` + quality/rifles.
 - Horse is per faction now (`CAV_TYPES[k].faction`, `.price`): British **light_dragoons** and **heavy_dragoons** added; British gunners/batteries in factions.js. Allied horse and guns use the same AI as the French.
 - UI: title → **Battle builder** (`UI.builder`, `#screen-builder`); the army is saved per viewer in `localStorage['formline.army']` (`App.loadArmy/saveArmy`, try/catch'd). `App.builderBattle`.
+
+## The acts (round 8 — the user: "the campaign still ends on the first big battle… a couple stages a la slay the spire")
+
+- `ACTS` (campaign.js): I The Peninsula 1810 → boss `sp_ridge` "Busaco"; II Spain 1812–13 → `sp_village` "Vitoria"; III The Hundred Days 1815 → `finale` "Waterloo". Each act is its own `MAP_ROWS` **9**-row route (`genMap(rng, act)`; the last row's node type stays `'finale'`, its scenario is the act's boss). `run.act`, `run.winter`.
+- `Campaign.level(row, act, rows)` = (act + row/(rows−1)) / 3 — the enemy gets better across the whole campaign, so horse (level ≥0.3) arrives in Act II and guns/cuirassiers in Act III. Act bosses +0.08.
+- Win an act's great battle → `run.winter` → `UI.winter` (= the camp screen with a winter header, no Rest): `Campaign.winterQuarters` heals you, sends recruits for half the gap to capacity, drill +0.03; then one camp choice → `Campaign.nextAct` (new map). Lose any act's great battle → the campaign is lost. Saves made during winter resume into winter quarters. Old saves migrate into Act I (the UI sizes the map from `run.map.length`, so an old 11-row map still draws).
+- ⚠ Only two set-piece maps exist for 3 acts × (3 set pieces + boss): they repeat a lot. More set-piece maps are the obvious content gap.
 
 ## Company customization (campaign)
 

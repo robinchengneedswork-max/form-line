@@ -159,7 +159,7 @@ console.log('§6 battles end');
 console.log('§7 campaign');
 {
   const r = Campaign.newRun(1234);
-  chk(`the route has ${MAP_ROWS} stages ending in the great battle`, r.map.length === MAP_ROWS && r.map[MAP_ROWS - 1][0].type === 'finale');
+  chk(`each act's route has ${MAP_ROWS} stages ending in the act's great battle`, r.map.length === MAP_ROWS && r.map[MAP_ROWS - 1][0].type === 'finale' && r.map[MAP_ROWS - 1][0].scenario === X.ACTS[0].boss);
   const reach = new Set(r.map[0].map(n => n.id));
   for (const row of r.map) for (const n of row) if (reach.has(n.id)) n.edges.forEach(e => reach.add(e));
   chk('every stage can be reached', r.map.every(row => row.every(n => reach.has(n.id))));
@@ -257,7 +257,7 @@ console.log('§10 set pieces');
 }
 {
   const r = Campaign.newRun(4321);
-  chk('the campaign route has set pieces along it', r.map.some(row => row.some(n => n.type === 'setpiece' && SETPIECE_POOL.includes(n.scenario))) && r.map[MAP_ROWS - 1][0].scenario === 'finale');
+  chk('the campaign route has set pieces along it', r.map.some(row => row.some(n => n.type === 'setpiece' && SETPIECE_POOL.includes(n.scenario))) && r.map[MAP_ROWS - 1][0].scenario === X.ACTS[0].boss);
   chk('the great battle is a set piece', !!SCENARIOS.finale.setpiece);
 }
 
@@ -422,7 +422,7 @@ console.log('§11 the charge, wind & the road');
   }
   {
     const r = Campaign.newRun(95);
-    chk('a big battle every other stage', r.map.filter(row => row.some(n => n.type === 'setpiece')).length >= 4);
+    chk("a big battle every other stage (three an act, then the act's own)", r.map.filter(row => row.some(n => n.type === 'setpiece')).length >= 3);
     chk('…and a quartermaster on every other stage', r.map.filter(row => row.some(n => n.type === 'quartermaster')).length >= 5);
   }
 
@@ -779,6 +779,37 @@ console.log('§15 the battle builder');
   chk('…with British horse and guns on our side', B.units.some(u => u.team === TEAM_PLAYER && u.cav === CAV_TYPES.heavy_dragoons) && B.units.some(u => u.team === TEAM_PLAYER && u.arm === 'gun'));
   run(B, CFG.NIGHTFALL);
   chk('…and the battle plays out to an end', B.over, B.result && B.result.how);
+}
+
+console.log('§16 the acts');
+{
+  const { ACTS } = X;
+  const r = Campaign.newRun(301);
+  chk('three acts, ending at Waterloo', ACTS.length === 3 && ACTS[2].boss === 'finale' && r.act === 0);
+  // the enemy gets better across the whole campaign, not just the act
+  const lv = (act, row) => Campaign.level(row, act);
+  chk('the enemy grows stronger act on act', lv(0, MAP_ROWS - 1) <= lv(1, 0) + 0.01 && lv(1, MAP_ROWS - 1) <= lv(2, 0) + 0.01 && lv(0, 0) === 0 && lv(2, MAP_ROWS - 1) === 1);
+  // win the act's great battle: winter quarters, then the next act’s road
+  const boss = r.map[MAP_ROWS - 1][0];
+  const B = fresh(boss.scenario, 302); B.over = false; Battle.finish(B, 'won');
+  r.commander.hp = 1;
+  Campaign.afterBattle(r, boss, B.result);
+  chk('winning an act’s great battle goes to winter quarters, not the end', !r.over && r.winter);
+  const before = r.company.soldiers.length, lines = Campaign.winterQuarters(r);
+  chk('…where wounds heal and the depot fills the ranks', r.commander.hp === r.commander.maxHp && r.company.soldiers.length >= before && lines.length >= 2);
+  Campaign.nextAct(r);
+  chk('…and the spring brings the next act’s road', r.act === 1 && !r.winter && r.at === null && r.map[MAP_ROWS - 1][0].scenario === ACTS[1].boss && r.map[0].every(n => !n.done));
+  // lose a great battle and the campaign is lost; win the last and it is won
+  const r2 = Campaign.newRun(303), b2 = r2.map[MAP_ROWS - 1][0];
+  const L = fresh(b2.scenario, 304); L.over = false; Battle.finish(L, 'lost');
+  Campaign.afterBattle(r2, b2, L.result);
+  chk('losing an act’s great battle ends the campaign', r2.over === 'defeat');
+  const r3 = Campaign.newRun(305); r3.act = 2; r3.map = Campaign.genMap(makeRng(5), 2);
+  const b3 = r3.map[MAP_ROWS - 1][0], W = fresh(b3.scenario, 306); W.over = false; Battle.finish(W, 'won');
+  Campaign.afterBattle(r3, b3, W.result);
+  chk('winning the last act wins the campaign', b3.scenario === 'finale' && r3.over === 'victory');
+  const old = Campaign.migrate(JSON.parse(JSON.stringify(Object.assign(Campaign.newRun(307), { act: undefined }))));
+  chk('older saves load into Act I', old.act === 0 && old.winter === false);
 }
 
 console.log('§8 music & the page');

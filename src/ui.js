@@ -52,7 +52,7 @@ const UI = {
   // ── route map ──
   map(run) {
     const svg = $('route'), rows = run.map, Wd = 520, Ht = 640;
-    const pos = n => [40 + n.x * (Wd - 80), Ht - 40 - n.row * ((Ht - 80) / (MAP_ROWS - 1))];
+    const pos = n => [40 + n.x * (Wd - 80), Ht - 40 - n.row * ((Ht - 80) / (rows.length - 1))];
     const choices = new Set(Campaign.choices(run).map(n => n.id));
     let s = '';
     for (const row of rows) for (const n of row) for (const e of n.edges) {
@@ -63,10 +63,11 @@ const UI = {
     for (const row of rows) for (const n of row) {
       const [x, y] = pos(n), inf = NODE_INFO[n.type];
       const cls = ['node', n.type, n.done ? 'done' : '', choices.has(n.id) && !run.over ? 'choice' : '', run.at === n.id ? 'here' : ''].join(' ');
-      const tip = inf.name + (n.scenario ? ' — ' + SCENARIOS[n.scenario].name : '');
+      const tip = (n.type === 'finale' ? `${Campaign.act(run).bossName}: the great battle of the act` : inf.name) + (n.scenario ? ' — ' + SCENARIOS[n.scenario].name : '');
       s += `<g class="${cls}" data-id="${n.id}"><title>${esc(tip)}</title><circle cx="${x}" cy="${y}" r="${n.type === 'finale' ? 22 : 16}"/><text x="${x}" y="${y + 6}">${inf.glyph}</text></g>`;
     }
     svg.innerHTML = s;
+    if ($('map-title')) $('map-title').textContent = Campaign.act(run).road;
     svg.querySelectorAll('g.choice').forEach(g => g.onclick = () => App.enterNode(g.dataset.id));
     UI.sidebar(run);
     $('btn-company').onclick = () => UI.company(run, () => UI.map(run));
@@ -78,6 +79,7 @@ const UI = {
     const hp = '♥'.repeat(run.commander.hp) + '♡'.repeat(run.commander.maxHp - run.commander.hp);
     const sold = co.soldiers.slice().sort((a, b) => b.kills - a.kills || b.xp - a.xp);
     $('side').innerHTML = `
+      <p class="kicker">${esc(Campaign.act(run).name)}</p>
       <h2>${esc(rk.title)}</h2>
       <div class="stat"><span>Renown to spend</span><b>${run.renown}</b></div>
       <div class="stat"><span>Renown earned</span><b>${run.total}${nx ? ` <small>/ ${nx.renown} for ${esc(nx.title)}</small>` : ''}</b></div>
@@ -130,7 +132,7 @@ const UI = {
 
   // ── before a battle ──
   brief(sc, dep, node, onGo) {
-    const level = node ? Campaign.level(node.row) : 0.3;
+    const level = node && App.run ? Campaign.level(node.row, App.run.act || 0, App.run.map.length) : 0.3;
     const enemyMen = dep.enemies.reduce((a, e) => a + e.size, 0);
     $('brief').innerHTML = `
       <p class="kicker">${sc.setpiece ? 'The whole brigade' : node && node.type === 'elite' ? 'A hard fight' : 'Battle'} · ${['Morning', 'Midday', 'Afternoon'][Math.min(2, Math.floor(level * 3))]}</p>
@@ -312,11 +314,20 @@ const UI = {
     showScreen('screen-report');
   },
 
-  camp(run, onDone) {
-    const opts = [['rest', 'Rest', 'Heal your wounds fully.'], ['drill', 'Drill', 'Platoon exercise: faster loading.'], ['recruit', 'Send to the depot', 'Up to 3 raw recruits, if there is room.']];
+  // between acts: what the winter did, then one camp choice, then the next act's road
+  winter(run, onDone) {
+    const lines = Campaign.winterQuarters(run), next = ACTS[(run.act || 0) + 1];
+    UI.camp(run, onDone, {
+      title: 'Winter quarters',
+      blurb: `${lines.join(' ')} In the spring: <b>${esc(next.name)}</b>. ${esc(next.blurb)}`,
+    });
+  },
+
+  camp(run, onDone, head) {
+    const opts = [...(head ? [] : [['rest', 'Rest', 'Heal your wounds fully.']]), ['drill', 'Drill', 'Platoon exercise: faster loading.'], ['recruit', 'Send to the depot', 'Up to 3 raw recruits, if there is room.']];
     const learn = Campaign.unlearned(run);
     if (learn.length) opts.push(['learn', 'Learn a drill', learn.map(k => LEARNED_DRILLS[k]).join(' · ')]);
-    $('camp').innerHTML = `<h1>Camp</h1><p class="blurb">A night with no enemy in sight. One thing, properly done.</p>
+    $('camp').innerHTML = `<h1>${head ? head.title : 'Camp'}</h1><p class="blurb">${head ? head.blurb : 'A night with no enemy in sight. One thing, properly done.'}</p>
       <div class="cards">${opts.map(([k, n, d]) => `<button class="card" data-k="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div><p id="camp-out" class="note"></p>`;
     $('camp').querySelectorAll('.card').forEach(b => b.onclick = () => {
       if (b.dataset.k === 'learn') {

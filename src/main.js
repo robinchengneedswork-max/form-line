@@ -17,7 +17,13 @@ const App = {
     App.saveRun();
     UI.map(App.run);
   },
-  continueCampaign() { const r = App.loadRun(); if (!r) return; App.quick = false; App.run = Campaign.migrate(r); UI.map(App.run); },
+  continueCampaign() {
+    const r = App.loadRun(); if (!r) return;
+    App.quick = false; App.run = Campaign.migrate(r);
+    // saved between an act's great battle and the spring
+    if (App.run.winter) return UI.winter(App.run, () => { Campaign.nextAct(App.run); App.saveRun(); UI.map(App.run); });
+    UI.map(App.run);
+  },
 
   enterNode(id) {
     const run = App.run, n = Campaign.go(run, id);
@@ -80,7 +86,8 @@ const App = {
           if (!best || run.total > best.renown) localStorage.setItem('formline.best', JSON.stringify({ renown: run.total, rank: Campaign.rank(run).title, outcome: run.over }));
         } catch (e) { /* storage unavailable */ }
         UI.end(run);
-      } else UI.map(run);
+      } else if (run.winter) UI.winter(run, () => { Campaign.nextAct(run); App.saveRun(); UI.map(run); });
+      else UI.map(run);
     });
   },
 
