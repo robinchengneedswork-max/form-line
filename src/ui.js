@@ -231,7 +231,7 @@ const UI = {
   hud(B) {
     const u = B.player, c = B.cmd;
     const loaded = u.men.filter(m => m.role === 'line' && m.state === 'formed' && m.m !== 'reloading').length;
-    const pres = u.men.filter(m => m.m === 'present').length;
+    const pres = u.men.filter(m => m.state === 'formed' && m.m === 'present').length;
     const word = Unit.moraleWord(u);
     const orderWord = { follow: 'In column, following you', hold: u.shelled && B.t - u.shelled < 4 ? (u.form.kind === 'square' ? 'In square — under the guns' : 'Under artillery fire') : u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'square' ? 'In square' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', retire: 'Retiring to the road', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
     const windWord = u.wind > 0.7 ? 'Fresh' : u.wind > 0.35 ? 'Puffing' : u.wind > 0.1 ? 'Winded' : 'Blown';

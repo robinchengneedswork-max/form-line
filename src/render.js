@@ -375,6 +375,8 @@ const Render = {
           g.strokeStyle = 'rgba(30,30,30,0.25)'; g.lineWidth = 0.25; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx - (f.x1 - f.x0) / L * 6, by - (f.y1 - f.y0) / L * 6); g.stroke();
         }
         const gk = Math.hypot(f.gx - f.x0, f.gy - f.y0) / L;
+        // once the ball has grazed, its furrow and skips stay in the ground for the rest of the day
+        if (!f.scored && age >= gk * f.dur) { f.scored = true; Render.score(B, f); }
         for (let j = 0; j < 4; j++) {
           const at = gk + (1 - gk) * j / 4, when = at * f.dur, a2 = age - when;
           if (a2 < 0 || a2 > 0.6) continue;
@@ -387,6 +389,27 @@ const Render = {
       g.fillStyle = `rgba(255,${200 + Math.random() * 50 | 0},120,${1 - age / 0.12})`;
       g.beginPath(); g.arc(f.x + Math.cos(f.a) * 0.4, f.y + Math.sin(f.a) * 0.4, 0.55 + Math.random() * 0.3, 0, 7); g.fill();
     }
+  },
+
+  // a roundshot's track in the turf: a gouge where it first grazed, then shorter scuffs where it skipped
+  score(B, f) {
+    const c = Render.terrain; if (!c || Render.terrainFor !== B) return;
+    const g = c.getContext('2d'), P = c.width / B.field.w;
+    const L = Math.hypot(f.x1 - f.gx, f.y1 - f.gy); if (L < 1) return;
+    const ux = (f.x1 - f.gx) / L, uy = (f.y1 - f.gy) / L, rnd = makeRng((f.t * 1000) | 0);
+    g.save(); g.scale(P, P); g.lineCap = 'round';
+    const mark = (s, len, w, a) => {
+      const x = f.gx + ux * s, y = f.gy + uy * s, t = Field.typeAt(B.field, x, y);
+      if (t === T.WATER || t === T.BUILDING || t === T.FORD) return;
+      g.strokeStyle = `rgba(78,58,36,${a})`; g.lineWidth = w;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + ux * len, y + uy * len); g.stroke();
+      // thrown-up earth either side
+      g.fillStyle = `rgba(96,74,46,${a * 0.6})`;
+      for (let k = 0; k < 4; k++) { const o = (rnd() - 0.5) * w * 3, along = rnd() * len; g.beginPath(); g.arc(x + ux * along - uy * o, y + uy * along + ux * o, 0.15 + rnd() * 0.2, 0, 7); g.fill(); }
+    };
+    mark(0, 3.2, 0.75, 0.6);
+    for (const [k, len, w, a] of [[0.22, 2.2, 0.55, 0.45], [0.45, 1.6, 0.45, 0.35], [0.66, 1.1, 0.35, 0.28], [0.84, 0.7, 0.3, 0.2]]) mark(L * k, len, w, a);
+    g.restore();
   },
 
   smoke(g, B) {

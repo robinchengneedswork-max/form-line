@@ -120,7 +120,7 @@ The agreed roadmap for a rewarding progression curve: **cavalry + square first, 
 - **Canister**: 30 balls in ±0.13 rad, each finds the first man in its path at `CANISTER_P`·e^(−d/110), max 6/shot. Two guns at 90 m rout a company. Range was 240 → 160 → **140** so skirmishers firing at will (165 m) can duel the crews from outside it: skirmish order at 150 m kills ~half the gunners in 3 min for ~2 men.
 - Capture (`Artillery.capture`): no own gunner within 6 m and an enemy formed man within `GUN_CAPTURE` 8 m. +20 renown per gun.
 - Where: **The Guns on the Knoll** (`battery`: 2 guns + a holding company, wood on the left running to ~140 m of the knoll, an attacking ally that draws fire); Open Ground at level ≥0.55 (35%, one gun); **The Long Ridge**: a grand battery of 2×2 guns on the French ridge (the reverse slope is now the point).
-- HUD says "Under artillery fire" (`u.shelled`). Sound: `Sound.cannon`. Render: `Render.gun` (recoils), `ball` fx (ball in flight + earth spurts where it grazes), `canister` spray, `gunflash`.
+- HUD says "Under artillery fire" (`u.shelled`). Sound: `Sound.cannon`. Render: `Render.gun` (recoils), `ball` fx (ball in flight + earth spurts where it grazes), `canister` spray, `gunflash`. `Render.score` paints each ball's furrow + skip scuffs permanently into the baked terrain canvas (the user asked; render-only, flag `f.scored` on the fx).
 
 ## Round 6 also: volley-and-charge, your horse, the phone minimap
 
