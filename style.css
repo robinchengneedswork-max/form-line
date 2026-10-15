@@ -162,7 +162,7 @@ button.mini { font-size: 12px; padding: 2px 8px; }
 .hud .cwind i { display: block; height: 100%; background: #9cc7e8; }
 .hud .warn { color: #f0b46a; }
 #touch-bar #tb-run.on { background: #b08a2e; color: #fff; }
-#btn-leave { display: none; position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 6;
+#btn-leavefield { display: none; position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 6;
   font: 700 17px Georgia, serif; padding: 10px 22px; background: #2d4a2b; color: #f1e8d2; border: 2px solid #e8be50; border-radius: 6px; cursor: pointer; }
-#btn-leave.show { display: block; }
-body.touch #btn-leave { bottom: 84px; }
+#btn-leavefield.show { display: block; }
+body.touch #btn-leavefield { bottom: 84px; }

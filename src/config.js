@@ -68,6 +68,8 @@ const CFG = {
   CHARGE_TEST: 22,
   STEADY_AFTER: 6,
   AI_CHARGE_BREATH: 0.6,
+  CREST_STEP: 75,          // a holding company will step this far off its post to see over a crest
+  CREST_STEP_RANGE: 200,   // …once the enemy is this close
   CHARGE_BLOWN: 0.2,       // below this breath, with nobody in contact, a charge (or a pursuit) is over
   CHARGE_MAX: 45,          // seconds; nobody chases a beaten enemy across the county   // AI captains only order a charge with this much breath in the men         // a volley this recent still counts as a steady line at the clash
   // MOMENTUM: a charge's push is how fast the men are going when it lands (wind, slope and ground

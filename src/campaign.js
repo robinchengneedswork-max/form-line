@@ -71,7 +71,8 @@ const Campaign = {
         if (r === MAP_ROWS - 1) type = 'finale';
         else if (r === 0) type = 'battle';
         else if (r === MAP_ROWS - 2) type = i === 0 ? 'camp' : rng.pick(['quartermaster', 'camp']);
-        else if ((r === 4 || r === 7) && i === 0) type = 'setpiece';   // a big battle every few stages
+        else if (r % 2 === 0 && i === 0) type = 'setpiece';           // a big battle every other stage
+        else if (r % 2 === 1 && i === n - 1) type = 'quartermaster';  // and the quartermaster's cart is never far
         else {
           const x = rng();
           type = x < 0.44 ? 'battle' : x < 0.58 ? 'quartermaster' : x < 0.72 ? 'camp' : x < 0.88 ? 'event' : (r >= 3 ? 'elite' : 'battle');
@@ -164,8 +165,10 @@ const Campaign = {
       }
     }
     co.soldiers = keep;
-    // the recruiting party has been busy while you fought
-    const room = Campaign.capacity(run) - co.soldiers.length, n = Math.min(Math.max(0, room), co.recruiters || 0);
+    // the regiment's depot sends a draft after every battle (a bigger one after a great battle),
+    // and your own recruiting party adds to it
+    const draft = (node.type === 'setpiece' || node.type === 'finale' ? 4 : 2) + (co.recruiters || 0);
+    const room = Campaign.capacity(run) - co.soldiers.length, n = Math.min(Math.max(0, room), draft);
     for (let i = 0; i < n; i++) co.soldiers.push(Campaign.newSoldier(rng));
     rep.recruits = n;
     if (R.coloursLost) co.colours = false;
@@ -214,9 +217,9 @@ const Campaign = {
     surgeons: { name: 'Surgeon\u2019s mate', costs: [16, 26, 40],
       desc: l => `More of the wounded survive the surgeon's table (${Math.round(Campaign.woundedLive({ surgeons: l }) * 100)}% → ${Math.round(Campaign.woundedLive({ surgeons: l + 1 }) * 100)}%).` },
     recruiters: { name: 'Recruiting party', costs: [18, 30, 45],
-      desc: l => `A sergeant and a drummer beating up for volunteers: ${l + 1} raw recruit${l ? 's' : ''} join after every battle, if there is room.` },
+      desc: l => `A sergeant and a drummer beating up for volunteers: ${l + 1} more raw recruit${l ? 's' : ''} on top of the depot's draft after every battle.` },
   },
-  woundedLive(co) { return [0.55, 0.68, 0.79, 0.88][co.surgeons || 0]; },
+  woundedLive(co) { return [0.65, 0.75, 0.84, 0.92][co.surgeons || 0]; },
   // the rifles go to the best shots, unless you have handed them out yourself
   armRifles(co) {
     const armed = co.soldiers.filter(s => s.weapon === 'rifle');
@@ -260,7 +263,7 @@ const Campaign = {
     }
     if (choice === 'recruit') {
       const room = Campaign.capacity(run) - co.soldiers.length;
-      const n = Math.min(3, Math.max(0, room));
+      const n = Math.min(5, Math.max(0, room));
       for (let i = 0; i < n; i++) co.soldiers.push(Campaign.newSoldier(rng));
       return n ? `${n} recruits from the depot join the company.` : 'The company is at full strength — the depot sends no one.';
     }
@@ -270,8 +273,8 @@ const Campaign = {
   shopItems(run) {
     const co = run.company, room = Campaign.capacity(run) - co.soldiers.length;
     return [
-      { key: 'recruit', name: 'Recruit', desc: 'A raw volunteer.', cost: 7, ok: room > 0 },
-      { key: 'veteran', name: 'Veteran from another regiment', desc: 'Steadier, a better shot.', cost: 16, ok: room > 0 },
+      { key: 'recruit', name: 'Recruit', desc: 'A raw volunteer.', cost: 5, ok: room > 0 },
+      { key: 'veteran', name: 'Veteran from another regiment', desc: 'Steadier, a better shot.', cost: 12, ok: room > 0 },
       { key: 'drill', name: 'Drill sergeant', desc: `Faster loading (drill ${Math.round(co.drill * 100)} → ${Math.round(Math.min(0.95, co.drill + 0.06) * 100)}).`, cost: 22, ok: co.drill < 0.95 },
       { key: 'rifle', name: 'Baker rifle', desc: `Twice the reach, half the rate of fire. Goes to your best shot (${co.rifles}/${Campaign.rifleCap(co)}).`, cost: 20, ok: co.rifles < Campaign.rifleCap(co) },
       { key: 'drummer', name: 'Drummer boy', desc: 'Carries your orders beyond shouting range. Steadies the men.', cost: 14, ok: !co.drummer },

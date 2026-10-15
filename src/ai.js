@@ -166,6 +166,8 @@ const AI = {
       }
     } else if (u.doctrine === 'hold') {
       if (u.form.kind === 'column') Orders.give(B, u, 'line', { x: u.cx, y: u.cy, facing: face });
+      // behind a crest and the enemy is in range of it: step up to where we can shoot (Wellington's way)
+      else if (u.order === 'hold' && d < CFG.CREST_STEP_RANGE && !AI.inCover(B, u) && AI.stepUp(B, u, E, face)) return;
       // a holding company keeps its ground (and its wall) unless the threat is well off its front
       else if (off > (AI.inCover(B, u) ? 0.9 : CFG.FIRE_CONE * 0.8) && d < 260) Orders.give(B, u, 'line', { x: u.form.x, y: u.form.y, facing: face });
       // against a column, hold the volley until it is close — then it breaks them
@@ -235,6 +237,21 @@ const AI = {
     const L = u.leader || B.cmd;
     if (u.order === 'follow' && L && dist(L.x, L.y, a.x, a.y) < 12) { Orders.give(B, u, 'line', { x: a.x, y: a.y, facing: a.facing }); return true; }
     if (!E && (u.form.kind === 'column' || Math.abs(angDiff(u.form.facing, a.facing)) > 0.3)) { Orders.give(B, u, 'line', { x: a.x, y: a.y, facing: a.facing }); return true; }
+    return false;
+  },
+
+  // the nearest spot ahead (within CREST_STEP of the post) from which the line can see its target
+  stepUp(B, u, E, face) {
+    const f = u.form;
+    if (Field.los(B.field, f.x, f.y, E.cx, E.cy) || B.t < (u.ai.stepT || 0)) return false;
+    u.ai.stepT = B.t + 6;
+    const home = u.anchor || f, fx = Math.cos(face), fy = Math.sin(face);
+    for (let k = 6; k <= CFG.CREST_STEP; k += 6) {
+      const x = f.x + fx * k, y = f.y + fy * k;
+      if (dist(x, y, home.x, home.y) > CFG.CREST_STEP) break;
+      if (!Field.passable(B.field, x, y)) break;
+      if (Field.los(B.field, x, y, E.cx, E.cy)) { Orders.give(B, u, 'line', { x, y, facing: face }); return true; }
+    }
     return false;
   },
 

@@ -8,7 +8,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const { load, SIM_FILES } = require('./load');
 const { X } = load();
-const { TEAM_PLAYER, TEAM_ENEMY, angDiff, knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
+const { AI, TEAM_PLAYER, TEAM_ENEMY, angDiff, knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
 
 let pass = 0, fail = 0;
 const chk = (name, cond, extra) => {
@@ -161,7 +161,7 @@ console.log('§7 campaign');
   run(B, CFG.NIGHTFALL + 10);
   const before = r.company.soldiers.length;
   const rep = Campaign.afterBattle(r, node, B.result);
-  chk('after a battle the dead leave the roll and the rest gain experience', r.company.soldiers.length === before - rep.dead.length && r.company.soldiers.some(s => s.battles === 1));
+  chk('after a battle the dead leave the roll and the rest gain experience', r.company.soldiers.length === before - rep.dead.length + rep.recruits && r.company.soldiers.some(s => s.battles === 1));
   chk('renown earned is never less than renown to spend', r.total >= r.renown);
   r.renown = 100;
   const cap = Campaign.capacity(r);
@@ -342,9 +342,29 @@ console.log('§11 the charge, wind & the road');
     const b = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
     Battle.finish(b, 'nightfall');
     const before = b.player.men.filter(m => m.src).length, rep = Campaign.afterBattle(r, r.map[0][0], b.result);
-    chk('…and a recruiting party brings up men after every battle, while there is room', rep.recruits === 2 && r.company.soldiers.length === before + 2, rep.recruits);
+    chk('…the depot sends a draft after every battle, and a recruiting party adds to it, while there is room', rep.recruits === 4 && r.company.soldiers.length === before + 4, rep.recruits);
     const old = JSON.parse(JSON.stringify(Campaign.newRun(94))); delete old.company.surgeons; delete old.company.recruiters;
     chk('…old saves start with none', Campaign.migrate(old).company.surgeons === 0 && old.company.recruiters === 0);
+  }
+
+  // the crest: holding companies step up to shoot instead of hiding behind it
+  {
+    const b = fresh('sp_ridge', 72), E4 = b.units.find(e => e.team === TEAM_ENEMY);
+    const a = b.units.find(o => o.team === 0 && !o.isPlayer && o.task.kind === 'hold' && !AI.inCover(b, o) &&
+      !Field.los(b.field, o.form.x, o.form.y, o.form.x, o.form.y - 150));
+    if (a) {
+      for (const m of E4.men) { m.x += a.form.x - E4.cx; m.y += a.form.y - 150 - E4.cy; }
+      Unit.survey(E4); b.seen[0].add(E4.id);
+      const y0 = a.form.y; b.pending.length = 0;
+      AI.stepUp(b, a, E4, -Math.PI / 2);
+      const o = b.pending.find(p => p.unit === a && p.cmd === 'line');
+      chk('a company holding behind a crest steps up to it when the enemy is in range', o && o.opts.y < y0 - 5 && dist(o.opts.x, o.opts.y, a.task.x, a.task.y) <= CFG.CREST_STEP, o && (y0 - o.opts.y).toFixed(0) + ' m');
+    } else chk('a company holding behind a crest steps up to it (no company behind a crest in this seed)', false);
+  }
+  {
+    const r = Campaign.newRun(95);
+    chk('a big battle every other stage', r.map.filter(row => row.some(n => n.type === 'setpiece')).length >= 4);
+    chk('…and a quartermaster on every other stage', r.map.filter(row => row.some(n => n.type === 'quartermaster')).length >= 5);
   }
 
   // you: sprint, and get blown
@@ -386,6 +406,13 @@ chk('every order has a drum call', ['follow', 'line', 'advance', 'halt', 'ready'
 {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const scripts = [...html.matchAll(/<script src="src\/([^"]+)"/g)].map(m => m[1]);
+  {
+    // an id used twice wires a button's click onto the wrong element (it broke the quartermaster's March on once)
+    const ids = [...html.matchAll(/id="([^"]+)"/g)].map(m => m[1]);
+    const made = [...fs.readFileSync(path.join(__dirname, '..', 'src', 'ui.js'), 'utf8').matchAll(/id="([^"$]+)"/g)].map(m => m[1]);
+    const dup = ids.filter((x, i) => ids.indexOf(x) !== i).concat(made.filter(x => ids.includes(x)));
+    chk('no element id is used twice (page + screens drawn by ui.js)', !dup.length, dup.join(','));
+  }
   chk('index.html loads the sim in the same order as the tests', SIM_FILES.every((f, i) => scripts[i] === f), scripts.join(','));
   // load the whole page's scripts with a stubbed DOM
   const ctx2d = new Proxy({}, { get(t, k) { if (k in t) return t[k]; if (k === 'createImageData') return (w, h) => ({ data: new Uint8ClampedArray(4) }); if (k === 'measureText') return () => ({ width: 40 }); return () => {}; }, set(t, k, v) { t[k] = v; return true; } });

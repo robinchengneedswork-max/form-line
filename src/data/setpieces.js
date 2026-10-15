@@ -38,7 +38,7 @@ Object.assign(SCENARIOS, {
     },
     deploy(rng, lv) {
       const e = enemyStrength(lv, rng), sz = Math.round(e.size * 0.75);
-      const you = hold(480, 505, 'Hold the centre of the ridge, just behind the crest. Let them come to you — do not go forward until I say.');
+      const you = hold(480, 505, 'Hold the centre of the ridge, just behind the crest. When they come up the slope, step up to the crest and give them a volley — but do not go down the hill until I say.');
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [

@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 121 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 124 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -96,11 +96,20 @@ The user chose: **keep ~1 round/min and fix the charge instead**; a **retreat zo
 - **Company type** at Captain: Light (skirmish learned, 0.42× hits in skirmish order, +10% speed), Grenadier (melee ×1.2, nerve +6, shock ×1.25), Line (reload ×0.92, volley bonus +0.1, drill +5).
 - `Campaign.migrate` upgrades older saves.
 
+## Progression (round 4: "we keep losing men and barely make enough to add back")
+
+- The depot sends a **free draft after every battle**: 2 men (4 after a set piece) + recruiters, up to capacity.
+- A quartermaster on every odd stage; recruits 5, veterans 12; camp recruiting brings 5.
+- Base wounded survival 65% (surgeons 75/84/92).
+- **Cannon** is the user's flagged next big topic once this settles.
+
 ## Establishment (the user asked: medics and recruiters)
 
-`co.surgeons` and `co.recruiters` (0..3, bought from the quartermaster: 16/26/40 and 18/30/45). Wounded survive at 55/68/79/88%; recruiters bring 1/2/3 raw men after every battle, up to capacity.
+`co.surgeons` and `co.recruiters` (0..3, bought from the quartermaster: 16/26/40 and 18/30/45). Wounded survive at 65/75/84/92%; recruiters bring 1/2/3 raw men after every battle, up to capacity.
 
 ## Set pieces
+
+**Round 4 (user):** "why hold on our side of the ridge when we can shoot" → holding companies **step up to the crest** (`AI.stepUp`, up to `CREST_STEP` 75 m off the post, once the enemy is within `CREST_STEP_RANGE`) — viewpoints on sp_ridge are 27–72 m ahead of the posts. Obedience counts that as still holding. Set pieces now come **every other stage** (rows 2/4/6/8 + finale) because the user finds them the fun part; with only two set-piece maps they repeat — more maps is the obvious next content.
 
 The user chose: **you are always one company**, and set pieces come up **a few times per campaign** (rows 4 and 7 + the finale).
 HQ is per side and generic (command.js); the scenario only places companies with tasks. Enemy waves are `reserve` tasks with a `wave` time.

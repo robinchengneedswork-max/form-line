@@ -25,7 +25,7 @@ const UI = {
     $('quick-scenario').innerHTML = BATTLE_POOL.concat('finale').map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('');
     $('btn-resume').onclick = () => UI.togglePause();
     $('btn-withdraw').onclick = () => { UI.togglePause(); Battle.withdraw(App.B); };
-    $('btn-leave').onclick = () => UI.leaveField();
+    $('btn-leavefield').onclick = () => UI.leaveField();
     $('btn-mute').onclick = () => UI.toggleMute();
     $('btn-help-close').onclick = () => UI.toggleHelp();
     $('hud-orders').innerHTML = ORDER_KEYS.map(o => `<button class="order" data-cmd="${o.cmd}"><kbd>${o.key}</kbd>${esc(o.label)}</button>`).join('');
@@ -167,7 +167,7 @@ const UI = {
       <div class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}${c.rallyCd > B.t ? ` <small>rally ${Math.ceil(c.rallyCd - B.t)}s</small>` : ''}
         <span class="cwind" title="your breath"><i style="width:${Math.round(c.wind * 100)}%"></i></span>${c.run || c.sprint ? ' <small>sprinting</small>' : ''}</div>`;
     const onRoad = Battle.atRetreat(B, c.x, c.y);
-    $('btn-leave').classList.toggle('show', onRoad);
+    $('btn-leavefield').classList.toggle('show', onRoad);
     $('tb-run').classList.toggle('on', !!c.sprint);
     const wa = B.wind.a * 180 / Math.PI;
     $('hud-clock').innerHTML = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`;
@@ -217,7 +217,7 @@ const UI = {
       <h1>${{ won: 'Victory', lost: 'Defeat', fell: 'Struck down', nightfall: 'Nightfall', withdrew: 'Withdrawal' }[rep.how]}</h1>
       <table class="renown">${rep.lines.map(([w, n]) => `<tr><td>${esc(w)}</td><td>${n > 0 ? '+' : ''}${n || ''}</td></tr>`).join('')}
         <tr class="total"><td>Renown</td><td>${rep.renown >= 0 ? '+' : ''}${rep.renown}</td></tr></table>
-      <p>${rep.wounded ? `${rep.wounded} wounded will march again. ` : ''}${rep.recruits ? `${rep.recruits} recruit${rep.recruits > 1 ? 's' : ''} came up from the depot. ` : ''}${rep.stragglers ? `${rep.stragglers} stragglers came back to the colours. ` : ''}</p>
+      <p>${rep.wounded ? `${rep.wounded} wounded will march again. ` : ''}${rep.recruits ? `A draft of ${rep.recruits} recruit${rep.recruits > 1 ? 's' : ''} came up from the depot. ` : ''}${rep.stragglers ? `${rep.stragglers} stragglers came back to the colours. ` : ''}</p>
       ${dead.length ? `<p class="dead"><b>Killed:</b> ${dead.map(d => esc(d.name)).join(', ')}</p>` : '<p>Nobody was killed.</p>'}
       ${des.length ? `<p class="dead"><b>Missing:</b> ${des.map(d => esc(d.name)).join(', ')}</p>` : ''}
       ${cap.length ? `<p class="dead"><b>Taken prisoner:</b> ${cap.map(d => esc(d.name)).join(', ')}</p>` : ''}

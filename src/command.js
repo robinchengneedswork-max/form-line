@@ -130,7 +130,7 @@ const Command = {
       const engaged = B.units.some(e => e.team !== u.team && !e.routed && e.formed && B.seen[u.team].has(e.id) && dist(u.cx, u.cy, e.cx, e.cy) < 160);
       ok = near < 70 || engaged || (t.lastD != null && near < t.lastD - 1);
       t.lastD = near;
-    } else ok = near < 50;
+    } else ok = near < CFG.CREST_STEP + 5;     // stepping up to the crest to shoot is still holding
     if (ok) B.orders.good++;
   },
   obeyed(B) { return B.orders && B.orders.total > 10 ? B.orders.good / B.orders.total : null; },
