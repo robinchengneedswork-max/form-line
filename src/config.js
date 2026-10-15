@@ -15,7 +15,11 @@ const CFG = {
   FILE_GAP: 1.25,          // shoulder to shoulder, a little generous so the sprites read
   RANK_GAP: 1.7,
   SKIRMISH_GAP: 5,
-  COLUMN_FILES: 4,
+  COLUMN_FILES: 4,         // march column (follow me)
+  ATTACK_FILES: 6,         // column of attack: narrow and deep, built for the charge
+  ATTACK_SHOCK: 1.25,      // charge shock from a column of attack
+  ATTACK_EXPOSED: 1.4,     // hits on a column of attack (a ball that misses the front rank finds the next)
+  BYRANK_GAP: 5,           // fire by rank: seconds between one rank's volley and the next
   SLOT_FORMED: 2.2,        // within this of his slot a man counts as "in the ranks"
 
   // ── pace (m/s) ──

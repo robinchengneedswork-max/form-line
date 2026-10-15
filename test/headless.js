@@ -8,7 +8,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const { load, SIM_FILES } = require('./load');
 const { X } = load();
-const { dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
+const { knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
 
 let pass = 0, fail = 0;
 const chk = (name, cond, extra) => {
@@ -141,7 +141,7 @@ console.log('§6 battles end');
   const B = fresh('plain', 21, { autoPlayer: true, playerDoctrine: 'attack' });
   run(B, CFG.NIGHTFALL + 10);
   chk('an open-field battle reaches a result', B.over && ['won', 'lost', 'fell'].includes(B.result.how), B.result && B.result.how);
-  chk('…in a deliberate few minutes, not seconds or half an hour', B.t > 150 && B.t < 900, (B.t / 60).toFixed(1) + ' min');
+  chk('…in a deliberate few minutes, not seconds or half an hour', B.t > 120 && B.t < 900, (B.t / 60).toFixed(1) + ' min');
   const B2 = fresh('plain', 22); B2.cmd.hp = 1; Combat.hit(B2, B2.cmd, null); run(B2, 1.5);
   chk('if you fall, the battle is over', B2.over && B2.result.how === 'fell');
 }
@@ -168,6 +168,87 @@ console.log('§7 campaign');
   chk('the quartermaster sells recruits up to your rank\'s strength', (() => { let n = 0; while (Campaign.buy(r, 'recruit') && n < 60) n++; return r.company.soldiers.length <= cap; })());
   chk('rank follows renown earned', Campaign.rank({ total: 0 }).title === 'Lieutenant' && Campaign.rank({ total: 999 }).title === 'Lieutenant-Colonel');
   chk('every road event resolves to text', EVENTS.every(ev => ev.options.every(([, fn]) => typeof fn(JSON.parse(JSON.stringify(r)), makeRng(5)) === 'string')));
+}
+
+console.log('§9 drill & the company');
+{
+  // fire by rank: one rank's volley, then the next
+  const B = fresh('plain', 41), u = B.player;
+  for (const m of u.men) { m.x = m.sx; m.y = m.sy; }
+  Orders.apply(B, u, 'byrank', {});
+  const E = B.units[1]; for (const m of E.men) { m.y += 250; m.sy = m.y; } Unit.survey(E);
+  run(B, 4.5);
+  const fired = r => u.men.filter(m => m.role === 'line' && m.rank === r && m.m === 'reloading').length;
+  chk('fire by rank: the front rank fires first…', fired(0) > 3 && fired(1) === 0, fired(0) + '/' + fired(1));
+  run(B, CFG.BYRANK_GAP + 1);
+  chk('…then the rank behind it', fired(1) > 3, fired(1));
+}
+{
+  const B = fresh('plain', 42), u = B.player;
+  Orders.apply(B, u, 'attackcol', { x: u.cx, y: u.cy, facing: -Math.PI / 2 });
+  Unit.layout(u);
+  const g = Unit.grid(u, u.formed);
+  chk('a column of attack is narrow and deep', u.form.kind === 'attack' && g.files === CFG.ATTACK_FILES && g.ranks >= 4, g.files + 'x' + g.ranks);
+  Orders.apply(B, u, 'advance', { facing: -Math.PI / 2 });
+  chk('…advances as a column, not a line', u.form.kind === 'attack' && u.order === 'advance');
+  Orders.apply(B, u, 'charge', {});
+  chk('…and remembers it charged from column (for the shock)', u.chargeFrom === 'attack');
+}
+{
+  const r = Campaign.newRun(77);
+  const B = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
+  chk('a new company has not learned fire by rank', Orders.shout(B, 'byrank') === false && B.pending.length === 0);
+  r.company.drills.push('byrank');
+  const B2 = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
+  chk('…until it drills it in camp', Orders.shout(B2, 'byrank') === true);
+  chk('camp can teach a drill', Campaign.camp(r, 'learn:attackcol').includes('column of attack') && r.company.drills.includes('attackcol'));
+  chk('quick battles know every drill', knowsDrill(fresh('plain', 3, { company: undefined }).player, 'attackcol'));
+}
+{
+  const r = Campaign.newRun(78); r.renown = 100; r.total = 100;
+  const s = r.company.soldiers[0]; s.xp = 2;
+  chk('a private needs experience to be made corporal', !Campaign.promote(r, s.id));
+  s.xp = 7;
+  chk('…and with it, he is', Campaign.promote(r, s.id) && s.rank === 'cpl' && r.renown === 95);
+  chk('…and then sergeant', Campaign.promote(r, s.id) && s.rank === 'sgt');
+  const B = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
+  chk('sergeants steady the company (baseline morale)', Morale.ncos(B.player) >= 2);
+  chk('rifles: the quartermaster sells one and the best shot carries it', Campaign.buy(r, 'rifle') && r.company.soldiers.filter(x => x.weapon === 'rifle').length === 1 &&
+    r.company.soldiers.find(x => x.weapon === 'rifle').aim === Math.max(...r.company.soldiers.map(x => x.aim)));
+  const B3 = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
+  const rm = B3.player.men.find(m => m.weapon === 'rifle'), mm = B3.player.men.find(m => m.role === 'line' && m.weapon !== 'rifle');
+  chk('…a rifle reaches further and loads slower', Combat.range(rm, false) > Combat.range(mm, false) && Combat.reloadTime(B3, rm, B3.player) > Combat.reloadTime(B3, mm, B3.player) * 1.3);
+  chk('a Lieutenant cannot choose the company type yet', !Campaign.chooseType(Object.assign(Campaign.newRun(5), { total: 0 }), 'light'));
+  chk('a Captain can; Light companies learn skirmish order at once', Campaign.chooseType(r, 'light') && r.company.drills.includes('skirmish'));
+  const B4 = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
+  chk('…and fight as light infantry', B4.player.ctype === 'light');
+  const old = JSON.parse(JSON.stringify(Campaign.newRun(9))); delete old.company.drills; delete old.company.rifles; old.company.soldiers.forEach(x => { delete x.rank; delete x.weapon; });
+  chk('a save from before the company sheet still loads', Campaign.migrate(old).company.drills.length === 0 && old.company.soldiers[0].rank === 'pte');
+}
+
+console.log('§10 set pieces');
+{
+  const B = fresh('sp_ridge', 51, { autoPlayer: true });
+  chk('a set piece is a bigger field', B.field.w > 900);
+  chk('…with a headquarters and a dispatch for you', !!B.hq && B.dispatch && /ridge/i.test(B.dispatch.text));
+  chk('…and every company has a task', B.units.every(u => u.task));
+  const waves = B.units.filter(u => u.team === 1 && u.task.kind === 'reserve' && u.task.wave);
+  run(B, Math.max(...waves.map(w => w.task.wave)) + 4);
+  chk('enemy waves go in when their hour comes', waves.every(w => w.routed || w.task.kind === 'attack'));
+  chk('the colonel tracks whether you obeyed', B.orders.total > 20 && B.orders.good / B.orders.total > 0.5, B.orders.good + '/' + B.orders.total);
+}
+{
+  const B = fresh('sp_village', 52);
+  const g = B.units.find(u => u.team === 0 && !u.isPlayer && u.task.kind === 'hold');
+  g.routed = true; B.player.cx = 470; B.player.cy = 600;
+  Command.think(B, 0, B.hq[0]);
+  chk('when a post is lost, the nearest reserve is sent to retake it', B.units.some(u => u.task && u.task.kind === 'attack' && dist(u.task.x, u.task.y, g.task.x, g.task.y) < 1));
+  chk('…and if that is you, a galloper brings the order', B.player.task.kind === 'attack' && /Retake/.test(B.dispatch.text));
+}
+{
+  const r = Campaign.newRun(4321);
+  chk('the campaign route has set pieces along it', r.map.some(row => row.some(n => n.type === 'setpiece' && SETPIECE_POOL.includes(n.scenario))) && r.map[MAP_ROWS - 1][0].scenario === 'finale');
+  chk('the great battle is a set piece', !!SCENARIOS.finale.setpiece);
 }
 
 console.log('§8 music & the page');

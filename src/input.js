@@ -15,6 +15,8 @@ const ORDER_KEYS = [
   { code: 'KeyF', key: 'F', cmd: 'fire', label: 'FIRE!', alt: 'Space' },
   { code: 'Digit6', key: '6', cmd: 'atwill', label: 'Fire at will' },
   { code: 'Digit7', key: '7', cmd: 'cease', label: 'Cease fire' },
+  { code: 'KeyB', key: 'B', cmd: 'byrank', label: 'Fire by rank' },
+  { code: 'Digit0', key: '0', cmd: 'attackcol', label: 'Column of attack' },
   { code: 'Digit8', key: '8', cmd: 'skirmish', label: 'Skirmish / close' },
   { code: 'Digit9', key: '9', cmd: 'fallback', label: 'Fall back' },
   { code: 'KeyC', key: 'C', cmd: 'charge', label: 'Charge!' },

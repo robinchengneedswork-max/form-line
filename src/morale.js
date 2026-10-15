@@ -32,9 +32,16 @@ const Morale = {
     return !!(u.leader && u.leader !== B.cmd && u.leader.state === 'formed');
   },
 
+  // NCOs still on their feet: sergeants steady the ranks, corporals a little
+  ncos(u) {
+    let s = 0;
+    for (const m of u.men) if (m.state === 'formed') s += m.grade === 'sgt' ? 2 : m.grade === 'cpl' ? 0.7 : 0;
+    return Math.min(8, s);
+  },
+
   baseline(B, u) {
     const left = u.formed / Math.max(1, u.startSize);
-    return CFG.MORALE_BASE + u.nerveBonus
+    return CFG.MORALE_BASE + u.nerveBonus + Morale.ncos(u)
       + (Unit.hasRole(u, 'ensign') ? 6 : u.coloursLost ? -8 : 0)
       + (Unit.bandPlaying(u) ? 5 : 0)
       + (u.leader || u.isPlayer ? 0 : -10)
@@ -73,7 +80,9 @@ const Morale = {
         for (const m of u.men) {
           if (m.state !== 'fleeing') continue;
           const L = u.isPlayer ? B.cmd : u.leader;
-          if (L && L.state === 'formed' && dist2(L.x, L.y, m.x, m.y) < 55 * 55 && B.rng() < 0.3 * dt) { m.state = 'formed'; u.reslot = B.t + 0.5; }
+          const near = (L && L.state === 'formed' && dist2(L.x, L.y, m.x, m.y) < 55 * 55) ||
+            u.men.some(s => s.grade === 'sgt' && s.state === 'formed' && dist2(s.x, s.y, m.x, m.y) < 40 * 40);
+          if (near && B.rng() < 0.3 * dt) { m.state = 'formed'; u.reslot = B.t + 0.5; }
         }
       }
     }
@@ -148,7 +157,7 @@ const Colours = {
       let friend = null, foe = null;
       Move.near(B, d.x, d.y, 6, a => {
         if (a.state !== 'formed' || a.role === 'drummer' || a.role === 'fifer') return;
-        if (a.team === d.unit.team) { if (!friend && a.unit === d.unit) friend = a; }
+        if (a.team === d.unit.team) { if (a.unit === d.unit && (!friend || (a.grade === 'sgt' && friend.grade !== 'sgt'))) friend = a; }
         else if (!foe && dist2(a.x, a.y, d.x, d.y) < 6.25) foe = a;
       });
       if (friend && !foe) {

@@ -19,11 +19,11 @@ const RING_DEAD = 24, RING_IN = 66, RING_OUT0 = 74, RING_OUT1 = 150, OPT_SPAN = 
 const WHEEL_GROUPS = [
   // `at` = slot in the outer arc, clockwise from the category's direction (0 = straight on)
   { name: 'Fire', angle: -Math.PI / 2, opts: [
-    { cmd: 'ready', label: 'Ready', at: -1 }, { cmd: 'fire', label: 'FIRE!', hot: true, at: 0 }, { cmd: 'atwill', label: 'At will', at: 1 }, { cmd: 'cease', label: 'Cease', at: 2 }] },
+    { cmd: 'ready', label: 'Ready', at: -1 }, { cmd: 'fire', label: 'FIRE!', hot: true, at: 0 }, { cmd: 'atwill', label: 'At will', at: 1 }, { cmd: 'cease', label: 'Cease', at: 2 }, { cmd: 'byrank', label: 'By rank', at: -2 }] },
   { name: 'Bayonet', angle: 0, opts: [
     { cmd: 'charge', label: 'Charge!', hot: true, at: 0 }, { cmd: 'rally', label: 'Rally', at: 1 }] },
   { name: 'Form', angle: Math.PI / 2, opts: [
-    { cmd: 'close', label: 'Close up', at: -1 }, { cmd: 'line', label: 'Line', at: 0 }, { cmd: 'skirmish', label: 'Skirmish', at: 1 }] },
+    { cmd: 'close', label: 'Close up', at: -1 }, { cmd: 'line', label: 'Line', at: 0 }, { cmd: 'skirmish', label: 'Skirmish', at: 1 }, { cmd: 'attackcol', label: 'Column', at: -2 }] },
   { name: 'Move', angle: Math.PI, opts: [
     { cmd: 'advance', label: 'Advance', at: 1 }, { cmd: 'follow', label: 'Follow me', at: 0 }, { cmd: 'halt', label: 'Halt', at: -1 }, { cmd: 'fallback', label: 'Fall back', at: -2 }] },
 ];
@@ -158,10 +158,10 @@ const Touch = {
     if (w.group >= 0) {
       const G = WHEEL_GROUPS[w.group];
       G.opts.forEach((o, i) => {
-        const a = optAngle(G, i), on = i === w.opt;
+        const a = optAngle(G, i), on = i === w.opt, locked = App.B && !knowsDrill(App.B.player, o.cmd);
         wedge(RING_OUT0, RING_OUT1, a - OPT_SPAN / 2 + 0.02, a + OPT_SPAN / 2 - 0.02);
         g.fillStyle = on ? (o.hot ? 'rgba(190,30,45,0.95)' : 'rgba(176,138,46,0.95)') : 'rgba(20,16,10,0.8)'; g.fill();
-        g.fillStyle = on ? '#fff' : (o.hot ? '#ffb9b0' : '#f1e8d2');
+        g.fillStyle = locked ? 'rgba(241,232,210,0.35)' : on ? '#fff' : (o.hot ? '#ffb9b0' : '#f1e8d2');
         g.font = `${on ? 700 : 600} 14px Georgia, serif`;
         const lr = (RING_OUT0 + RING_OUT1) / 2;
         g.fillText(o.label, w.x + Math.cos(a) * lr, w.y + Math.sin(a) * lr);

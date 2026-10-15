@@ -132,3 +132,27 @@ body.touch #hud-log { bottom: 12px; max-width: calc(100% - 140px); font-size: 12
   .blurb { font-size: 16px; }
   #end-banner { padding: 18px 20px; top: 18%; }
 }
+
+/* company sheet */
+.sheet.wide { max-width: 900px; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 10px 0; font-size: 15px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.chip { border: 1px solid var(--ink); padding: 2px 10px; border-radius: 12px; font-size: 13px; background: rgba(255,255,255,0.4); }
+.chip.locked { opacity: 0.5; border-style: dashed; }
+.tablewrap { overflow-x: auto; max-width: 100%; }
+table.roster { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.roster th { text-align: left; font-weight: 600; border-bottom: 2px solid var(--ink); padding: 4px 6px; white-space: nowrap; }
+table.roster td { padding: 3px 6px; border-bottom: 1px dotted rgba(43,32,22,0.25); white-space: nowrap; }
+table.roster tr.sgt td:first-child { font-weight: 700; } table.roster tr.cpl td:first-child { font-weight: 600; }
+.rifle { color: #2f5a2a; }
+button.mini { font-size: 12px; padding: 2px 8px; }
+#hud-orders .order.locked { opacity: 0.35; }
+
+/* the colonel's dispatch */
+#dispatch { display: none; position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top)); transform: translateX(-50%); max-width: min(560px, calc(100% - 560px)); min-width: 260px; background: rgba(236, 226, 200, 0.96); color: var(--ink); padding: 10px 18px; box-shadow: 0 6px 24px rgba(0,0,0,0.45); border-left: 4px solid var(--gold); pointer-events: none; }
+#dispatch.show { display: block; animation: drop 0.4s ease-out; }
+#dispatch small { display: block; text-transform: uppercase; letter-spacing: 0.12em; font-size: 11px; color: var(--ink-2); }
+#dispatch div { font-size: 16px; font-style: italic; margin-top: 2px; }
+#hud-company .orders { color: #e8c766; font-size: 12px; white-space: normal; }
+@keyframes drop { from { transform: translate(-50%, -20px); opacity: 0; } }
+@media (max-width: 760px) { #dispatch { max-width: calc(100% - 200px); left: auto; right: 64px; transform: none; padding: 7px 10px; } #dispatch div { font-size: 13px; } }

@@ -11,7 +11,14 @@ const ORDER_TEXT = {
   ready: 'Make ready!', fire: 'Present — FIRE!', atwill: 'Fire at will!', cease: 'Cease fire!',
   charge: 'Fix bayonets — CHARGE!', fallback: 'Fall back!', skirmish: 'Extend — skirmish order!',
   close: 'Close order!', rally: 'Rally! Rally on me!',
+  byrank: 'Fire by rank!', attackcol: 'Column of attack!',
 };
+
+// drills a company must LEARN (at camp) before it can be ordered to do them. AI companies know them all.
+const LEARNED_DRILLS = {
+  byrank: 'Fire by rank', attackcol: 'Column of attack', skirmish: 'Skirmish order',
+};
+const knowsDrill = (u, cmd) => !LEARNED_DRILLS[cmd] || !u.drills || u.drills.includes(cmd);
 
 const Orders = {
   // the player shouts. Returns false if nobody could hear.
@@ -22,6 +29,7 @@ const Orders = {
     B.events.push({ type: 'shout', order: cmd });
     if (cmd === 'rally') { Morale.rally(B); return true; }
     if (!u || u.routed && cmd !== 'rally') { Battle.log(B, 'They are running — get among them and rally them (R).', 'bad'); return false; }
+    if (!knowsDrill(u, cmd)) { Battle.log(B, `Your company has never learned ${LEARNED_DRILLS[cmd].toLowerCase()} — drill it in camp.`, 'bad'); return false; }
     const d = dist(c.x, c.y, u.cx, u.cy);
     const drum = Unit.hasRole(u, 'drummer');
     if (drum) B.events.push({ type: 'drumcall', order: cmd, unit: u.id });
@@ -30,7 +38,7 @@ const Orders = {
     else if (drum) delay = CFG.DRUM_DELAY;
     else { Battle.log(B, 'They cannot hear you — your drummer is down. Get closer.', 'bad'); return false; }
     // geometry is decided NOW, where you are standing, not when the drum finishes
-    if (cmd === 'line' || cmd === 'advance' || cmd === 'skirmish' || cmd === 'close') {
+    if (cmd === 'line' || cmd === 'advance' || cmd === 'skirmish' || cmd === 'close' || cmd === 'attackcol') {
       const a = c.aim != null ? c.aim : c.facing;
       if (opts.x == null) { opts.x = c.x + Math.cos(a) * 5; opts.y = c.y + Math.sin(a) * 5; }
       if (opts.facing == null) opts.facing = a;
@@ -57,6 +65,8 @@ const Orders = {
       case 'charge': return u.order === 'charge';
       case 'ready': return u.fire === 'ready';
       case 'atwill': return u.fire === 'atwill';
+      case 'byrank': return u.fire === 'byrank';
+      case 'attackcol': return u.form.kind === 'attack';
       case 'cease': return u.fire === 'hold';
       case 'skirmish': return u.form.kind === 'skirmish' && u.order === 'hold';
       default: return false;
@@ -88,8 +98,10 @@ const Orders = {
         toLine(o.x, o.y, o.facing);
         break;
       case 'advance':
-        // advancing toward somewhere else wheels the line about its own centre first
-        if (f.kind === 'column' || (o.facing != null && Math.abs(angDiff(f.facing, o.facing)) > 0.35)) toLine(u.cx, u.cy, o.facing != null ? o.facing : f.facing);
+        // advancing toward somewhere else wheels the formation about its own centre first
+        // (a column of attack stays a column of attack — that is the point of it)
+        if (f.kind === 'column') toLine(u.cx, u.cy, o.facing != null ? o.facing : f.facing);
+        else if (o.facing != null && Math.abs(angDiff(f.facing, o.facing)) > 0.35) Unit.setForm(u, f.kind, u.cx, u.cy, o.facing);
         u.order = 'advance';
         break;
       case 'halt':
@@ -102,6 +114,11 @@ const Orders = {
         u.order = 'fallback';
         break;
       case 'ready': u.fire = 'ready'; break;
+      case 'byrank': u.fire = 'byrank'; u.rankTurn = 0; u.rankNext = B.t + 1; break;
+      case 'attackcol':
+        u.order = 'hold';
+        Unit.setForm(u, 'attack', o.x != null ? o.x : u.cx, o.y != null ? o.y : u.cy, o.facing != null ? o.facing : f.facing);
+        break;
       case 'atwill': u.fire = 'atwill'; break;
       case 'cease': u.fire = 'hold'; for (const m of u.men) m.volleyAt = 0; break;
       case 'fire': {
@@ -113,6 +130,7 @@ const Orders = {
       }
       case 'charge':
         u.order = 'charge'; u.chargeT = 0; u.lastFoe = B.t; u.fire = 'hold';
+        u.chargeFrom = f.kind;
         if (f.kind === 'column') f.kind = 'line';
         B.events.push({ type: 'charge', team: u.team, unit: u.id });
         B.fx.push({ kind: 'say', x: u.cx, y: u.cy, text: u.F.cry, t: B.t, team: u.team, big: true });

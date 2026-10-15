@@ -60,11 +60,12 @@
         <h3>Being heard</h3>
         <p>Your voice carries ~50 m. Further off, only the <b>drummer</b> can beat your order down the line, two seconds late. Lose him and you must walk to your men.</p>
         <h3>Firing</h3>
+        <p><kbd>B</kbd> Fire by rank — the front rank fires, then the next, so some muskets are always loaded.</p>
         <p><kbd>5</kbd> Make ready — the front two ranks present and <i>hold</i>. <kbd>F</kbd> / <kbd>Space</kbd> FIRE — everyone presented lets go at once. A volley close in breaks companies; at 150 m it wastes powder. Reloading takes about a minute. <kbd>6</kbd> lets each man fire when he has a mark. Men only fire when <b>halted</b>.</p>
       </div>
       <div>
         <h3>Moving</h3>
-        <p><kbd>1</kbd> Follow me — a column that walks in your footsteps. <kbd>2</kbd> Form line. <kbd>3</kbd> Advance (wheels to face your mouse). <kbd>4</kbd> Halt. <kbd>9</kbd> Fall back, facing the enemy. <kbd>8</kbd> Skirmish order — loose, hard to hit, easy to ride over.</p>
+        <p><kbd>1</kbd> Follow me — a column that walks in your footsteps. <kbd>2</kbd> Form line. <kbd>3</kbd> Advance (wheels to face your mouse). <kbd>4</kbd> Halt. <kbd>9</kbd> Fall back, facing the enemy. <kbd>8</kbd> Skirmish order — loose, hard to hit, easy to ride over. <kbd>0</kbd> Column of attack — narrow and deep: it barely fires and suffers more, but its charge hits far harder. Skirmish, column of attack and fire by rank are learned at camp.</p>
         <h3>Nerve</h3>
         <p>Men fall back when shot, faster when it comes all at once or from the flank. The <b>colours</b>, the <b>music</b> and <b>you</b> nearby steady them. <kbd>R</kbd> Rally — in person — can turn a rout.</p>
         <h3>The bayonet</h3>
@@ -74,9 +75,11 @@
     </div>
     <button id="btn-help-close" class="big">To your duty</button>
   </div></div>
+  <div id="dispatch"></div>
   <div id="end-banner"></div>
 </section>
 
+<section id="screen-company" class="screen paper"><div id="company" class="sheet wide"></div></section>
 <section id="screen-report" class="screen paper"><div id="report" class="sheet"></div></section>
 <section id="screen-camp" class="screen paper"><div id="camp" class="sheet"></div></section>
 <section id="screen-end" class="screen paper"><div id="endscreen" class="sheet"></div></section>
@@ -87,12 +90,14 @@
 <script src="src/data/tunes.js"></script>
 <script src="src/field.js"></script>
 <script src="src/data/scenarios.js"></script>
+<script src="src/data/setpieces.js"></script>
 <script src="src/unit.js"></script>
 <script src="src/move.js"></script>
 <script src="src/combat.js"></script>
 <script src="src/morale.js"></script>
 <script src="src/orders.js"></script>
 <script src="src/ai.js"></script>
+<script src="src/command.js"></script>
 <script src="src/battle.js"></script>
 <script src="src/campaign.js"></script>
 <script src="src/render.js"></script>

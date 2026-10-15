@@ -181,7 +181,7 @@ const SCENARIOS = {
         player: { x: 300, y: 470, facing: NORTH },
         allies: [coy(0, 450, 475, NORTH, 24, 0.4, 'attack', { name: 'No. 5 Coy, 1/43rd', fifer: false, objective: [400, 210] })],
         enemies: [
-          coy(1, 360, 215, SOUTH, e.size, e.drill, 'hold', { nerve: e.nerve + 4 }),
+          coy(1, 360, 215, SOUTH, Math.round(e.size * 0.75), e.drill, 'hold', { nerve: e.nerve + 4 }),
           coy(1, 380, 80, SOUTH, Math.round(e.size * 0.8), e.drill, 'attack', { nerve: e.nerve, fifer: false, delay: 150 }),
         ],
         note: 'You attack, with a friendly company on your right. Their reserve will come up from the north.',
@@ -205,10 +205,11 @@ const SCENARIOS = {
     deploy(rng, lv) {
       const e = enemyStrength(lv, rng);
       return {
-        player: { x: 360, y: 470, facing: NORTH },
-        allies: [],
+        player: { x: 300, y: 470, facing: NORTH },
+        // a lane is too long for one company to rush: the brigade lends you another
+        allies: [coy(0, 460, 475, NORTH, 22, 0.45, 'attack', { name: 'No. 6 Coy, 1/45th', fifer: false, objective: [430, 228] })],
         enemies: [coy(1, 360, 228, SOUTH, e.size, e.drill + 0.05, 'hold', { nerve: e.nerve + 6 })],
-        note: 'One company, well placed. Go and get them out.',
+        note: 'One company, well placed in the lane. You and the 45th go in together.',
       };
     },
   },

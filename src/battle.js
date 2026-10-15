@@ -10,14 +10,15 @@ const Battle = {
     const seed = opts.seed >>> 0 || 1;
     const rng = makeRng(seed);
     const sc = SCENARIOS[opts.scenario];
-    const field = makeField(CFG.FIELD_W, CFG.FIELD_H);
+    const [FW, FH] = sc.size || [CFG.FIELD_W, CFG.FIELD_H];
+    const field = makeField(FW, FH);
     sc.build(field, makeRng(seed ^ 0x9e3779b9));
     const dep = sc.deploy(rng, opts.level || 0);
     const windA = rng() * Math.PI * 2, windS = rng.range(0.4, 1.6);
     const B = {
       seed, rng, t: 0, field, scenario: sc, scenarioId: opts.scenario, deploy: dep,
       units: [], player: null, cmd: null, agents: [], hash: null,
-      smoke: [], smokeT: 0, smokeCols: Math.ceil(CFG.FIELD_W / CFG.SMOKE_CELL), smokeRows: Math.ceil(CFG.FIELD_H / CFG.SMOKE_CELL),
+      smoke: [], smokeT: 0, smokeCols: Math.ceil(FW / CFG.SMOKE_CELL), smokeRows: Math.ceil(FH / CFG.SMOKE_CELL),
       wind: { x: Math.cos(windA) * windS, y: Math.sin(windA) * windS, a: windA, s: windS },
       events: [], fx: [], pending: [], dropped: [], messages: [],
       seen: [new Set(), new Set()], visT: 0, endT: 0, checkT: 0,
@@ -26,7 +27,8 @@ const Battle = {
     };
     B.smokeGrid = new Float32Array(B.smokeCols * B.smokeRows);
 
-    const co = opts.company || Campaign.defaultCompany(rng);
+    // a quick battle's company knows every drill; a campaign company only what it has learned
+    const co = opts.company || Object.assign(Campaign.defaultCompany(rng), { drills: Object.keys(LEARNED_DRILLS) });
     const cm = opts.commander || { name: 'You', hp: 3, maxHp: 3 };
     const p = dep.player;
     B.cmd = { id: NEXT_ID++, team: TEAM_PLAYER, isCommander: true, x: p.x, y: p.y + 7, facing: p.facing, aim: p.facing,
@@ -34,8 +36,9 @@ const Battle = {
     const pu = makeUnit({
       team: TEAM_PLAYER, faction: 'british', isPlayer: true, name: co.name,
       x: p.x, y: p.y, facing: p.facing, drill: co.drill, nerve: co.nerve || 0,
-      roster: co.soldiers.map(s => ({ name: s.name, aim: s.aim, nerve: s.nerve, xp: s.xp, src: s })),
-      drummer: co.drummer, fifer: co.fifer, colours: co.colours, doctrine: opts.playerDoctrine || 'hold',
+      roster: co.soldiers.map(s => ({ name: s.name, aim: s.aim, nerve: s.nerve, xp: s.xp, rank: s.rank, weapon: s.weapon, src: s })),
+      ctype: co.type || null, drills: co.drills || [],
+      drummer: co.drummer, fifer: co.fifer, colours: co.colours, doctrine: opts.playerDoctrine || 'hold', task: p.task,
     }, rng);
     pu.leader = B.cmd;
     B.player = pu;
@@ -43,6 +46,7 @@ const Battle = {
     for (const a of dep.allies) B.units.push(makeUnit(Object.assign({ faction: 'british' }, a), rng));
     for (const e of dep.enemies) B.units.push(makeUnit(Object.assign({ faction: 'french' }, e), rng));
     for (const u of B.units) Unit.survey(u);
+    if (sc.setpiece) Command.init(B);
     Battle.visibility(B);
     Battle.log(B, `${sc.name}. ${dep.note || ''}`.trim());
     return B;
@@ -54,6 +58,7 @@ const Battle = {
     Orders.deliver(B);
     AI.cmdRoute(B);
     Move.commander(B, B.cmd, dt);
+    Command.step(B);
     AI.step(B);
     for (const u of B.units) {
       if (u.reslot && B.t >= u.reslot) { u.reslot = 0; Unit.assignSlots(u); }
@@ -130,6 +135,7 @@ const Battle = {
       enemyRouted: enemies.filter(u => u.everRouted).length, enemyUnits: enemies.length,
       coloursTaken: B.stats.coloursTaken, coloursLost: B.player.coloursLost,
       commanderHp: Math.max(0, B.cmd.hp), commanderKills: B.cmd.kills || 0,
+      orders: B.hq ? Command.obeyed(B) : null,
       player: B.player,
     };
     B.events.push({ type: 'end', how });

@@ -29,7 +29,7 @@ const Render = {
   // ── terrain bake ──
   bake(B) {
     // phones get a lighter bake: 2 px/m is a quarter of the pixels of 3 and bakes in well under a second
-    const f = B.field, P = Render.coarse() ? 2 : TERRAIN_PX, w = f.w * P, h = f.h * P;
+    const f = B.field, P = Render.coarse() || f.w > 800 ? 2 : TERRAIN_PX, w = f.w * P, h = f.h * P;
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     const g = c.getContext('2d'), img = g.createImageData(w, h), d = img.data;
     const hh = new Float32Array(w * h);
@@ -79,7 +79,7 @@ const Render = {
     g.restore();
     Render.terrain = c; Render.terrainFor = B;
     // minimap thumbnail
-    const m = document.createElement('canvas'); m.width = Render.W < 700 ? 112 : 180; m.height = Math.round(180 * f.h / f.w);
+    const m = document.createElement('canvas'); m.width = (Render.W < 700 ? 112 : 180) * (f.w > 800 ? 1.15 : 1); m.height = Math.round(180 * f.h / f.w);
     m.getContext('2d').drawImage(c, 0, 0, m.width, m.height);
     Render.mini = m;
   },
@@ -105,6 +105,7 @@ const Render = {
     g.lineJoin = 'round'; g.lineCap = 'round';
 
     Render.helpers(B, g, ui);
+    Render.objective(B, g);
     const seen = B.seen[TEAM_PLAYER];
     for (const u of B.units) for (const m of u.men) if (m.state === 'down') Render.body(g, m);
     for (const d of B.dropped) Render.flag(g, d.x, d.y, d.unit, B.t, true);
@@ -147,6 +148,23 @@ const Render = {
     }
   },
 
+  // where the colonel wants you: a gold ring and a pennant
+  objective(B, g) {
+    const t = B.player && B.player.task;
+    if (!t) return;
+    const z = Render.cam.zoom, pulse = 1 + Math.sin(B.t * 3) * 0.06;
+    g.strokeStyle = 'rgba(232,190,80,0.85)'; g.lineWidth = 2.5 / z; g.setLineDash([8 / z, 6 / z]);
+    g.beginPath(); g.arc(t.x, t.y, (t.kind === 'attack' ? 30 : 24) * pulse, 0, 7); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = '#3b2a18'; g.lineWidth = 2 / z;
+    g.beginPath(); g.moveTo(t.x, t.y); g.lineTo(t.x, t.y - 9); g.stroke();
+    g.fillStyle = '#e8be50'; g.beginPath(); g.moveTo(t.x, t.y - 9); g.lineTo(t.x + 6, t.y - 7.5); g.lineTo(t.x, t.y - 6); g.closePath(); g.fill();
+    if (t.kind === 'hold' || t.kind === 'reserve') {
+      const a = t.facing != null ? t.facing : -Math.PI / 2;
+      g.strokeStyle = 'rgba(232,190,80,0.7)'; g.lineWidth = 2 / z;
+      g.beginPath(); g.moveTo(t.x + Math.cos(a) * 26, t.y + Math.sin(a) * 26); g.lineTo(t.x + Math.cos(a) * 36, t.y + Math.sin(a) * 36); g.stroke();
+    }
+  },
+
   // a standing man, top-down. Local frame: +x is the way he faces.
   man(g, m, u, t) {
     const F = u.F, s = SPRITE;
@@ -173,6 +191,8 @@ const Render = {
     // head + shako
     g.fillStyle = flee ? '#d9b89a' : F.hat;
     g.beginPath(); g.arc(0.02, 0, 0.15, 0, 7); g.fill();
+    if (m.grade === 'sgt') { g.strokeStyle = '#a3192e'; g.lineWidth = 0.09; g.beginPath(); g.moveTo(-0.12, 0.26); g.lineTo(0.12, -0.26); g.stroke(); }   // the sergeant's crimson sash
+    if (m.weapon === 'rifle') { g.fillStyle = '#2f5a2a'; g.beginPath(); g.arc(-0.05, 0, 0.07, 0, 7); g.fill(); }                                   // a green plume
     if (m.role === 'officer') { g.fillStyle = '#111'; g.beginPath(); g.ellipse(0.02, 0, 0.1, 0.3, 0, 0, 7); g.fill(); g.strokeStyle = '#a3192e'; g.lineWidth = 0.08; g.beginPath(); g.moveTo(-0.15, -0.25); g.lineTo(0.15, 0.25); g.stroke(); }
     if (m.role === 'drummer') {
       g.fillStyle = '#efe9d8'; g.beginPath(); g.arc(0.18, 0.3, 0.2, 0, 7); g.fill();
@@ -352,6 +372,8 @@ const Render = {
       for (const mm of u.men) if (mm.state === 'formed' || mm.state === 'fleeing') g.fillRect(x0 + mm.x * sc - 0.8, y0 + mm.y * sc - 0.8, 1.6, 1.6);
     }
     g.fillStyle = '#ffe08a'; g.beginPath(); g.arc(x0 + B.cmd.x * sc, y0 + B.cmd.y * sc, 2.6, 0, 7); g.fill();
+    const tk = B.player && B.player.task;
+    if (tk) { g.strokeStyle = '#e8be50'; g.lineWidth = 1.5; g.beginPath(); g.arc(x0 + tk.x * sc, y0 + tk.y * sc, 5, 0, 7); g.stroke(); }
     const c = Render.cam, vw = Render.W / c.zoom * sc, vh = Render.H / c.zoom * sc;
     g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1;
     g.strokeRect(x0 + c.x * sc - vw / 2, y0 + c.y * sc - vh / 2, vw, vh);

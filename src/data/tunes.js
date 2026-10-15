@@ -50,6 +50,8 @@ const DRUM_CALLS = {
   fallback: ['X', '.', '.', 'x', 'X', '.', '.', 'x'],
   skirmish: ['x', 'x', 'X', '.', 'x', 'x', 'X'],
   close:    ['X', '.', 'X', 'x', 'X', '.'],
+  byrank:   ['X', 'x', '.', 'X', 'x', '.'],
+  attackcol: ['f', 'x', 'f', 'x', 'X', 'X'],
   rally:    ['r', 'X', 'r', 'X', 'r', 'X'],
 };
 

@@ -14,6 +14,7 @@ const NODE_INFO = {
   battle: { glyph: '⚔', name: 'Battle' }, elite: { glyph: '✠', name: 'Hard fight — more renown' },
   camp: { glyph: '▲', name: 'Camp' }, quartermaster: { glyph: '£', name: 'Quartermaster' },
   event: { glyph: '?', name: 'On the road' }, finale: { glyph: '⚑', name: 'The great battle' },
+  setpiece: { glyph: '⚜', name: 'A great battle — the whole brigade' },
 };
 
 const UI = {
@@ -63,6 +64,7 @@ const UI = {
     svg.innerHTML = s;
     svg.querySelectorAll('g.choice').forEach(g => g.onclick = () => App.enterNode(g.dataset.id));
     UI.sidebar(run);
+    $('btn-company').onclick = () => UI.company(run, () => UI.map(run));
     showScreen('screen-map');
   },
 
@@ -79,8 +81,45 @@ const UI = {
       <div class="stat"><span>Rank and file</span><b>${co.soldiers.length} <small>/ ${rk.company}</small></b></div>
       <div class="stat"><span>Drill</span><b>${Math.round(co.drill * 100)} <small>(~${Math.round(CFG.RELOAD_BASE - CFG.RELOAD_DRILL * co.drill)} s reload)</small></b></div>
       <div class="kit">${co.colours ? '<span>⚑ Colours</span>' : '<span class="lost">⚑ Colours lost</span>'}${co.drummer ? '<span>◉ Drummer</span>' : '<span class="lost">◉ No drummer</span>'}${co.fifer ? '<span>♪ Fifer</span>' : '<span class="lost">♪ No fifer</span>'}</div>
+      <button id="btn-company" class="big" style="width:100%">Company sheet${!co.type && rk.title !== 'Lieutenant' ? ' — choose its character!' : ''}</button>
       <details><summary>Muster roll</summary><ol class="roll">${sold.map(s => `<li>${esc(s.name)} <small>${s.battles ? s.battles + ' fights' : 'recruit'}${s.kills ? ' · ' + s.kills + ' down' : ''}</small></li>`).join('')}</ol></details>
       ${run.fallen.length ? `<details><summary>The fallen (${run.fallen.length})</summary><ol class="roll">${run.fallen.map(s => `<li>${esc(s.name)}</li>`).join('')}</ol></details>` : ''}`;
+  },
+
+  // ── the company sheet: character, drills, NCOs, rifles ──
+  company(run, back) {
+    const co = run.company, rk = Campaign.rank(run), sl = Campaign.slots(run), T = Campaign.TYPES;
+    const typeBlock = co.type ? `<p class="kicker">${esc(T[co.type].name)}</p><p class="note">${esc(T[co.type].desc)}</p>`
+      : rk.title === 'Lieutenant' ? '<p class="note">At Captain you will choose what kind of company this is.</p>'
+      : `<h3>Choose its character</h3><div class="cards">${Object.entries(T).map(([k, t]) => `<button class="card" data-type="${k}"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join('')}</div>`;
+    const drills = Object.entries(LEARNED_DRILLS).map(([k, n]) => `<span class="chip ${co.drills.includes(k) ? '' : 'locked'}">${esc(n)}${co.drills.includes(k) ? '' : ' — learn at camp'}</span>`).join('');
+    const order = { sgt: 0, cpl: 1, pte: 2 };
+    const sorted = co.soldiers.slice().sort((a, b) => order[a.rank] - order[b.rank] || b.kills - a.kills || b.xp - a.xp);
+    const rows = sorted.map(s => {
+      const p = Campaign.promotion(run, s);
+      const promo = p ? `<button class="mini" data-promote="${s.id}" ${p.ok ? '' : 'disabled'} title="needs ${p.xp} xp">→ ${Campaign.RANK_NAMES[p.to]} (${p.cost})</button>` : '';
+      const rifle = s.weapon === 'rifle' ? '<b class="rifle">Baker rifle</b>' : co.rifles ? `<button class="mini" data-rifle="${s.id}">give rifle</button>` : 'musket';
+      return `<tr class="${s.rank}"><td>${esc(s.name)}</td><td>${Campaign.RANK_NAMES[s.rank]}</td><td>${rifle}</td><td>${s.battles}</td><td>${s.kills}</td><td>${s.xp}</td><td>${Math.round(s.aim * 100)}</td><td>${promo}</td></tr>`;
+    }).join('');
+    $('company').innerHTML = `<h1>${esc(co.name)}</h1>${typeBlock}
+      <div class="facts"><span>Drill <b>${Math.round(co.drill * 100)}</b></span><span>Renown <b>${run.renown}</b></span>
+        <span>Sergeants <b>${sl.sgtUsed}/${sl.sgt}</b></span><span>Corporals <b>${sl.cplUsed}/${sl.cpl}</b></span>
+        <span>Rifles <b>${co.soldiers.filter(s => s.weapon === 'rifle').length}/${co.rifles}</b> <small>(max ${Campaign.rifleCap(co)})</small></span></div>
+      <div class="chips">${drills}</div>
+      <p class="hint">Sergeants steady the men round them, close the ranks quicker, call back stragglers and take up fallen colours. Corporals help a little. Promotion needs experience: 3 for corporal, 6 for sergeant.</p>
+      <div class="tablewrap"><table class="roster"><tr><th>Name</th><th>Rank</th><th>Arms</th><th>Fights</th><th>Down</th><th>XP</th><th>Aim</th><th></th></tr>${rows}</table></div>
+      <button id="btn-company-back" class="big">Back to the road</button>`;
+    const again = () => { App.saveRun(); UI.company(run, back); };
+    $('company').querySelectorAll('[data-type]').forEach(b => b.onclick = () => { Campaign.chooseType(run, b.dataset.type); again(); });
+    $('company').querySelectorAll('[data-promote]').forEach(b => b.onclick = () => { Campaign.promote(run, +b.dataset.promote); again(); });
+    $('company').querySelectorAll('[data-rifle]').forEach(b => b.onclick = () => { Campaign.toggleRifle(run, +b.dataset.rifle); again(); });
+    $('btn-company-back').onclick = back;
+    showScreen('screen-company');
+  },
+
+  // grey out orders the company has not learned (the order bar; the wheel checks for itself)
+  markLocked(B) {
+    document.querySelectorAll('#hud-orders .order').forEach(b => b.classList.toggle('locked', !knowsDrill(B.player, b.dataset.cmd)));
   },
 
   // ── before a battle ──
@@ -88,11 +127,12 @@ const UI = {
     const level = node ? Campaign.level(node.row) : 0.3;
     const enemyMen = dep.enemies.reduce((a, e) => a + e.size, 0);
     $('brief').innerHTML = `
-      <p class="kicker">${node && node.type === 'elite' ? 'A hard fight' : node && node.type === 'finale' ? 'The great battle' : 'Battle'} · ${['Morning', 'Midday', 'Afternoon'][Math.min(2, Math.floor(level * 3))]}</p>
+      <p class="kicker">${sc.setpiece ? 'The whole brigade' : node && node.type === 'elite' ? 'A hard fight' : 'Battle'} · ${['Morning', 'Midday', 'Afternoon'][Math.min(2, Math.floor(level * 3))]}</p>
       <h1>${esc(sc.name)}</h1>
       <p class="blurb">${esc(sc.blurb)}</p>
       ${dep.note ? `<p class="note">${esc(dep.note)}</p>` : ''}
       <ul class="forces">
+        ${dep.player.task ? `<li><b>Your orders:</b> <i>“${esc(dep.player.task.text)}”</i></li>` : ''}
         <li><b>Yours:</b> ${App.run ? App.run.company.soldiers.length : 24} men${dep.allies.length ? ` · with ${dep.allies.length} allied compan${dep.allies.length > 1 ? 'ies' : 'y'}` : ''}</li>
         <li><b>Scouts report:</b> ${dep.enemies.length} French compan${dep.enemies.length > 1 ? 'ies' : 'y'}, perhaps ${Math.round(enemyMen / 5) * 5} bayonets</li>
       </ul>
@@ -108,9 +148,10 @@ const UI = {
     const loaded = u.men.filter(m => m.role === 'line' && m.state === 'formed' && m.m !== 'reloading').length;
     const pres = u.men.filter(m => m.m === 'present').length;
     const word = Unit.moraleWord(u);
-    const orderWord = { follow: 'In column, following you', hold: u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'column' ? 'Halted in column' : 'Halted in line', advance: 'Advancing', fallback: 'Falling back', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
-    const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will' }[u.fire];
+    const orderWord = { follow: 'In column, following you', hold: u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
+    const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will', byrank: 'Firing by rank' }[u.fire];
     const dist0 = Math.round(dist(c.x, c.y, u.cx, u.cy));
+    const task = u.task ? `<div class="row wide orders">Orders: ${esc(u.task.text)}</div>` : '';
     $('hud-company').innerHTML = `
       <div class="name">${esc(u.name)}</div>
       <div class="bar"><i style="width:${u.morale}%;background:${u.routed ? '#d9a03a' : u.morale < CFG.SHAKEN ? '#d2653b' : u.morale < CFG.STEADY ? '#d8c27a' : '#7fb069'}"></i><span>${word}</span></div>
@@ -118,9 +159,17 @@ const UI = {
       <div class="row wide"><span>${orderWord}</span></div>
       <div class="row wide"><span>${fireWord}</span></div>
       <div class="kit">${Unit.hasRole(u, 'ensign') ? '⚑' : u.coloursLost ? '<s>⚑</s>' : '<s>⚑</s>'} ${Unit.hasRole(u, 'drummer') ? '◉' : '<s>◉</s>'} ${Unit.hasRole(u, 'fifer') ? '♪' : '<s>♪</s>'} <span class="${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'warn' : 'bad') : ''}">${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'by drum' : 'out of earshot') : 'in earshot'}</span></div>
+      ${task}
       <div class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}${c.rallyCd > B.t ? ` <small>rally ${Math.ceil(c.rallyCd - B.t)}s</small>` : ''}</div>`;
     const wa = B.wind.a * 180 / Math.PI;
     $('hud-clock').innerHTML = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`;
+    const dp = B.dispatch;
+    const showD = dp && B.t - dp.t < 9;
+    $('dispatch').classList.toggle('show', !!showD);
+    if (showD && $('dispatch').dataset.t !== String(dp.t)) {
+      $('dispatch').dataset.t = String(dp.t);
+      $('dispatch').innerHTML = `<small>${dp.first ? 'Your orders' : 'A galloper from'} — ${esc(B.colonel)}</small><div>“${esc(dp.text)}”</div>`;
+    }
     const log = B.messages.slice(-5);
     const sig = log.map(m => m.t).join(',');
     if (sig !== UI._logSig) {
@@ -156,6 +205,7 @@ const UI = {
       <p>${rep.wounded ? `${rep.wounded} wounded will march again. ` : ''}${rep.stragglers ? `${rep.stragglers} stragglers came back to the colours. ` : ''}</p>
       ${dead.length ? `<p class="dead"><b>Killed:</b> ${dead.map(d => esc(d.name)).join(', ')}</p>` : '<p>Nobody was killed.</p>'}
       ${des.length ? `<p class="dead"><b>Missing:</b> ${des.map(d => esc(d.name)).join(', ')}</p>` : ''}
+      ${rep.orders != null ? `<p class="note">${rep.orders >= 0.6 ? 'The colonel was pleased with you.' : rep.orders < 0.3 ? 'The colonel will remember that you went your own way.' : 'The colonel had no complaint.'}</p>` : ''}
       ${rep.promoted ? `<p class="note">${esc(rep.promoted.name)} accounted for ${rep.promoted.kills} of the enemy, and is mentioned in despatches.</p>` : ''}
       <button id="btn-next" class="big">${run && run.over ? 'The end of it' : 'On'}</button>`;
     $('btn-next').onclick = onNext;
@@ -164,9 +214,21 @@ const UI = {
 
   camp(run, onDone) {
     const opts = [['rest', 'Rest', 'Heal your wounds fully.'], ['drill', 'Drill', 'Platoon exercise: faster loading.'], ['recruit', 'Send to the depot', 'Up to 3 raw recruits, if there is room.']];
+    const learn = Campaign.unlearned(run);
+    if (learn.length) opts.push(['learn', 'Learn a drill', learn.map(k => LEARNED_DRILLS[k]).join(' · ')]);
     $('camp').innerHTML = `<h1>Camp</h1><p class="blurb">A night with no enemy in sight. One thing, properly done.</p>
       <div class="cards">${opts.map(([k, n, d]) => `<button class="card" data-k="${k}"><b>${n}</b><span>${d}</span></button>`).join('')}</div><p id="camp-out" class="note"></p>`;
     $('camp').querySelectorAll('.card').forEach(b => b.onclick = () => {
+      if (b.dataset.k === 'learn') {
+        // a second choice: which drill
+        $('camp').querySelector('.cards').innerHTML = learn.map(k => `<button class="card" data-k="learn:${k}"><b>${esc(LEARNED_DRILLS[k])}</b></button>`).join('');
+        $('camp').querySelectorAll('.card').forEach(c => c.onclick = () => {
+          $('camp-out').textContent = Campaign.camp(run, c.dataset.k);
+          $('camp').querySelectorAll('.card').forEach(x => x.disabled = true);
+          setTimeout(onDone, 1600);
+        });
+        return;
+      }
       $('camp-out').textContent = Campaign.camp(run, b.dataset.k);
       $('camp').querySelectorAll('.card').forEach(x => x.disabled = true);
       setTimeout(onDone, 1400);

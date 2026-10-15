@@ -16,8 +16,12 @@
 const Combat = {
   reloadTime(B, m, u) {
     const base = CFG.RELOAD_BASE - CFG.RELOAD_DRILL * u.drill - Math.min(m.xp, 6);
-    return base * B.rng.range(0.85, 1.15);
+    // a rifle must be rammed down a tight, greased patch; Line companies drill hardest at the musket
+    return base * B.rng.range(0.85, 1.15) * (m.weapon === 'rifle' ? 1.7 : 1) * (u.ctype === 'line' ? 0.92 : 1);
   },
+  // a man's reach with his weapon, at will / in a volley
+  range(m, volley) { return m.weapon === 'rifle' ? (volley ? 300 : 280) : volley ? CFG.RANGE_MAX : CFG.RANGE_ATWILL; },
+
   moraleMul(u) { return u.morale >= CFG.STEADY ? 1 : u.morale >= CFG.SHAKEN ? 0.86 : 0.7; },
 
   canFire(u, m) {
@@ -27,8 +31,24 @@ const Combat = {
     return m.rank < CFG.FIRING_RANKS && dist2(m.x, m.y, m.sx, m.sy) < CFG.SLOT_FORMED * CFG.SLOT_FORMED;
   },
 
+  // fire by rank: the front rank lets go, then the next, so part of the company is always loaded
+  rankFire(B, u) {
+    if (u.fire !== 'byrank' || B.t < (u.rankNext || 0)) return;
+    const nr = Math.min(CFG.FIRING_RANKS, Unit.grid(u, Math.max(1, u.formed)).ranks);
+    const r = (u.rankTurn || 0) % nr;
+    let tot = 0;
+    const pres = [];
+    for (const m of u.men) if (m.role === 'line' && m.state === 'formed' && m.rank === r) { tot++; if (m.m === 'present') pres.push(m); }
+    if (!tot) { u.rankTurn = r + 1; return; }
+    if (pres.length >= tot * 0.6 && Combat.pickTarget(B, pres[0], CFG.RANGE_MAX)) {
+      for (const m of pres) m.volleyAt = B.t + B.rng() * CFG.VOLLEY_RIPPLE;
+      u.rankTurn = r + 1; u.rankNext = B.t + CFG.BYRANK_GAP;
+    }
+  },
+
   muskets(B, dt) {
     for (const u of B.units) {
+      Combat.rankFire(B, u);
       const relMul = u.morale >= CFG.SHAKEN ? 1 : 1.3;
       for (const m of u.men) {
         if (m.role !== 'line' || m.state !== 'formed') continue;
@@ -40,7 +60,7 @@ const Combat = {
         const can = Combat.canFire(u, m);
         if (!can) { if (m.m !== 'loaded') { m.m = 'loaded'; m.volleyAt = 0; } m.aimAt = null; continue; }
         if (m.m === 'loaded') {
-          const want = u.fire === 'ready' || (u.fire === 'atwill' && B.rng() < dt * 2 && Combat.pickTarget(B, m, CFG.RANGE_ATWILL));
+          const want = u.fire === 'ready' || u.fire === 'byrank' || (u.fire === 'atwill' && B.rng() < dt * 2 && Combat.pickTarget(B, m, Combat.range(m, false)));
           if (want) { m.m = 'presenting'; m.mt = CFG.PRESENT_TIME * B.rng.range(0.8, 1.3) / (0.7 + u.drill * 0.6); }
         } else if (m.m === 'presenting') {
           m.mt -= dt;
@@ -51,7 +71,7 @@ const Combat = {
           if (u.fire === 'atwill') {
             m.mt -= dt;
             if (m.mt <= 0) {
-              if (Combat.pickTarget(B, m, CFG.RANGE_ATWILL)) Combat.fire(B, u, m, false);
+              if (Combat.pickTarget(B, m, Combat.range(m, false))) Combat.fire(B, u, m, false);
               else m.mt = 1;
             }
           }
@@ -86,7 +106,7 @@ const Combat = {
   },
 
   fire(B, u, m, volley) {
-    let t = Combat.pickTarget(B, m, volley ? CFG.RANGE_MAX : CFG.RANGE_ATWILL);
+    let t = Combat.pickTarget(B, m, Combat.range(m, volley));
     const face = t ? Math.atan2(t.y - m.y, t.x - m.x) : m.facing;
     m.facing = face;
     m.m = 'reloading'; m.mt = Combat.reloadTime(B, m, u); m.aimAt = null;
@@ -99,17 +119,20 @@ const Combat = {
     // officers draw fire
     const tu = t.unit;
     const officer = tu.team === TEAM_PLAYER ? B.cmd : tu.leader;
-    if (officer && officer.state === 'formed' && dist2(officer.x, officer.y, t.x, t.y) < 144 && B.rng() < CFG.OFFICER_TARGETED) t = officer;
+    // officers draw fire — and riflemen go looking for them
+    const rifle = m.weapon === 'rifle';
+    if (officer && officer.state === 'formed' && dist2(officer.x, officer.y, t.x, t.y) < (rifle ? 900 : 144) && B.rng() < (rifle ? 0.4 : CFG.OFFICER_TARGETED)) t = officer;
     tu.morale -= CFG.SUPPRESS;
     const d = dist(m.x, m.y, t.x, t.y);
-    let p = CFG.HIT_P0 * Math.exp(-d / CFG.HIT_FALLOFF);
+    let p = CFG.HIT_P0 * Math.exp(-d / (rifle ? CFG.HIT_FALLOFF * 2 : CFG.HIT_FALLOFF));
     p *= m.aim * (1 + Math.min(m.xp, 8) * 0.025) * Combat.moraleMul(u);
     p *= Field.coverFor(B.field, t.x, t.y, m.x, m.y);
     p *= Math.exp(-CFG.SMOKE_K * Smoke.along(B, m.x, m.y, t.x, t.y));
-    if (volley) p *= CFG.VOLLEY_BONUS;
+    if (volley) p *= u.ctype === 'line' ? CFG.VOLLEY_BONUS + 0.1 : CFG.VOLLEY_BONUS;
     if (!m.fired) { p *= CFG.FIRST_FIRE; m.fired = true; }
-    if (tu.form.kind === 'skirmish') p *= 0.55;
-    else if (tu.form.kind === 'column') p *= 1.3;
+    if (tu.form.kind === 'skirmish') p *= tu.ctype === 'light' ? 0.42 : 0.55;
+    else if (tu.form.kind === 'attack') p *= CFG.ATTACK_EXPOSED;
+    else if (tu.form.kind === 'column') p *= 1.3;   // a deep target: a ball that misses one man finds the next
     const dh = Field.heightAt(B.field, m.x, m.y) - Field.heightAt(B.field, t.x, t.y);
     p *= dh > 3 ? 1.08 : dh < -3 ? 0.94 : 1;
     if (t.moving > 2.5) p *= 0.85;
@@ -131,7 +154,7 @@ const Combat = {
     if (by) { by.kills++; by.unit.stats.hits++; }
     u.stats.down++;
     B.events.push({ type: 'down', x: t.x, y: t.y, team: u.team });
-    if (t.role === 'line') u.reslot = B.t + 1.5;
+    if (t.role === 'line') u.reslot = B.t + (u.men.some(s => s.grade === 'sgt' && s.state === 'formed') ? 0.8 : 1.5);   // "close up!"
     const flank = by && Math.abs(angDiff(u.form.facing, Math.atan2(by.y - t.y, by.x - t.x))) > Math.PI / 3;
     Morale.onLoss(B, u, flank, t.role);
     if (t.role === 'ensign' || t.carrying) Colours.drop(B, t);
@@ -165,7 +188,7 @@ const Combat = {
         if (!foe) { if (u.order !== 'charge') m.foe = null; continue; }
         m.foe = foe;
         m.aimAt = Math.atan2(foe.y - m.y, foe.x - m.x);
-        let p = CFG.MELEE_KILL * u.F.meleeSkill * Combat.moraleMul(u) * (u.order === 'charge' ? 1.35 : 1) * (m.role === 'officer' ? 1.5 : 1);
+        let p = CFG.MELEE_KILL * u.melee * Combat.moraleMul(u) * (u.order === 'charge' ? 1.35 : 1) * (m.role === 'officer' ? 1.5 : 1);
         if (foe === B.cmd) p *= 0.6;
         if (B.rng() < p * dt) Combat.hit(B, foe, m);
       }
@@ -213,7 +236,8 @@ const Combat = {
         if (d.team === c.team || !d.formed || d.routed) continue;
         const dd = dist(c.cx, c.cy, d.cx, d.cy);
         if (dd > CFG.CHARGE_RANGE) continue;
-        const odds = clamp(c.formed / d.formed, 0.4, 2.5) * (c.morale / 60) * c.F.meleeSkill;
+        const odds = clamp(c.formed / d.formed, 0.4, 2.5) * (c.morale / 60) * c.melee
+          * (c.chargeFrom === 'attack' ? CFG.ATTACK_SHOCK : 1) * (c.ctype === 'grenadier' ? 1.25 : 1);
         const loaded = d.men.filter(m => m.m === 'present').length / Math.max(1, d.formed);
         d.beingCharged = 1;
         d.morale -= CFG.CHARGE_SHOCK * odds * (1 - loaded * 0.5) * dt;

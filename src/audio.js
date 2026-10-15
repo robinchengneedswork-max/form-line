@@ -125,6 +125,10 @@ const Sound = {
       } else if (e.type === 'charge') {
         const u = B.units.find(v => v.id === e.unit);
         if (u) Sound.roar(u.cx, u.cy);
+      } else if (e.type === 'dispatch') {
+        // a galloper's bugle: five rising notes
+        const out = Sound.chain(0.5, 0);
+        [523, 659, 784, 659, 1047].forEach((f, i) => Sound.fife(now + 0.05 + i * 0.16, f, i === 4 ? 0.5 : 0.14, out));
       } else if (e.type === 'cmdhit') {
         const out = Sound.chain(0.6, 0);
         Sound.noise(now, 0.25, 'lowpass', 300, 1, 0.8, out);

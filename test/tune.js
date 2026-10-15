@@ -39,7 +39,7 @@ function fight(scenario, seed, level = 0.3) {
 const pct = x => (x * 100).toFixed(0).padStart(3) + '%';
 const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const [only, nArg] = process.argv.slice(2);
-const list = only ? [only] : BATTLE_POOL.concat('finale');
+const list = only ? [only] : BATTLE_POOL.concat(X.SETPIECE_POOL, 'finale');
 const N = Number(nArg) || 6;
 console.log('scenario   won  lost other | length  1st shot | my loss  their loss | rds/man/min  hit%');
 for (const sc of list) {

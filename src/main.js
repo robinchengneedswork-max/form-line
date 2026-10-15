@@ -17,7 +17,7 @@ const App = {
     App.saveRun();
     UI.map(App.run);
   },
-  continueCampaign() { const r = App.loadRun(); if (!r) return; App.quick = false; App.run = r; UI.map(r); },
+  continueCampaign() { const r = App.loadRun(); if (!r) return; App.quick = false; App.run = Campaign.migrate(r); UI.map(App.run); },
 
   enterNode(id) {
     const run = App.run, n = Campaign.go(run, id);
@@ -46,6 +46,7 @@ const App = {
       $('pause').classList.remove('show');
       showScreen('screen-battle');
       Render.resize();
+      UI.markLocked(B);
       App.ended = false;
     });
   },

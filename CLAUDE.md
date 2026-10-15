@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 49 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 87 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -36,7 +36,10 @@ export line). A headless check asserts that index.html's script order matches.
 | `combat.js` | musket state machine, hit roll, smoke grid, melee, charge shock |
 | `morale.js` | loss shock, suppression, baseline, wavering, rout, rally; `Colours` (drop / pick up / capture) |
 | `orders.js` | `shout` (player: voice ≤48 m, else only via a living drummer, 1.8 s late), `give` (AI), `apply` |
-| `ai.js` | every non-player captain (enemy AND allied): doctrines attack / hold / skirmish |
+| `ai.js` | every non-player captain (enemy AND allied): doctrines attack / hold / skirmish. Several ideas borrowed from DoDoCat's *Day of Slaughter* NW AI mod (spread targets, march until the centres can see each other, a firing distance kills push in and losses push out, sideways realignment with a deadzone, troop-ratio retreat/charge) |
+| `command.js` | brigade **headquarters** for set pieces: every company has a task (hold / reserve / attack); waves, reserves committed to retake a lost post, general advance; YOUR task arrives as a dispatch and obedience is scored |
+| `data/setpieces.js` | the big battles (bigger `size`, `setpiece: true`): The Long Ridge, The Village on the Stream, and the finale |
+| `touch.js` | phone controls: tap = walk, hold = two-level order wheel (Fire up / Bayonet right / Form down / Move left), drag = look, pinch = zoom |
 | `battle.js` | create / fixed-step tick / per-team fog of war / end check. Pure: emits `events` (sound) + `fx` (picture) |
 | `campaign.js` | route map (11 rows, StS-style), renown, rank, roster persistence, camp/shop/events |
 | `render.js` `audio.js` `input.js` `ui.js` `main.js` | the browser side. `Sound`, not `Audio` (that is a DOM global) |
@@ -58,6 +61,27 @@ export line). A headless check asserts that index.html's script order matches.
   Crossings sit on the river centreline; a ford painted beside the channel made the ford scenario a 32-minute stand-off.
 - A holding company wheels to face a threat outside its fire cone, **unless it is in cover** (then only past 52°), so a garrison does not leave its wall.
 
+## Drill the user asked for (round 2)
+
+- **Fire by rank** (`byrank`): the front rank fires, then the next after `BYRANK_GAP` — part of the company is always loaded.
+- **Column of attack** (`attack` formation): `ATTACK_FILES` wide, deep; advances like a line, only its front two ranks fire,
+  takes `ATTACK_EXPOSED`× hits, charges with `ATTACK_SHOCK`× shock. French AI captains attack in it (a third prefer to deploy into line).
+  **Tuned so a holding line beats a column ~60% when it holds its volley to ~60 m** (`$TEMP/fl/duel.js`-style duel) — line vs column is the period's core matchup.
+- Learned drills (`LEARNED_DRILLS` in orders.js): fire by rank, column of attack, skirmish order. A campaign company learns them at camp; quick battles and AI know all.
+
+## Company customization (campaign)
+
+- **Grades**: private → corporal (xp 3, 5 renown) → sergeant (xp 6, 12). Slots scale with rank. In battle a sergeant adds +2 baseline morale (corporal +0.7, cap +8), closes ranks faster, calls stragglers back, and takes up fallen colours first.
+  ⚠ The in-battle man uses **`grade`** for this — `m.rank` is already *which rank of the line he stands in*. (They collided once and every sergeant became a private.) Campaign soldiers keep `rank`.
+- **Baker rifles**: bought (20), carried by the best shots (or whoever you hand them to); 2× hit falloff, 1.7× reload, reach 280–300 m, hunt officers. Cap 4 (Light 6).
+- **Company type** at Captain: Light (skirmish learned, 0.42× hits in skirmish order, +10% speed), Grenadier (melee ×1.2, nerve +6, shock ×1.25), Line (reload ×0.92, volley bonus +0.1, drill +5).
+- `Campaign.migrate` upgrades older saves.
+
+## Set pieces
+
+The user chose: **you are always one company**, and set pieces come up **a few times per campaign** (rows 4 and 7 + the finale).
+HQ is per side and generic (command.js); the scenario only places companies with tasks. Enemy waves are `reserve` tasks with a `wave` time.
+
 ## Fun bits that are mechanics, not decoration
 
 - **Drummer** relays your orders beyond shouting range. Lose him and you must walk to your men.
@@ -76,5 +100,6 @@ Save = `localStorage['formline.run']` (per-viewer convenience, try/catch'd); bes
 
 - **Never played by a human.** Browser-verified by script (quick battle, volley, charge, victory, report, map, briefing), not by hand.
 - No cavalry, so no square. Skirmish order exists; light-infantry bugle calls don't.
+- Set pieces are CPU-heavier (~90 ms of sim per battle-second for the finale): fine on desktop at 1×, untested on a phone.
 - The autoplayer in `tune.js` is a crude proxy for a human; some scenarios (ridge, ford: 2 enemy companies) are hard for it by design.
 - Civil War era = a second pair of factions + tunes. Not built.

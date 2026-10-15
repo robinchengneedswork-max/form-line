@@ -19,13 +19,17 @@ const Campaign = {
       aim: clamp(1 + rng.gauss() * 0.12 + vet * 0.04, 0.72, 1.4),
       nerve: rng.gauss() * 5 + vet * 2,
       xp: vet ? rng.int(vet, vet + 2) : 0, kills: 0, battles: 0,
+      rank: 'pte', weapon: 'musket',
     };
   },
 
   defaultCompany(rng) {
     const soldiers = [];
     for (let i = 0; i < 24; i++) soldiers.push(Campaign.newSoldier(rng, i < 4 ? 1 : 0));
-    return { name: 'No. 4 Company, 1/52nd Foot', drill: 0.35, nerve: 0, drummer: true, fifer: true, colours: true, soldiers };
+    return { name: 'No. 4 Company, 1/52nd Foot', drill: 0.35, nerve: 0, drummer: true, fifer: true, colours: true, soldiers,
+      type: null,       // chosen at Captain: 'light' | 'grenadier' | 'line'
+      drills: [],       // learned drills (see LEARNED_DRILLS in orders.js)
+      rifles: 0 };      // Baker rifles owned; the best shots carry them
   },
 
   newRun(seed) {
@@ -37,6 +41,14 @@ const Campaign = {
       map: Campaign.genMap(rng), at: null, row: -1, log: [], fallen: [],
       rngN: 1,
     };
+    return run;
+  },
+
+  // saves from before the company sheet existed
+  migrate(run) {
+    const co = run.company;
+    co.drills = co.drills || []; co.rifles = co.rifles || 0; co.type = co.type || null;
+    for (const s of co.soldiers) { s.rank = s.rank || 'pte'; s.weapon = s.weapon || 'musket'; }
     return run;
   },
 
@@ -56,13 +68,14 @@ const Campaign = {
         if (r === MAP_ROWS - 1) type = 'finale';
         else if (r === 0) type = 'battle';
         else if (r === MAP_ROWS - 2) type = i === 0 ? 'camp' : rng.pick(['quartermaster', 'camp']);
+        else if ((r === 4 || r === 7) && i === 0) type = 'setpiece';   // a big battle every few stages
         else {
           const x = rng();
           type = x < 0.44 ? 'battle' : x < 0.58 ? 'quartermaster' : x < 0.72 ? 'camp' : x < 0.88 ? 'event' : (r >= 3 ? 'elite' : 'battle');
         }
         row.push({
           id: `${r}-${i}`, row: r, x: (i + 0.5) / n + (n > 1 ? rng.range(-0.08, 0.08) : 0), type,
-          scenario: type === 'finale' ? 'finale' : (type === 'battle' || type === 'elite') ? rng.pick(BATTLE_POOL) : null,
+          scenario: type === 'finale' ? 'finale' : type === 'setpiece' ? rng.pick(SETPIECE_POOL) : (type === 'battle' || type === 'elite') ? rng.pick(BATTLE_POOL) : null,
           seed: Math.floor(rng() * 1e9), edges: [], done: false,
         });
       }
@@ -91,6 +104,7 @@ const Campaign = {
 
   // what a battle node hands to Battle.create
   battleOpts(run, node) {
+    Campaign.armRifles(run.company);
     return {
       scenario: node.scenario, seed: node.seed,
       level: Campaign.level(node.row) + (node.type === 'elite' ? 0.18 : 0),
@@ -102,9 +116,13 @@ const Campaign = {
   afterBattle(run, node, R) {
     const rng = Campaign.rng(run);
     const co = run.company;
-    const rep = { how: R.how, lines: [], renown: 0, dead: [], wounded: 0, returned: 0, stragglers: 0, promoted: null };
+    const rep = { how: R.how, orders: R.orders, lines: [], renown: 0, dead: [], wounded: 0, returned: 0, stragglers: 0, promoted: null };
     const add = (n, why) => { if (!n) return; rep.renown += n; rep.lines.push([why, n]); };
-    if (R.won) add(node.type === 'elite' ? 35 : node.type === 'finale' ? 60 : 20, 'Victory');
+    if (R.won) add(node.type === 'elite' ? 35 : node.type === 'finale' ? 60 : node.type === 'setpiece' ? 40 : 20, 'Victory');
+    if (R.orders != null) {
+      if (R.orders >= 0.6) add(15, 'You carried out the colonel\u2019s orders');
+      else if (R.orders < 0.3) add(-10, 'The colonel noted that you ignored his orders');
+    }
     add(R.enemyDown, `${R.enemyDown} of the enemy shot or bayoneted`);
     add(Math.round(R.enemyFled * 0.4), `${R.enemyFled} of the enemy scattered`);
     add(R.enemyRouted * 6, `${R.enemyRouted} enemy compan${R.enemyRouted === 1 ? 'y' : 'ies'} broken`);
@@ -156,10 +174,68 @@ const Campaign = {
   // ── between battles ──
   capacity(run) { return Campaign.rank(run).company; },
 
+  // ── the company sheet ──
+  RANK_NAMES: { pte: 'Private', cpl: 'Corporal', sgt: 'Sergeant' },
+  slots(run) {
+    const cap = Campaign.capacity(run), s = run.company.soldiers;
+    return { sgt: Math.max(1, Math.floor(cap / 12)), cpl: Math.floor(cap / 6),
+      sgtUsed: s.filter(x => x.rank === 'sgt').length, cplUsed: s.filter(x => x.rank === 'cpl').length };
+  },
+  // [rank to, cost, xp needed]
+  promotion(run, s) {
+    const sl = Campaign.slots(run);
+    if (s.rank === 'pte') return { to: 'cpl', cost: 5, xp: 3, ok: sl.cplUsed < sl.cpl && s.xp >= 3 && run.renown >= 5 };
+    if (s.rank === 'cpl') return { to: 'sgt', cost: 12, xp: 6, ok: sl.sgtUsed < sl.sgt && s.xp >= 6 && run.renown >= 12 };
+    return null;
+  },
+  promote(run, id) {
+    const s = run.company.soldiers.find(x => x.id === id), p = s && Campaign.promotion(run, s);
+    if (!p || !p.ok) return false;
+    run.renown -= p.cost; s.rank = p.to;
+    return true;
+  },
+  rifleCap(co) { return co.type === 'light' ? 6 : 4; },
+  // the rifles go to the best shots, unless you have handed them out yourself
+  armRifles(co) {
+    const armed = co.soldiers.filter(s => s.weapon === 'rifle');
+    while (armed.length > co.rifles) armed.pop().weapon = 'musket';
+    const spare = co.soldiers.filter(s => s.weapon !== 'rifle').sort((a, b) => b.aim - a.aim);
+    for (let i = armed.length; i < Math.min(co.rifles, co.soldiers.length); i++) spare[i - armed.length].weapon = 'rifle';
+  },
+  toggleRifle(run, id) {
+    const co = run.company, s = co.soldiers.find(x => x.id === id);
+    if (!s) return false;
+    if (s.weapon === 'rifle') return false;          // rifles are only ever handed on, never put away
+    const armed = co.soldiers.filter(x => x.weapon === 'rifle');
+    if (armed.length >= co.rifles) { if (!armed.length) return false; armed.sort((a, b) => a.aim - b.aim)[0].weapon = 'musket'; }
+    s.weapon = 'rifle';
+    return true;
+  },
+  TYPES: {
+    light: { name: 'Light Company', desc: 'Skirmishers. Skirmish order is learned at once and they are harder to hit in it; quicker on their feet; room for six rifles.' },
+    grenadier: { name: 'Grenadier Company', desc: 'The biggest men in the battalion. Better with the bayonet, steadier under fire, and their charge hits harder.' },
+    line: { name: 'Battalion (Line) Company', desc: 'The backbone. Faster loading and harder-hitting volleys, and the drill sergeant starts them ahead.' },
+  },
+  chooseType(run, t) {
+    const co = run.company;
+    if (co.type || !Campaign.TYPES[t] || Campaign.rank(run).title === 'Lieutenant') return false;
+    co.type = t;
+    if (t === 'light' && !co.drills.includes('skirmish')) co.drills.push('skirmish');
+    if (t === 'line') co.drill = clamp(co.drill + 0.05, 0, 0.95);
+    return true;
+  },
+  unlearned(run) { return Object.keys(LEARNED_DRILLS).filter(k => !run.company.drills.includes(k)); },
+
   camp(run, choice) {
     const co = run.company, rng = Campaign.rng(run);
     if (choice === 'rest') { run.commander.hp = run.commander.maxHp; return 'You sleep under a cart for the first time in a week. Wounds closed.'; }
     if (choice === 'drill') { co.drill = clamp(co.drill + 0.07, 0, 0.95); return 'Three days of platoon exercise. The men load faster.'; }
+    if (choice && choice.startsWith('learn:')) {
+      const k = choice.slice(6);
+      if (!LEARNED_DRILLS[k] || co.drills.includes(k)) return '';
+      co.drills.push(k);
+      return `A week of drill on the parade ground. The company has learned ${LEARNED_DRILLS[k].toLowerCase()}.`;
+    }
     if (choice === 'recruit') {
       const room = Campaign.capacity(run) - co.soldiers.length;
       const n = Math.min(3, Math.max(0, room));
@@ -175,6 +251,7 @@ const Campaign = {
       { key: 'recruit', name: 'Recruit', desc: 'A raw volunteer.', cost: 7, ok: room > 0 },
       { key: 'veteran', name: 'Veteran from another regiment', desc: 'Steadier, a better shot.', cost: 16, ok: room > 0 },
       { key: 'drill', name: 'Drill sergeant', desc: `Faster loading (drill ${Math.round(co.drill * 100)} → ${Math.round(Math.min(0.95, co.drill + 0.06) * 100)}).`, cost: 22, ok: co.drill < 0.95 },
+      { key: 'rifle', name: 'Baker rifle', desc: `Twice the reach, half the rate of fire. Goes to your best shot (${co.rifles}/${Campaign.rifleCap(co)}).`, cost: 20, ok: co.rifles < Campaign.rifleCap(co) },
       { key: 'drummer', name: 'Drummer boy', desc: 'Carries your orders beyond shouting range. Steadies the men.', cost: 14, ok: !co.drummer },
       { key: 'fifer', name: 'Fifer', desc: 'Music in the ranks. Morale recovers faster.', cost: 12, ok: !co.fifer },
       { key: 'colours', name: 'New colours', desc: 'The regiment will not forget the old ones.', cost: 30, ok: !co.colours },
@@ -189,6 +266,7 @@ const Campaign = {
     if (key === 'recruit') co.soldiers.push(Campaign.newSoldier(rng));
     if (key === 'veteran') co.soldiers.push(Campaign.newSoldier(rng, 2));
     if (key === 'drill') co.drill = clamp(co.drill + 0.06, 0, 0.95);
+    if (key === 'rifle') { co.rifles++; Campaign.armRifles(co); }
     if (key === 'drummer') co.drummer = true;
     if (key === 'fifer') co.fifer = true;
     if (key === 'colours') co.colours = true;

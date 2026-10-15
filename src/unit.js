@@ -19,7 +19,7 @@ function makeMan(unit, role, spec, rng) {
     name: spec.name || '', src: spec.src || null,
     aim: spec.aim != null ? spec.aim : clamp(1 + rng.gauss() * 0.13, 0.7, 1.35),
     nerve: spec.nerve != null ? spec.nerve : rng.gauss() * 6,
-    xp: spec.xp || 0, kills: 0,
+    xp: spec.xp || 0, kills: 0, grade: spec.rank || 'pte', weapon: spec.weapon || 'musket',
     x: 0, y: 0, facing: unit.form.facing, moving: 0,
     state: 'formed',            // formed · fleeing · down · gone
     m: role === 'line' ? 'loaded' : 'none', mt: 0,   // musket: loaded · presenting · present · reloading
@@ -30,17 +30,23 @@ function makeMan(unit, role, spec, rng) {
 
 function makeUnit(spec, rng) {
   const F = FACTIONS[spec.faction];
+  // company type: Light / Grenadier / Line. The player's comes from the campaign; others from their name
+  const name = spec.name || rng.pick(F.companies);
+  const ctype = spec.ctype || (/Voltigeur|Light/i.test(name) ? 'light' : /Grenad/i.test(name) ? 'grenadier' : null);
   const u = {
-    id: NEXT_ID++, team: spec.team, faction: spec.faction, F,
-    name: spec.name || rng.pick(F.companies), isPlayer: !!spec.isPlayer,
+    id: NEXT_ID++, team: spec.team, faction: spec.faction, F, ctype,
+    melee: F.meleeSkill * (ctype === 'grenadier' ? 1.2 : 1),
+    name, isPlayer: !!spec.isPlayer,
     men: [], leader: null,
     form: { kind: 'line', x: spec.x, y: spec.y, facing: spec.facing },
     ranks: F.ranks,
     order: 'hold', fire: 'hold', volleyAt: -1,
-    drill: spec.drill, nerveBonus: (spec.nerve || 0) + F.nerve,
+    drill: spec.drill, nerveBonus: (spec.nerve || 0) + F.nerve + (ctype === 'grenadier' ? 6 : 0),
+    drills: spec.drills || null,   // null = knows every drill (AI companies)
     morale: CFG.MORALE_BASE + (spec.nerve || 0), startSize: 0,
     routed: false, everRouted: false,
     doctrine: spec.doctrine || 'hold', objective: spec.objective || null, delay: spec.delay || 0,
+    task: spec.task || null, taskApplied: null, anchor: null,
     trail: [], slotOrder: [], reslot: 0,
     lossLog: [], lastHit: -99, flanked: 0, beingCharged: 0, chargeT: 0,
     colours: null, coloursLost: false, hasColours: spec.colours !== false,
@@ -91,8 +97,7 @@ const Unit = {
       u.slotOrder = men;
       return;
     }
-    const ranks = f.kind === 'skirmish' ? 1 : u.ranks;
-    const files = Math.max(1, Math.ceil(men.length / ranks));
+    const { ranks, files } = Unit.grid(u, men.length);
     men.sort((a, b) => (a.x * rx + a.y * ry) - (b.x * rx + b.y * ry));
     const order = new Array(men.length);
     let k = 0;
@@ -105,6 +110,14 @@ const Unit = {
       slots.forEach((i, j) => { order[i] = group[j]; });
     }
     u.slotOrder = order.filter(Boolean);
+  },
+
+  // files × ranks for a block formation of n men
+  grid(u, n) {
+    const k = u.form.kind;
+    if (k === 'skirmish') return { ranks: 1, files: Math.max(1, n), gap: CFG.SKIRMISH_GAP };
+    if (k === 'attack') { const files = Math.max(1, Math.min(CFG.ATTACK_FILES, n)); return { ranks: Math.ceil(n / files), files, gap: CFG.FILE_GAP }; }
+    return { ranks: u.ranks, files: Math.max(1, Math.ceil(n / u.ranks)), gap: CFG.FILE_GAP };
   },
 
   // slot positions from the current formation. Runs every tick (cheap).
@@ -130,9 +143,7 @@ const Unit = {
       }
       return;
     }
-    const ranks = f.kind === 'skirmish' ? 1 : u.ranks;
-    const gap = f.kind === 'skirmish' ? CFG.SKIRMISH_GAP : CFG.FILE_GAP;
-    const files = Math.max(1, Math.ceil(n / ranks));
+    const { ranks, files, gap } = Unit.grid(u, n);
     halfW = (files - 1) / 2 * gap;
     men.forEach((m, i) => {
       const rank = Math.floor(i / files), file = i % files;

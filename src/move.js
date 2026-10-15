@@ -74,6 +74,7 @@ const Move = {
           max = d > 5 ? CFG.CATCH_UP : (u.order === 'advance' || u.order === 'fallback' || u.order === 'follow') ? CFG.QUICK : CFG.WALK;
           if (m.state === 'formed' && m.role === 'line' && (m.m === 'present' || m.m === 'presenting') && d < CFG.SLOT_FORMED) max = 0;
         }
+        if (u.ctype === 'light') max *= 1.1;
         const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy);
         if (d > 0.15 && max > 0) {
           const ux = dx / d, uy = dy / d;
