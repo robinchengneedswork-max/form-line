@@ -17,6 +17,14 @@ const attack = (x, y) => ({ kind: 'attack', x, y });
 // a company spec carrying its task, standing where the task puts it
 const post = (team, task, size, drill, extra = {}) => coy(team, task.x, task.y, task.facing != null ? task.facing : (team === TEAM_ENEMY ? SOUTH : NORTH), size, drill, task.kind === 'attack' ? 'attack' : 'hold', Object.assign({ task }, extra));
 
+// where a road crosses a ridge it goes through a saddle: lower the crest along the road line
+function saddle(f, x0, x1, ry, depth = 9, w = 32) {
+  Paint.each(f, (x, y, i) => {
+    const rx = lerp(x0, x1, y / f.h);
+    f.height[i] -= depth * Math.exp(-Math.pow((x - rx) / w, 2) / 2) * Math.exp(-Math.pow((y - ry) / 90, 2) / 2);
+  });
+}
+
 function ridgeLine(f, rng, ry, h = 16, w = 70) {
   const rN = makeNoise(rng);
   Paint.each(f, (x, y, i) => {
@@ -33,6 +41,7 @@ Object.assign(SCENARIOS, {
     build(f, rng) {
       baseGround(f, rng, { amp: 4, woods: 0.06 });
       ridgeLine(f, rng, 455);
+      saddle(f, 500, 520, 455);
       Paint.disc(f, 60, 430, 70, T.WOODS); Paint.disc(f, 950, 450, 60, T.WOODS);
       Paint.line(f, 500, 0, 520, f.h, T.ROAD, 2.5);
     },
@@ -55,11 +64,14 @@ Object.assign(SCENARIOS, {
           post(1, attack(750, 470), sz, e.drill, { nerve: e.nerve, y: 100, fifer: false }),
           post(1, wave(380, 40, 300 + rng() * 60, { x: 420, y: 480 }), sz, e.drill, { nerve: e.nerve, fifer: false }),
           post(1, wave(620, 40, 330 + rng() * 60, { x: 600, y: 480 }), sz, e.drill, { nerve: e.nerve, fifer: false }),
+          // the grand battery on their ridge: it can only hurt what stands where it can see
+          guns(400, 170, SOUTH, 2, Math.max(lv, 0.5)),
+          guns(640, 170, SOUTH, 2, Math.max(lv, 0.5)),
           // the afternoon: heavy horse comes over the valley to break whatever the foot have shaken
           horse(250, 30, SOUTH, Math.max(lv, 0.8), rng, { cavType: 'cuirassiers', delay: 420 }),
           horse(760, 30, SOUTH, Math.max(lv, 0.8), rng, { cavType: 'cuirassiers', delay: 450 }),
         ],
-        note: 'Five companies of ours on the ridge. Six of theirs, in two waves — and their heavy cavalry behind.',
+        note: 'Five companies of ours on the ridge. Six of theirs, in two waves, a grand battery — and their heavy cavalry behind.',
       };
     },
   },
@@ -122,6 +134,7 @@ Object.assign(SCENARIOS, {
     build(f, rng) {
       baseGround(f, rng, { amp: 4, woods: 0.06 });
       ridgeLine(f, rng, 500);
+      saddle(f, 550, 560, 500);
       Paint.line(f, 550, 0, 560, f.h, T.ROAD, 2.5);
       // the great farm on the right, with its orchard and wood
       Paint.rect(f, 820, 360, 920, 450, T.GRASS);

@@ -22,6 +22,8 @@ const FACTIONS = {
     coat: '#233f8c', facings: '#c0262b', trousers: '#e6e1d4', hat: '#121212', belts: '#efeadb',
     ranks: 3, meleeSkill: 1.12, nerve: 2,
     columns: true,          // attacks in column of attack and tries to carry the position with the bayonet
+    gunners: { coat: '#1f2f5e', facings: '#c0262b', trousers: '#1f2f5e' },   // foot artillery: blue faced red
+    batteries: ['6e Cie, 1er Rég. d\u2019artillerie à pied', '3e Cie, 6e d\u2019artillerie', '2e Cie, 8e d\u2019artillerie', 'Batterie de la Garde'],
     flag: 'tricolore', tune: 'marseillaise', cadence: 'pas-de-charge',
     cry: "Vive l'Empereur!",
     companies: ['3e Cie, 2/31e Léger', '1re Cie, 1/40e Ligne', 'Voltigeurs, 2/64e', 'Grenadiers, 1/88e',

@@ -5,11 +5,11 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 const SRC = path.join(__dirname, '..', 'src');
 const SIM_FILES = [
   'config.js', 'rng.js', 'data/factions.js', 'data/tunes.js', 'field.js', 'data/scenarios.js', 'data/setpieces.js',
-  'unit.js', 'move.js', 'combat.js', 'morale.js', 'orders.js', 'place.js', 'ai.js', 'command.js', 'battle.js', 'campaign.js',
+  'unit.js', 'move.js', 'combat.js', 'artillery.js', 'morale.js', 'orders.js', 'place.js', 'ai.js', 'command.js', 'battle.js', 'campaign.js',
 ];
 const EXPORTS = ['CFG', 'T', 'TERRAIN', 'Field', 'Paint', 'makeField', 'makeRng', 'SCENARIOS', 'BATTLE_POOL',
   'FACTIONS', 'TUNES', 'CADENCES', 'DRUM_CALLS', 'noteFreq', 'Unit', 'makeUnit', 'Move', 'Combat', 'Smoke',
-  'Morale', 'Colours', 'Orders', 'Place', 'CAV_TYPES', 'AI', 'Command', 'SETPIECE_POOL', 'LEARNED_DRILLS', 'knowsDrill', 'Battle', 'Campaign', 'EVENTS', 'RANKS', 'MAP_ROWS', 'TEAM_PLAYER', 'TEAM_ENEMY',
+  'Morale', 'Colours', 'Orders', 'Place', 'CAV_TYPES', 'Artillery', 'Path', 'AI', 'Command', 'SETPIECE_POOL', 'LEARNED_DRILLS', 'knowsDrill', 'Battle', 'Campaign', 'EVENTS', 'RANKS', 'MAP_ROWS', 'TEAM_PLAYER', 'TEAM_ENEMY',
   'dist', 'angDiff'];
 
 function load(extraFiles = [], sandbox = {}) {

@@ -34,7 +34,7 @@ const Orders = {
     const drum = Unit.hasRole(u, 'drummer');
     if (drum) B.events.push({ type: 'drumcall', order: cmd, unit: u.id });
     let delay;
-    if (d <= CFG.VOICE_RANGE) delay = CFG.VOICE_DELAY;
+    if (d <= CFG.VOICE_RANGE + (c.horse ? CFG.HORSE_VOICE : 0)) delay = CFG.VOICE_DELAY;
     else if (drum) delay = CFG.DRUM_DELAY;
     else { Battle.log(B, 'They cannot hear you — your drummer is down. Get closer.', 'bad'); return false; }
     // geometry is decided NOW, where you are standing, not when the drum finishes

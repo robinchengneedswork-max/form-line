@@ -19,7 +19,20 @@
     <div class="menu">
       <button id="btn-new" class="big">New campaign</button>
       <button id="btn-continue" class="big">Continue campaign</button>
-      <div class="quick"><select id="quick-scenario"></select><button id="btn-quick">Quick battle</button></div>
+      <div class="quick">
+        <select id="quick-scenario" title="The field"></select>
+        <select id="quick-stage" title="How far into a campaign: how many of them, how good, and whether they bring horse and guns">
+          <option value="0.15">Early (1809)</option><option value="0.45" selected>Middle (1811)</option><option value="0.8">Late (1813)</option><option value="1">Waterloo</option>
+        </select>
+        <select id="quick-size" title="Your company">
+          <option value="24">24 men</option><option value="32">32 men</option><option value="40">40 men</option><option value="48">48 men</option>
+        </select>
+        <select id="quick-type" title="Company type">
+          <option value="">Battalion company</option><option value="line">Line (drilled)</option><option value="light">Light (skirmishers)</option><option value="grenadier">Grenadiers</option>
+        </select>
+        <label class="quick-horse"><input type="checkbox" id="quick-horse"> Mounted</label>
+        <button id="btn-quick">Quick battle</button>
+      </div>
     </div>
     <p id="title-best" class="hint"></p>
   </div>
@@ -72,6 +85,8 @@
         <p><kbd>C</kbd> Charge. They go in at the double and only rush the last 40 m — order it from too far and they arrive blown. A line still presented fires on its own at 30 m, and then somebody's nerve goes — and <b>momentum</b> counts: how fast they are going when they land and whether they are running down onto you or up into you: a steady, loaded line stops most charges; a shaken one with empty muskets breaks. Charge when they waver. <kbd>T</kbd> Re-form (Bayonet → Re-form) calls a charge off and closes them up on the colours, facing the nearest enemy; <kbd>4</kbd> Halt stops them where they stand. Rally does not — Rally steadies men and turns a rout.</p>
         <h3>Cavalry &amp; the square</h3>
         <p>When you hear the trumpet and someone shouts <b>Cavalry!</b>, you have a few seconds. <kbd>E</kbd> Form square (Form → Square): four faces, every man facing out. Once it is dressed — about eight seconds, quicker for a well-drilled company — no horse will ride onto it. But a square cannot march, fires only a quarter of its muskets each way, and every ball fired into it finds somebody. A square still forming is worse than a line. Horse rides down skirmishers, lines caught reloading or taken in the flank, and anyone running. A wood, a wall or a village is as good as a square. Chasseurs come first; lancers and then cuirassiers later in the campaign.</p>
+        <h3>The guns</h3>
+        <p>French batteries fire twice a minute and reach right across the field — but only at what they can see: <b>stand behind a crest</b> and they cannot touch you. A roundshot skips through whatever is in its path, so a line two deep loses a man or two, and a <b>square or a column loses a file</b> (horse and guns together are the nightmare: square for the one, slaughter from the other). Skirmishers hardly notice it. Inside 140 m they fire <b>canister</b>, and a company walking straight at the guns is swept away. To take them: get close under cover, come at them from the <b>flank</b> (a gun swings round slowly past its front), or go out in <b>skirmish order</b> just beyond canister range and shoot down the gunners. A gun with no gunners near it is yours if you walk onto it.</p>
         <h3>The road</h3>
         <p>Every field has a <b>line of retreat</b> (the green ring on your side). <kbd>X</kbd> Retire — about face and march for it; they cannot fire, and every hit hurts like one from the flank. Men who reach it are off the field and safe. Stand on it yourself and <b>Leave the field</b> (<kbd>L</kbd>). Anyone still out there within 150 m of the enemy is taken prisoner, colours too.</p>
         <p class="hint"><kbd>Wheel</kbd> zoom · <kbd>Arrows</kbd> look · <kbd>V</kbd> re-centre · <kbd>Tab</kbd> 1×/2×/4× · <kbd>P</kbd> pause · <kbd>M</kbd> mute · click the map to walk there</p>
@@ -99,6 +114,7 @@
 <script src="src/unit.js"></script>
 <script src="src/move.js"></script>
 <script src="src/combat.js"></script>
+<script src="src/artillery.js"></script>
 <script src="src/morale.js"></script>
 <script src="src/orders.js"></script>
 <script src="src/place.js"></script>

@@ -8,7 +8,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const { load, SIM_FILES } = require('./load');
 const { X } = load();
-const { CAV_TYPES, makeUnit, AI, TEAM_PLAYER, TEAM_ENEMY, angDiff, knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
+const { Artillery, CAV_TYPES, makeUnit, AI, TEAM_PLAYER, TEAM_ENEMY, angDiff, knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
 
 let pass = 0, fail = 0;
 const chk = (name, cond, extra) => {
@@ -74,7 +74,17 @@ console.log('§3 ground');
   chk('woods hide what is deep inside them', (() => { const W = fresh('woods', 3).field; let blocked = 0, n = 0; for (let x = 200; x < 520; x += 20) { if (Field.typeAt(W, x, 190) !== T.WOODS) continue; n++; if (!Field.los(W, x, 330, x, 150)) blocked++; } return n === 0 || blocked / n > 0.6; })());
   const R = fresh('ford', 3);
   chk('the river is impassable and the ford is not', !Field.passable(R.field, 400, 260 + Math.sin(400 / 90) * 18) && Field.passable(R.field, 190, 262));
-  chk('the AI routes a column across the river by a crossing', X.AI.route(R, 220, 80, 230, 450).length === 4);
+  {
+    // every leg walkable, and the river crossed by a ford or the bridge; houses are walked round
+    const legs = (B, a, r) => [a].concat(r).every((q, i, all) => i === 0 || X.Path.clear(B.field, all[i - 1].x, all[i - 1].y, q.x, q.y));
+    const r = X.AI.route(R, 220, 80, 230, 450);
+    chk('the AI routes a column across the river by a crossing', r.length > 1 && legs(R, { x: 220, y: 80 }, r) && [{ x: 220, y: 80 }].concat(r).some((q, i, all) => i > 0 && X.AI.crossingOn(R.field, all[i - 1].x, all[i - 1].y, q.x, q.y) !== null || [T.FORD, T.BRIDGE].includes(Field.typeAt(R.field, q.x, q.y))));
+    const V = fresh('sp_village', 3);
+    let hx = null, hy = null;
+    for (let y = 300; y < 420 && hx == null; y += 4) for (let x = 420; x < 600; x += 4) if (Field.typeAt(V.field, x, y) === T.BUILDING) { hx = x; hy = y; break; }
+    const rv = X.AI.route(V, hx, hy - 40, hx + 2, hy + 60);
+    chk('…and round a house rather than into it', hx != null && rv.length > 1 && legs(V, { x: hx, y: hy - 40 }, rv));
+  }
   chk('uphill is slower than downhill', Field.speedAt(B.field, 360, crest + 30, 0, -1) < Field.speedAt(B.field, 360, crest - 5, 0, 1));
 }
 
@@ -231,7 +241,7 @@ console.log('§10 set pieces');
   const B = fresh('sp_ridge', 51, { autoPlayer: true });
   chk('a set piece is a bigger field', B.field.w > 900);
   chk('…with a headquarters and a dispatch for you', !!B.hq && B.dispatch && /ridge/i.test(B.dispatch.text));
-  chk('…and every company of foot has a task (horse finds its own)', B.units.every(u => u.task || u.arm === 'cav'));
+  chk('…and every company of foot has a task (horse and guns find their own)', B.units.every(u => u.task || u.arm !== 'foot'));
   const waves = B.units.filter(u => u.team === 1 && u.task && u.task.kind === 'reserve' && u.task.wave);
   run(B, Math.max(...waves.map(w => w.task.wave)) + 4);
   chk('enemy waves go in when their hour comes', waves.every(w => w.routed || w.task.kind === 'attack'));
@@ -573,6 +583,172 @@ console.log('§12 cavalry & the square');
     const B = fresh('heath', 1705, { autoPlayer: true });
     run(B, CFG.NIGHTFALL);
     chk('a battle with horse in it ends (not at nightfall)', B.over && B.result.how !== 'nightfall', B.result && B.result.how);
+  }
+}
+
+console.log('§13 the guns');
+{
+  // a battery `gap` m in front of the player's company, everything else gone
+  const range = (seed, gap, opts = {}) => {
+    const B = fresh(opts.sc || 'plain', seed), P = B.player;
+    for (const e of B.units) if (e.team === TEAM_ENEMY) { e.delay = 1e9; for (const m of e.men) m.state = 'gone'; }
+    const G = makeUnit({ team: TEAM_ENEMY, faction: 'french', arm: 'gun', guns: opts.guns || 2, x: P.cx + (opts.dx || 0), y: P.cy - gap, facing: Math.PI / 2, drill: 0.5 }, B.rng);
+    const F = makeUnit({ team: TEAM_ENEMY, faction: 'french', x: 40, y: 30, facing: Math.PI / 2, size: 20, drill: 0.5 }, B.rng); F.delay = 1e9;
+    B.units.push(G, F); Unit.survey(G); Unit.survey(F);
+    for (const g of G.guns) { g.m = 'loaded'; g.mt = 0; }
+    return { B, P, G };
+  };
+  {
+    const { B, G } = range(1800, 300);
+    chk('a battery is pieces with crews of five, no colours, no drum', G.guns.length === 2 && G.formed === 2 * CFG.GUN_CREW && !G.men.some(m => m.role === 'ensign' || m.role === 'drummer'));
+    chk('…every gunner is dealt to a piece', G.men.filter(m => m.role === 'line').every(m => G.guns.includes(m.gun)));
+    run(B, 30);
+    chk('it lays its guns and fires roundshot at what it can see', G.stats.shots >= 2 && B.fx.some(f => f.kind === 'ball'), G.stats.shots);
+  }
+  // deep targets suffer: a column or a square loses far more men to roundshot than a line
+  {
+    const loss = form => {
+      let n = 0;
+      for (let k = 0; k < 6; k++) {
+        const { B, P } = range(1810 + k, 380);
+        if (form !== 'line') Orders.apply(B, P, form, {});
+        run(B, 8);
+        const n0 = P.formed;
+        for (let i = 0; i < 30 * 100; i++) { Battle.step(B, CFG.STEP); B.events.length = 0; P.lastHit = -99; }
+        n += n0 - P.formed;
+      }
+      return n / 6;
+    };
+    const line = loss('line'), sq = loss('square'), col = loss('attackcol'), sk = loss('skirmish');
+    chk('roundshot: a square or a column loses far more than a line; skirmishers hardly any', sq > line * 1.4 && col > line * 1.3 && sk < line * 0.5, `line ${line.toFixed(1)} square ${sq.toFixed(1)} column ${col.toFixed(1)} skirmish ${sk.toFixed(1)}`);
+  }
+  // behind a crest you are safe from guns that cannot see you
+  {
+    const { B, P, G } = range(1820, 300);
+    const fl = B.field;
+    for (let i = 0; i < fl.height.length; i++) { const y = Math.floor(i / fl.cols) * CFG.CELL; fl.height[i] = 12 * Math.exp(-Math.pow((y - (P.cy - 30)) / 18, 2)); }
+    B.seen[TEAM_ENEMY].add(P.id);
+    const n0 = P.formed;
+    run(B, 60);
+    chk('a crest between you and the guns: they cannot lay on you', G.stats.shots === 0 && P.formed === n0, G.stats.shots + ' shots');
+  }
+  // canister close in, roundshot further off
+  {
+    const { B, P, G } = range(1830, 90);
+    run(B, 3);
+    chk('inside canister range they load canister — and it is murder', G.guns.every(g => g.shot === 'canister') && P.stats.down >= 3, P.stats.down + ' down');
+    const far = range(1832, 300); run(far.B, 3);
+    chk('…outside it, roundshot', far.G.guns.every(g => g.shot === 'round'));
+  }
+  // a crew shot down reloads slower; none at all and the piece is silent
+  {
+    const { B, G } = range(1840, 300, { guns: 1 });
+    const g = G.guns[0];
+    run(B, 4); const t0 = g.mt;
+    for (const m of G.men.filter(m => m.role === 'line').slice(0, 3)) m.state = 'down';
+    Unit.survey(G);
+    run(B, 4);
+    chk('fewer hands, slower loading', g.m === 'reloading' && t0 - g.mt < 4 * 0.85, (t0 - g.mt).toFixed(2));
+    for (const m of G.men) if (m.role === 'line') m.state = 'down';
+    Unit.survey(G); g.m = 'loaded'; const s0 = G.stats.shots;
+    run(B, 20);
+    chk('…and with no crew the gun is silent', G.stats.shots === s0);
+  }
+  // guns swing slowly beyond their front: come at them from the flank
+  {
+    const { B, G } = range(1850, 120, { dx: 0 });
+    for (const g of G.guns) g.facing = 0;   // laid east, out past their front
+    B.seen[TEAM_ENEMY].add(B.player.id);
+    run(B, 3);
+    chk('a gun laid off its front comes round slowly', G.stats.shots === 0 && G.guns.every(g => Math.abs(g.facing) < 0.5), G.guns.map(g => g.facing.toFixed(2)).join(','));
+  }
+  // overrun: gunners gone, a man of ours on the piece = taken
+  {
+    const { B, P, G } = range(1860, 300, { guns: 1 });
+    const g = G.guns[0];
+    for (const m of G.men) if (m.role === 'line') { m.state = 'fleeing'; }
+    const man = P.men.find(m => m.role === 'line'); man.x = g.x + 2; man.y = g.y + 2; man.sx = man.x; man.sy = man.y;
+    Battle.step(B, CFG.STEP); Battle.step(B, CFG.STEP);
+    chk('a gun with nobody of its own near it is taken by whoever reaches it', g.taken && g.takenBy === TEAM_PLAYER && B.stats.gunsTaken === 1);
+    B.over = false; Battle.finish(B, 'won');
+    const rep = Campaign.afterBattle(Campaign.newRun(5), { type: 'battle', scenario: 'plain', row: 3 }, B.result);
+    chk('…and it is worth renown', rep.lines.some(l => /gun/.test(l[0])));
+  }
+  // they will not fire through their own men
+  {
+    const { B, P, G } = range(1870, 300);
+    const F = B.units.find(u => u.team === TEAM_ENEMY && u.arm === 'foot');
+    F.delay = 1e9; for (const m of F.men) { m.state = 'formed'; m.x = P.cx + (m.x - F.cx) * 0.4; m.y = P.cy - 150 + (m.y - F.cy) * 0.4; }
+    Unit.survey(F);
+    run(B, 20);
+    chk('a battery holds fire rather than shoot through its own men', G.stats.shots === 0, G.stats.shots);
+  }
+  {
+    chk('The Guns on the Knoll is in the battle pool, with a battery and supports', BATTLE_POOL.includes('battery') && SCENARIOS.battery.deploy(makeRng(2), 0.3).enemies.some(e => e.arm === 'gun'));
+    const R = fresh('sp_ridge', 1880);
+    chk('the Long Ridge has a grand battery on their ridge', R.units.filter(u => u.arm === 'gun').length === 2);
+    const b = fresh('battery', 1881, { autoPlayer: true });
+    run(b, CFG.NIGHTFALL);
+    chk('a battle against guns ends', b.over && b.result.how !== 'nightfall', b.result && b.result.how);
+  }
+}
+
+console.log('§14 volley and charge; your horse');
+{
+  // the user's way: close up, one volley, then in with the bayonet
+  const vc = (seed, at) => {
+    const B = fresh('plain', seed), P = B.player, E = B.units.find(u => u.team === TEAM_ENEMY && u.arm === 'foot');
+    for (const u of B.units) if (u.team === TEAM_ENEMY && u !== E) for (const m of u.men) m.state = 'gone';
+    for (const m of E.men) { m.x += P.cx - E.cx; m.y += (P.cy - 200) - E.cy; }
+    Unit.setForm(E, 'line', P.cx, P.cy - 200, Math.PI / 2); E.doctrine = 'hold'; Unit.survey(E); for (const m of E.men) { m.x = m.sx; m.y = m.sy; }
+    Orders.apply(B, P, 'advance', { facing: -Math.PI / 2 });
+    let phase = 0, t = 0;
+    for (let i = 0; i < 30 * 300; i++) {
+      Battle.step(B, CFG.STEP); B.events.length = 0; B.cmd.x = P.cx; B.cmd.y = P.cy + 5;
+      const d = Math.hypot(E.cx - P.cx, E.cy - P.cy);
+      if (phase === 0 && d < at + 8) { Orders.apply(B, P, 'halt', {}); Orders.apply(B, P, 'ready', {}); phase = 1; }
+      else if (phase === 1 && P.men.filter(m => m.m === 'present').length > P.formed * 0.6) { Orders.apply(B, P, 'fire', {}); phase = 2; t = B.t; }
+      else if (phase === 2 && B.t > t + 2) { Orders.apply(B, P, 'charge', {}); phase = 3; }
+      if (E.routed) return true;
+      if (P.routed || (phase === 3 && P.order !== 'charge')) return false;
+    }
+    return false;
+  };
+  let near = 0;
+  for (let k = 0; k < 12; k++) if (vc(1900 + k, 40)) near++;
+  chk('march up, volley at 40 m, then charge: it usually carries', near >= 7, near + '/12');
+  // a defender that loses its nerve and is left shaken gives way at once
+  {
+    const b = fresh('plain', 1950), c = b.player, d = b.units.find(e => e.team === TEAM_ENEMY);
+    c.morale = 80; d.morale = 55; c.impetus = 1;
+    let broke = 0;
+    for (let k = 0; k < 20; k++) {
+      d.routed = false; d.morale = 55; d.order = 'hold';
+      for (const m of d.men) if (m.state === 'fleeing') m.state = 'formed';
+      Orders.apply(b, c, 'charge', {}); Combat.nerve(b, c, d, 1.4);
+      if (d.routed) broke++;
+    }
+    chk('a company that loses its nerve before the bayonets, already shaken, breaks', broke >= 12, broke + '/20');
+  }
+  // your horse: faster, heard further, shot from under you
+  {
+    const camp = Campaign.newRun(7);
+    camp.renown = 100;
+    chk('the quartermaster sells you a horse', Campaign.buy(camp, 'horse') && camp.commander.horse && !Campaign.shopItems(camp).find(i => i.key === 'horse').ok);
+    const B = fresh('plain', 1960, { commander: { hp: 3, maxHp: 3, horse: true } }), c = B.cmd;
+    const x0 = c.x; c.mvx = 1; run(B, 3); c.mvx = 0;
+    const B2 = fresh('plain', 1960), c2 = B2.cmd, x2 = c2.x; c2.mvx = 1; run(B2, 3);
+    chk('mounted, you cover more ground', c.x - x0 > (c2.x - x2) * 1.3, (c.x - x0).toFixed(1) + ' vs ' + (c2.x - x2).toFixed(1));
+    c.x = B.player.cx; c.y = B.player.cy + CFG.VOICE_RANGE + 10;
+    chk('…and they hear you further off', Orders.shout(B, 'halt'));
+    let horseFirst = 0;
+    for (let k = 0; k < 20; k++) { const b = fresh('plain', 1970 + k, { commander: { hp: 3, maxHp: 3, horse: true } }); Combat.hit(b, b.cmd, null); if (b.cmd.hp === 3 && !b.cmd.horse && b.cmd.horseLost) horseFirst++; }
+    chk('the first ball that finds you often finds the horse instead', horseFirst >= 8 && horseFirst <= 18, horseFirst + '/20');
+    const b = fresh('plain', 1990, { commander: { hp: 3, maxHp: 3, horse: true } });
+    b.cmd.horse = null; b.cmd.horseLost = true; b.over = false; Battle.finish(b, 'won');
+    const r2 = Campaign.newRun(8); r2.commander.horse = true;
+    const rep = Campaign.afterBattle(r2, { type: 'battle', scenario: 'plain', row: 3 }, b.result);
+    chk('…and a horse killed under you is gone', !r2.commander.horse && rep.horseLost);
   }
 }
 

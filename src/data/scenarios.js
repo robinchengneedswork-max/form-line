@@ -37,6 +37,11 @@ function horse(x, y, facing, lv, rng, extra = {}) {
   return Object.assign({ team: TEAM_ENEMY, x, y, facing, size: Math.round(20 + lv * 10 + rng.int(-2, 2)), drill: 0.5,
     doctrine: 'cavalry', arm: 'cav', cavType, drummer: true, fifer: false, colours: false }, extra);
 }
+// a French battery: n pieces in a row, served by five gunners each; better crews later on
+function guns(x, y, facing, n, lv, extra = {}) {
+  return Object.assign({ team: TEAM_ENEMY, x, y, facing, arm: 'gun', guns: n, drill: clamp(0.35 + lv * 0.45, 0.2, 0.9),
+    doctrine: 'battery', drummer: false, fifer: false, colours: false }, extra);
+}
 // from a third of the way into a campaign, the enemy sometimes brings horse
 const bringsHorse = (lv, rng, p) => lv >= 0.3 && rng() < p;
 
@@ -56,7 +61,35 @@ const SCENARIOS = {
         player: { x: 360, y: 470, facing: NORTH },
         allies: [],
         enemies: [coy(1, 360 + rng.range(-60, 60), 95, SOUTH, e.size, e.drill, 'attack', { nerve: e.nerve })]
-          .concat(bringsHorse(lv, rng, 0.5) ? [horse(rng() < 0.5 ? 130 : 590, 70, SOUTH, lv, rng)] : []),
+          .concat(bringsHorse(lv, rng, 0.5) ? [horse(rng() < 0.5 ? 130 : 590, 70, SOUTH, lv, rng)] : [])
+          .concat(lv >= 0.55 && rng() < 0.35 ? [guns(360 + rng.range(-120, 120), 60, SOUTH, 1, lv)] : []),
+      };
+    },
+  },
+
+  battery: {
+    name: 'The Guns on the Knoll', blurb: 'Two French guns on a little knoll, with a company of foot beside them, firing into our lines. Take them. Straight at them is death by canister — there is a wood on the left that runs nearly up to the knoll.',
+    retreat: { x: 470, label: 'The road south' },
+    build(f, rng) {
+      baseGround(f, rng, { amp: 3, wheat: 0.25, woods: 0 });
+      Paint.each(f, (x, y, i) => { f.height[i] += 9 * Math.exp(-(Math.pow(x - 380, 2) + Math.pow(y - 150, 2)) / (2 * 60 * 60)); });
+      // a low rise in front of where you form up: the guns cannot see you until you go over it
+      Paint.each(f, (x, y, i) => { f.height[i] += 5 * Math.exp(-Math.pow((y - 415) / 16, 2)); });
+      // the wood runs up to ~150 m of the guns (musket reach, just outside canister); an orchard beyond it
+      Paint.line(f, 160, 440, 258, 232, T.WOODS, 16);
+      Paint.disc(f, 285, 205, 18, T.ORCHARD);
+      Paint.line(f, 470, f.h, 430, 0, T.ROAD, 2.5);
+    },
+    deploy(rng, lv) {
+      const e = enemyStrength(lv, rng);
+      return {
+        player: { x: 330, y: 470, facing: NORTH },
+        allies: [coy(0, 520, 470, NORTH, 22, 0.4, 'attack', { name: 'No. 6 Coy, 1/45th', fifer: false, objective: [380, 160] })],
+        enemies: [
+          guns(380, 150, SOUTH, 2, lv),
+          coy(1, 480, 160, SOUTH, Math.round(e.size * 0.7), e.drill, 'hold', { nerve: e.nerve, fifer: false }),
+        ].concat(bringsHorse(lv, rng, 0.5) ? [horse(620, 80, SOUTH, lv, rng)] : []),
+        note: 'Two guns and their supports. Canister reaches 140 m: get close under cover, come at them from the flank, or shoot down the gunners in skirmish order.',
       };
     },
   },
@@ -278,4 +311,4 @@ const SCENARIOS = {
   },
 };
 
-const BATTLE_POOL = ['plain', 'ridge', 'farm', 'ford', 'woods', 'village', 'lane', 'heath'];
+const BATTLE_POOL = ['plain', 'ridge', 'farm', 'ford', 'woods', 'village', 'lane', 'heath', 'battery'];

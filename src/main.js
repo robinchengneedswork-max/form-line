@@ -30,9 +30,11 @@ const App = {
     App.startBattle(Campaign.battleOpts(run, n), n);
   },
 
-  quickBattle(scenario) {
+  quickBattle(scenario, q = {}) {
     App.quick = true; App.run = null;
-    App.startBattle({ scenario, seed: (Math.random() * 1e9) >>> 0, level: 0.3 }, null);
+    const seed = (Math.random() * 1e9) >>> 0;
+    App.startBattle({ scenario, seed, level: q.stage != null ? q.stage : 0.3, company: Campaign.quickCompany(seed, q),
+      commander: { name: 'You', hp: 3, maxHp: 3, horse: !!q.horse } }, null);
   },
 
   startBattle(opts, node) {

@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 146 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 170 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -34,6 +34,7 @@ export line). A headless check asserts that index.html's script order matches.
 | `unit.js` | a company: men, leader, **slots**. Line/skirmish slots come from (centre, facing); a column's from the leader's **trail** (footsteps) |
 | `move.js` | formation centre moves; every man walks to his slot; river/house sliding; spatial-hash separation |
 | `combat.js` | musket state machine, hit roll, smoke grid, melee, charge shock |
+| `artillery.js` | batteries: laying, roundshot that skips through the ranks, canister, crews, capture |
 | `morale.js` | loss shock, suppression, baseline, wavering, rout, rally; `Colours` (drop / pick up / capture) |
 | `orders.js` | `shout` (player: voice ≤48 m, else only via a living drummer, 1.8 s late), `give` (AI), `apply` |
 | `ai.js` | every non-player captain (enemy AND allied): doctrines attack / hold / skirmish. Several ideas borrowed from DoDoCat's *Day of Slaughter* NW AI mod (spread targets, march until the centres can see each other, a firing distance kills push in and losses push out, sideways realignment with a deadzone, troop-ratio retreat/charge) |
@@ -109,6 +110,33 @@ The agreed roadmap for a rewarding progression curve: **cavalry + square first, 
 - **Where**: new small map **The Heath** (always horse); Open Ground (50%) and The Reverse Slope (35%) from campaign level 0.3; the type gets heavier with level. **The Long Ridge** gets two cuirassier squadrons at ~7 min.
 - Duels (`$TEMP/fl/cav2.js`): formed square vs cuirassiers ~0–1/10 broken; line in the flank ~9/10 ridden over; ready line facing chasseurs ~50/50; square ordered with the horse at 60 m ~30% caught, at 90 m safe.
 
+## The guns (round 6 — step 2 of the roadmap)
+
+- `artillery.js` (after combat.js). A **battery** is a unit with `arm: 'gun'`, `form.kind: 'battery'`, `u.guns = [{x,y,facing,m,mt,target,shot,taken,takenBy}]` and `GUN_CREW` 5 gunners per piece (role line, `weapon: 'rammer'`, `m.gun` → their piece, re-dealt round the live pieces in `assignSlots`). No colours/drum. Static (no limbering) except `AI.battery`: when its foot are all beaten it leaves, abandoning the guns.
+- ⚠ `g.taken` is a **boolean** and `g.takenBy` the team — the player is team 0, so storing the team in `taken` read as "not taken" (bug found by the assault duel).
+- Per piece, once a second: best seen target in `GUN_RANGE` with **LOS from the gun** (a crest protects completely) and no friendly company within 16 m of the line of fire; canister inside `CANISTER_RANGE` 140, else roundshot weighted to deep targets (square 2.4, column 2, attack 1.9, horse 1.3, line 1, skirmish 0.25). Traverse `GUN_TRAVERSE` within `GUN_ARC` of the battery's front, only `GUN_SWING` 0.04 rad/s beyond it (flank attacks work). Reload `GUN_RELOAD` 26 s × crew^0.7. First round after 8 s (+5 s per piece).
+- **Roundshot**: lateral error `ROUND_SD` 0.006 (laying for line was easy), range error 5%; grazes `ROUND_SHORT` before the fall and skips `ROUND_SKIP` 140 m on; each man within `ROUND_WIDTH` of the path is hit at `ROUND_P` 0.3 (×1.6 in square, ×1.3 column), max 6, if the gun has LOS to him; buildings stop it; trees take half. Every company it passes near loses `ROUND_SCARE`. Measured at 400 m, 2 guns: line ~2/min, column ~4, square ~4.4, skirmish ~0.3.
+- **Canister**: 30 balls in ±0.13 rad, each finds the first man in its path at `CANISTER_P`·e^(−d/110), max 6/shot. Two guns at 90 m rout a company. Range was 240 → 160 → **140** so skirmishers firing at will (165 m) can duel the crews from outside it: skirmish order at 150 m kills ~half the gunners in 3 min for ~2 men.
+- Capture (`Artillery.capture`): no own gunner within 6 m and an enemy formed man within `GUN_CAPTURE` 8 m. +20 renown per gun.
+- Where: **The Guns on the Knoll** (`battery`: 2 guns + a holding company, wood on the left running to ~140 m of the knoll, an attacking ally that draws fire); Open Ground at level ≥0.55 (35%, one gun); **The Long Ridge**: a grand battery of 2×2 guns on the French ridge (the reverse slope is now the point).
+- HUD says "Under artillery fire" (`u.shelled`). Sound: `Sound.cannon`. Render: `Render.gun` (recoils), `ball` fx (ball in flight + earth spurts where it grazes), `canister` spray, `gunflash`.
+
+## Round 6 also: volley-and-charge, your horse, the phone minimap
+
+- **"I tend to want to march them up, shoot, then charge"** (the user): a company with >40% of its men having fired in the last `VOLLEY_CHARGE` 20 s charges at ×`VOLLEY_CHARGE_BONUS` 1.3; a line caught reloading defends at 0.65 (was 0.75; fully loaded still 1.35); a defender that loses the nerve test takes `NERVE_LOST` 22 and **routs at once** if left below SHAKEN+`NERVE_BREAK` (40). Duel `$TEMP/fl/vc.js`: vs a fresh holding line, volley at 40 m then charge ≈ 75% carries, at 60 m ≈ 30%. Line-vs-column duel unchanged (~58%). A faltered charge with no volley first says "close to 40 m and give them a volley first".
+- ⚠ A charge ordered from beyond ~140 m fizzles (nobody within `nearestFoe` range → ends after 3 s). Not changed yet; worth a look if the user still finds charging hard.
+- **Officer's horse** (user asked): quartermaster `horse` (`HORSE_COST` 30) → `run.commander.horse` → `B.cmd.horse` (coat colour, also makes separation treat you as a horse). Walk 2.4 / gallop 7 (breath lasts ~30 s), voice +20 m, ×2 chance to be picked out (and from 30 m like a rifleman), first hit 60% kills the horse instead (`horseLost` → lost from the run).
+- **Minimap on phones** sat under the bottom log bar (it guessed a 12 px inset). `Render.bottomInset` now measures #hud-log / #hud-orders / #touch-bar where they overlap the minimap's column.
+
+## Round 6, from the user's phone playtest
+
+- **Path-finding** (user: "ai has some pathfinding issues with buildings… also on rivers… esp around bridges"): `Path` in field.js = A* on the 4 m ground grid avoiding BUILDING and WATER (fords/bridges open), walls/woods/marsh cost more, no corner-cutting past houses, string-pulled with `Path.clear`, cached per field (12 m key). `AI.route` now uses it for everything (the old named-crossing ±30 m waypoints walked columns into the water wherever the river bent); a leg that meets a ford/bridge gets a stand-off point 14 m before it so the column takes it square on. The scenario `crossings` arrays are now unused by routing.
+- **Walls never overwrite a road or bridge** (`Paint.enclosure`): every road through a garden wall is a gateway (the small Village was walled shut across its road).
+- **Saddles**: where a road crosses a ridge it dips (`saddle()` in setpieces.js; Long Ridge, finale) — ~10 m lower than the crest beside it.
+- **Cover, explained** (the user found the grey wall lines opaque): cover only protects the man IN it — `Field.coverFor(target, shooter)` = the target's ground (woods 0.55, orchard 0.75, wheat 0.9, standing on a wall 0.35) or a wall within 2.5–4.5 m of the target toward the shooter (0.35). Your fire OUT of cover is unaffected. Walls do not block sight; they slow men to 0.35. The HUD now has a line: "Behind a wall — they hit you a third as often / In cover / In the open · they are in cover" (`UI.coverLine`).
+- **Quick battle** expanded: skirmishes + set-piece battles + finale; stage (Early/Middle/Late/Waterloo → `level`), company size 24–48, company type, mounted. `Campaign.quickCompany` builds a seasoned company to match (NCOs, rifles, drill).
+- **Future topics the user raised (not started):** a points-based battle builder (renown as the budget) as groundwork for PvP; asymmetric factions; runners + bugle for commanding allies; named NCOs leading detachments (e.g. a rifle party) that can be reabsorbed.
+
 ## Company customization (campaign)
 
 - **Grades**: private → corporal (xp 3, 5 renown) → sergeant (xp 6, 12). Slots scale with rank. In battle a sergeant adds +2 baseline morale (corporal +0.7, cap +8), closes ranks faster, calls stragglers back, and takes up fallen colours first.
@@ -154,7 +182,7 @@ Save = `localStorage['formline.run']` (per-viewer convenience, try/catch'd); bes
 ## Known gaps / next
 
 - **Never played by a human.** Browser-verified by script (quick battle, volley, charge, victory, report, map, briefing), not by hand.
-- Cavalry + square built (round 5); no artillery yet. Light-infantry bugle calls don't exist.
+- Cavalry + square (round 5) and enemy guns (round 6) built; no guns of our own yet. Light-infantry bugle calls don't exist.
 - Set pieces are CPU-heavier (~90 ms of sim per battle-second for the finale): fine on desktop at 1×, untested on a phone.
 - The autoplayer in `tune.js` is a crude proxy for a human; some scenarios (ridge, ford: 2 enemy companies) are hard for it by design.
 - Civil War era = a second pair of factions + tunes. Not built.

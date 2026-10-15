@@ -36,16 +36,18 @@ function makeUnit(spec, rng) {
   const ctype = spec.ctype || (/Voltigeur|Light/i.test(name) ? 'light' : /Grenad/i.test(name) ? 'grenadier' : null);
   // a squadron of horse: troopers in two loose ranks, a trumpeter, no colours, no muskets
   const cav = spec.arm === 'cav' ? CAV_TYPES[spec.cavType || 'chasseurs'] : null;
+  const gun = spec.arm === 'gun';
   const u = {
-    id: NEXT_ID++, team: spec.team, faction: spec.faction, F: cav ? Object.assign({}, F, { coat: cav.coat, facings: cav.facings, hat: cav.hat }) : F, ctype,
-    arm: cav ? 'cav' : 'foot', cav,
-    melee: cav ? F.meleeSkill * cav.melee : F.meleeSkill * (ctype === 'grenadier' ? 1.2 : 1),
-    name: cav && !spec.name ? rng.pick(cav.names) : name, isPlayer: !!spec.isPlayer,
+    id: NEXT_ID++, team: spec.team, faction: spec.faction,
+    F: cav ? Object.assign({}, F, { coat: cav.coat, facings: cav.facings, hat: cav.hat }) : gun ? Object.assign({}, F, F.gunners) : F, ctype,
+    arm: cav ? 'cav' : gun ? 'gun' : 'foot', cav,
+    melee: cav ? F.meleeSkill * cav.melee : gun ? 0.6 : F.meleeSkill * (ctype === 'grenadier' ? 1.2 : 1),
+    name: cav && !spec.name ? rng.pick(cav.names) : gun && !spec.name ? rng.pick(F.batteries) : name, isPlayer: !!spec.isPlayer,
     men: [], leader: null,
-    form: { kind: 'line', x: spec.x, y: spec.y, facing: spec.facing },
+    form: { kind: gun ? 'battery' : 'line', x: spec.x, y: spec.y, facing: spec.facing },
     ranks: cav ? 2 : F.ranks,
     order: 'hold', fire: 'hold', volleyAt: -1,
-    drill: spec.drill, nerveBonus: (spec.nerve || 0) + F.nerve + (ctype === 'grenadier' ? 6 : 0) + (cav ? cav.nerve : 0),
+    drill: spec.drill, nerveBonus: (spec.nerve || 0) + F.nerve + (ctype === 'grenadier' ? 6 : 0) + (cav ? cav.nerve : 0) + (gun ? 6 : 0),
     drills: spec.drills || null,   // null = knows every drill (AI companies)
     morale: CFG.MORALE_BASE + (spec.nerve || 0), startSize: 0,
     routed: false, everRouted: false,
@@ -53,18 +55,29 @@ function makeUnit(spec, rng) {
     task: spec.task || null, taskApplied: null, anchor: null,
     trail: [], slotOrder: [], reslot: 0,
     lossLog: [], lastHit: -99, flanked: 0, beingCharged: 0, chargeT: 0,
-    colours: null, coloursLost: false, wind: 1, hasColours: spec.colours !== false && !cav,
+    colours: null, coloursLost: false, wind: 1, hasColours: spec.colours !== false && !cav && !gun,
     rallyCd: 0, ai: { next: 0, phase: 'deploy', route: null },
     cx: spec.x, cy: spec.y, formed: 0, visible: spec.team === TEAM_PLAYER,
     lastSeen: null, stats: { shots: 0, hits: 0, down: 0, fled: 0 },
   };
+  // a battery: its pieces in a row across the front, and five gunners to each
+  if (gun) {
+    const k = spec.guns || 2, rx = -Math.sin(spec.facing), ry = Math.cos(spec.facing);
+    u.guns = [];
+    for (let i = 0; i < k; i++) {
+      const off = (i - (k - 1) / 2) * CFG.GUN_GAP;
+      // (the first round goes off once the gunners have found the range)
+      u.guns.push({ i, x: spec.x + rx * off, y: spec.y + ry * off, facing: spec.facing, m: 'reloading', mt: 8 + i * 5, taken: false, target: null });
+    }
+    spec.size = k * CFG.GUN_CREW;
+  }
   const roster = spec.roster || [];
   const n = spec.roster ? roster.length : spec.size;
   for (let i = 0; i < n; i++) u.men.push(makeMan(u, 'line', Object.assign({}, roster[i] || {}, cav ? { weapon: cav.weapon } : {}), rng));
-  if (cav) for (const m of u.men) m.m = 'none';
+  if (cav || gun) for (const m of u.men) { m.m = 'none'; if (gun) m.weapon = 'rammer'; }
   if (u.hasColours) u.men.push(makeMan(u, 'ensign', { name: 'Ensign' }, rng));
-  if (spec.drummer) u.men.push(makeMan(u, 'drummer', { name: cav ? 'Trumpeter' : 'Drummer' }, rng));
-  if (spec.fifer && !cav) u.men.push(makeMan(u, 'fifer', { name: 'Fifer' }, rng));
+  if (spec.drummer && !gun) u.men.push(makeMan(u, 'drummer', { name: cav ? 'Trumpeter' : 'Drummer' }, rng));
+  if (spec.fifer && !cav && !gun) u.men.push(makeMan(u, 'fifer', { name: 'Fifer' }, rng));
   if (!spec.isPlayer) {
     const off = makeMan(u, 'officer', { name: F.name === 'French' ? 'Capitaine' : 'Captain', aim: 1 }, rng);
     u.men.push(off);
@@ -96,6 +109,20 @@ const Unit = {
     const men = Unit.lineMen(u);
     const f = u.form, rx = Math.cos(f.facing + Math.PI / 2), ry = Math.sin(f.facing + Math.PI / 2);
     const fx = Math.cos(f.facing), fy = Math.sin(f.facing);
+    if (f.kind === 'battery') {
+      const live = u.guns.filter(g => !g.taken);
+      men.sort((a, b) => (a.gun ? a.gun.i : 0) - (b.gun ? b.gun.i : 0));
+      if (live.length) men.forEach((m, i) => { if (!m.gun || m.gun.taken) m.gun = null; });
+      const per = new Map(live.map(g => [g, men.filter(m => m.gun === g).length]));
+      for (const m of men) {
+        if (m.gun || !live.length) continue;
+        let g = live[0];
+        for (const h of live) if (per.get(h) < per.get(g)) g = h;
+        m.gun = g; per.set(g, per.get(g) + 1);
+      }
+      u.slotOrder = men;
+      return;
+    }
     if (f.kind === 'square') {
       const free = men.slice(), order = [];
       for (let i = 0; i < men.length; i++) {
@@ -157,6 +184,24 @@ const Unit = {
         const d = m.role === 'ensign' ? 4.6 : 2.6, lat = m.role === 'drummer' ? 1.2 : m.role === 'fifer' ? -1.2 : 0;
         const p = Unit.trailPoint(u, d);
         m.sx = p.x - Math.sin(p.dir) * lat; m.sy = p.y + Math.cos(p.dir) * lat; m.slotFacing = p.dir;
+      }
+      return;
+    }
+    if (f.kind === 'battery') {
+      // each crew stands in a fan behind and beside its piece; the officer behind the middle
+      const seen = new Map();
+      for (const m of men) {
+        const g = m.gun;
+        if (!g) { m.sx = f.x - fx * 6; m.sy = f.y - fy * 6; m.slotFacing = f.facing; continue; }
+        const k = seen.get(g) || 0; seen.set(g, k + 1);
+        const gx = Math.cos(g.facing), gy = Math.sin(g.facing);
+        const spots = [[-0.6, 2.4], [-0.6, -2.4], [-4.4, 1.6], [-4.4, -1.6], [-6.4, 0], [-2.8, 3.4], [-2.8, -3.4]];
+        const [b, l] = spots[k % spots.length];
+        m.sx = g.x + gx * b - gy * l; m.sy = g.y + gy * b + gx * l; m.slotFacing = g.facing; m.rank = 0;
+      }
+      for (const m of u.men) {
+        if (m.state !== 'formed' || m.role === 'line') continue;
+        m.sx = f.x - fx * 8; m.sy = f.y - fy * 8; m.slotFacing = f.facing;
       }
       return;
     }

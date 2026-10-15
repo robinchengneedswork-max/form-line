@@ -110,6 +110,7 @@ const Render = {
     const seen = B.seen[TEAM_PLAYER];
     for (const u of B.units) for (const m of u.men) if (m.state === 'down') Render.body(g, m);
     for (const d of B.dropped) Render.flag(g, d.x, d.y, d.unit, B.t, true);
+    for (const u of B.units) if (u.guns && (u.team === TEAM_PLAYER || seen.has(u.id) || u.guns.some(p => p.taken))) for (const p of u.guns) Render.gun(g, p, u, B.t);
     for (const u of B.units) {
       const vis = u.team === TEAM_PLAYER || seen.has(u.id);
       if (!vis) continue;
@@ -188,8 +189,10 @@ const Render = {
     const flee = m.state === 'fleeing';
     // shadow
     g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(0.08, 0.1, 0.3, 0.42, 0, 0, 7); g.fill();
+    // a gunner's rammer
+    if (m.weapon === 'rammer' && !flee) { g.strokeStyle = '#6b4a2a'; g.lineWidth = 0.07; g.beginPath(); g.moveTo(-0.5, 0.25); g.lineTo(0.9, 0.3); g.stroke(); }
     // musket (under the body when shouldered)
-    if (m.role === 'line' && !flee) {
+    else if (m.role === 'line' && !flee) {
       g.strokeStyle = '#4a3420'; g.lineWidth = 0.09;
       g.beginPath();
       if (m.m === 'present' || m.m === 'presenting') { g.moveTo(0.05, 0.12); g.lineTo(1.25, 0.06); }
@@ -258,8 +261,34 @@ const Render = {
     g.restore();
   },
 
+  // a field gun: trail behind, two wheels, the bronze barrel; it jumps back when it fires
+  gun(g, p, u, t) {
+    const back = p.recoil != null && t - p.recoil < 0.6 ? (1 - (t - p.recoil) / 0.6) * 0.9 : 0;
+    g.save(); g.translate(p.x - Math.cos(p.facing) * back, p.y - Math.sin(p.facing) * back); g.rotate(p.facing); g.scale(1.35, 1.35);
+    if (p.taken) { g.globalAlpha = 0.75; g.rotate(0.25); }
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(-0.6, 0.2, 2.2, 0.9, 0, 0, 7); g.fill();
+    g.strokeStyle = '#3d2b1a'; g.lineWidth = 0.45; g.beginPath(); g.moveTo(0, 0); g.lineTo(-3.2, 0); g.stroke();          // trail
+    g.fillStyle = '#2a1d12';
+    g.fillRect(-0.35, -1.05, 0.7, 0.28); g.fillRect(-0.35, 0.77, 0.7, 0.28);                                                    // wheels, side on
+    g.strokeStyle = '#4a3420'; g.lineWidth = 0.18; g.beginPath(); g.moveTo(0, -0.9); g.lineTo(0, 0.9); g.stroke();            // axle
+    g.strokeStyle = '#a07a3a'; g.lineWidth = 0.5; g.beginPath(); g.moveTo(-0.6, 0); g.lineTo(1.9, 0); g.stroke();              // barrel
+    g.fillStyle = '#8a6630'; g.beginPath(); g.arc(1.95, 0, 0.3, 0, 7); g.fill();
+    if (p.taken && p.takenBy === TEAM_PLAYER) { g.globalAlpha = 1; g.rotate(-0.25); g.fillStyle = '#b3202b'; g.fillRect(-1.6, -1.7, 0.7, 0.45); }
+    g.restore();
+  },
+
   commander(g, c, t) {
     const F = FACTIONS.british;
+    if (c.horse) {
+      // your horse under you
+      g.save(); g.translate(c.x, c.y); g.rotate(c.facing); g.scale(SPRITE, SPRITE);
+      const gait = c.moving > 4 ? Math.sin(t * 14) * 0.05 : c.moving > 1 ? Math.sin(t * 8) * 0.03 : 0;
+      g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(0.1, 0.12, 0.95, 0.4, 0, 0, 7); g.fill();
+      g.fillStyle = c.horse; g.beginPath(); g.ellipse(gait, 0, 0.82, 0.3, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(0.88 + gait * 2, 0, 0.3, 0.14, 0, 0, 7); g.fill();
+      g.fillStyle = '#24306a'; g.beginPath(); g.ellipse(-0.12, 0, 0.26, 0.34, 0, 0, 7); g.fill();
+      g.restore();
+    }
     g.save(); g.translate(c.x, c.y); g.rotate(c.facing); g.scale(SPRITE * 1.15, SPRITE * 1.15);
     g.fillStyle = 'rgba(0,0,0,0.25)'; g.beginPath(); g.ellipse(0.08, 0.1, 0.32, 0.44, 0, 0, 7); g.fill();
     g.strokeStyle = '#d9dde0'; g.lineWidth = 0.06; g.beginPath(); g.moveTo(0.1, 0.32); g.lineTo(0.95, 0.5); g.stroke();
@@ -329,8 +358,31 @@ const Render = {
 
   flashes(g, B) {
     for (const f of B.fx) {
-      if (f.kind !== 'flash') continue;
       const age = B.t - f.t;
+      if (f.kind === 'gunflash' && age < 0.2) {
+        g.fillStyle = `rgba(255,215,130,${1 - age / 0.2})`;
+        g.beginPath(); g.arc(f.x + Math.cos(f.a) * 1.2, f.y + Math.sin(f.a) * 1.2, 1.6 + Math.random() * 0.6, 0, 7); g.fill();
+      } else if (f.kind === 'canister' && age < 0.25) {
+        // the spray of a tin of balls
+        g.strokeStyle = `rgba(255,235,190,${0.5 * (1 - age / 0.25)})`; g.lineWidth = 0.12;
+        for (let k = -4; k <= 4; k++) { const a = f.a + k * CFG.CANISTER_SPREAD / 4; g.beginPath(); g.moveTo(f.x, f.y); g.lineTo(f.x + Math.cos(a) * f.r * (age / 0.25 + 0.3), f.y + Math.sin(a) * f.r * (age / 0.25 + 0.3)); g.stroke(); }
+      } else if (f.kind === 'ball' && age < f.dur + 0.6) {
+        // the ball in flight, a spurt of earth where it grazes, and its skips beyond
+        const L = Math.hypot(f.x1 - f.x0, f.y1 - f.y0), s = Math.min(L, age * CFG.BALL_SPEED), k = s / L;
+        if (age < f.dur) {
+          const bx = f.x0 + (f.x1 - f.x0) * k, by = f.y0 + (f.y1 - f.y0) * k;
+          g.fillStyle = '#1a1a1a'; g.beginPath(); g.arc(bx, by, 0.35, 0, 7); g.fill();
+          g.strokeStyle = 'rgba(30,30,30,0.25)'; g.lineWidth = 0.25; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx - (f.x1 - f.x0) / L * 6, by - (f.y1 - f.y0) / L * 6); g.stroke();
+        }
+        const gk = Math.hypot(f.gx - f.x0, f.gy - f.y0) / L;
+        for (let j = 0; j < 4; j++) {
+          const at = gk + (1 - gk) * j / 4, when = at * f.dur, a2 = age - when;
+          if (a2 < 0 || a2 > 0.6) continue;
+          const px = f.x0 + (f.x1 - f.x0) * at, py = f.y0 + (f.y1 - f.y0) * at;
+          g.fillStyle = `rgba(110,85,55,${0.6 * (1 - a2 / 0.6)})`; g.beginPath(); g.arc(px, py, 0.6 + a2 * 2.5, 0, 7); g.fill();
+        }
+      }
+      if (f.kind !== 'flash') continue;
       if (age > 0.12) continue;
       g.fillStyle = `rgba(255,${200 + Math.random() * 50 | 0},120,${1 - age / 0.12})`;
       g.beginPath(); g.arc(f.x + Math.cos(f.a) * 0.4, f.y + Math.sin(f.a) * 0.4, 0.55 + Math.random() * 0.3, 0, 7); g.fill();
@@ -422,9 +474,27 @@ const Render = {
     g.fillText(`${d} m`, x - Math.cos(a) * 22, y - Math.sin(a) * 18 + 4);
   },
 
+  bottomInset(x0) {
+    const now = performance.now();
+    if (Render._inset && now - Render._inset.t < 500 && Render._inset.x0 === x0) return Render._inset.v;
+    if (!Render.cv.getBoundingClientRect) return 12;
+    const cv = Render.cv.getBoundingClientRect();
+    let v = 0;
+    for (const id of ['hud-log', 'hud-orders', 'touch-bar']) {
+      const el = document.getElementById(id);
+      if (!el || !el.offsetParent || !el.getBoundingClientRect) continue;
+      const r = el.getBoundingClientRect();
+      if (!r.height || r.right < cv.left + x0 || r.top < cv.top + cv.height * 0.5) continue;
+      v = Math.max(v, cv.bottom - r.top);
+    }
+    Render._inset = { t: now, x0, v };
+    return v;
+  },
+
   minimap(B, g) {
     const m = Render.mini; if (!m) return;
-    const x0 = Render.W - m.width - 10, y0 = Render.H - m.height - (document.body.classList.contains('touch') || Render.W < 700 ? 12 : 92), sc = m.width / B.field.w;
+    // sit above whatever bar is along the bottom on this screen (the log on a phone, the order keys on a desktop)
+    const x0 = Render.W - m.width - 10, y0 = Render.H - m.height - Render.bottomInset(x0) - 10, sc = m.width / B.field.w;
     g.globalAlpha = 0.92; g.drawImage(m, x0, y0); g.globalAlpha = 1;
     g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 2; g.strokeRect(x0, y0, m.width, m.height);
     const seen = B.seen[TEAM_PLAYER];

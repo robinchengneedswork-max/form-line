@@ -12,7 +12,7 @@ const { X } = load();
 const { Battle, SCENARIOS, BATTLE_POOL, CFG, Campaign, makeRng } = X;
 
 // how YOUR company is played by the autoplayer in each scenario
-const PLAYER_DOCTRINE = { plain: 'attack', ridge: 'hold', farm: 'attack', ford: 'hold', woods: 'attack', village: 'attack', lane: 'attack', finale: 'hold' };
+const PLAYER_DOCTRINE = { plain: 'attack', ridge: 'hold', farm: 'attack', ford: 'hold', woods: 'attack', village: 'attack', lane: 'attack', finale: 'hold', heath: 'hold', battery: 'attack' };
 
 function fight(scenario, seed, level = 0.3) {
   const B = Battle.create({ scenario, seed, level, autoPlayer: true, playerDoctrine: PLAYER_DOCTRINE[scenario],

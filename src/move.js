@@ -65,8 +65,11 @@ const Move = {
     if (len > 0) {
       vx /= len; vy /= len;
       const run = c.run && c.wind > 0;
-      const sp = (run ? lerp(CFG.CMD_WALK, CFG.CMD_SPRINT, clamp(c.wind / 0.25, 0, 1)) : CFG.CMD_WALK) * Field.speedAt(B.field, c.x, c.y, vx, vy);
-      c.wind = clamp(c.wind + (run ? -CFG.CMD_WIND_DRAIN : CFG.CMD_WIND_REST * 0.5) * dt, 0, 1);
+      // on a horse you walk faster and gallop far faster; it tires more slowly than you do
+      const walk = c.horse ? CFG.HORSE_WALK : CFG.CMD_WALK, fast = c.horse ? CFG.HORSE_GALLOP : CFG.CMD_SPRINT;
+      const ground = c.horse ? Move.horseGround(B, c.x, c.y, vx, vy) : Field.speedAt(B.field, c.x, c.y, vx, vy);
+      const sp = (run ? lerp(walk, fast, clamp(c.wind / 0.25, 0, 1)) : walk) * ground;
+      c.wind = clamp(c.wind + (run ? -(c.horse ? CFG.HORSE_WIND_DRAIN : CFG.CMD_WIND_DRAIN) : CFG.CMD_WIND_REST * 0.5) * dt, 0, 1);
       Move.step(B, c, vx * sp * dt, vy * sp * dt);
       c.facing = turnToward(c.facing, Math.atan2(vy, vx), 8 * dt);
       c.moving = sp;

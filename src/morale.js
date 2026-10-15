@@ -124,7 +124,8 @@ const Morale = {
     u.morale = Math.max(u.morale, CFG.SHAKEN + 2);
     const face = u.team === TEAM_PLAYER ? -Math.PI / 2 : Math.PI / 2;
     Unit.survey(u);
-    Unit.setForm(u, 'line', L.x + Math.cos(face) * 4, L.y + Math.sin(face) * 4, face);
+    if (u.arm === 'gun') { u.reslot = B.t + 0.3; u.order = 'hold'; }   // back to the guns
+    else Unit.setForm(u, 'line', L.x + Math.cos(face) * 4, L.y + Math.sin(face) * 4, face);
     Battle.log(B, `${u.name} rallies — ${n} men back in the ranks.`, u.team === TEAM_PLAYER ? 'good' : 'bad');
     return true;
   },

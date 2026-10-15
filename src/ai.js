@@ -72,6 +72,7 @@ const AI = {
     if (!u.formed || B.t < u.delay || u.order === 'charge') return;
     if (!u.leader && !u.isPlayer) AI.promote(B, u);
     if (u.arm === 'cav') return AI.cavalry(B, u);
+    if (u.arm === 'gun') return AI.battery(B, u);
     Command.apply(u);
 
     // horse coming on and no wall or wood to stand in: form square, and stay in it while they are about
@@ -295,6 +296,16 @@ const AI = {
     AI.ride(B, u, lerp(u.cx, B.field.w / 2, 0.3), u.team === TEAM_ENEMY ? Math.min(B.field.h * 0.55, u.cy + 80) : Math.max(B.field.h * 0.45, u.cy - 80), CFG.CAV_WALK);
   },
 
+  // a battery lays its own guns (artillery.js); its captain only decides when the day is lost
+  battery(B, u) {
+    const friends = B.units.some(o => o !== u && o.team === u.team && o.arm === 'foot' && !Battle.out(o));
+    if (friends) return;
+    // limber up and away, leaving whatever cannot be dragged off
+    for (const g of u.guns) if (!g.taken) { g.taken = true; g.takenBy = 1 - u.team; }
+    for (const m of u.men) if (m.state === 'formed') { m.state = 'gone'; m.saved = true; }
+    Battle.log(B, `${u.name} limbers up and leaves the field — abandoning the guns.`, u.team === TEAM_PLAYER ? 'bad' : 'good');
+  },
+
   // the trumpet, and a shout down the line — so the player has a few seconds to form square
   warn(B, u, target) {
     B.events.push({ type: 'trumpet', x: u.cx, y: u.cy, unit: u.id });
@@ -343,16 +354,32 @@ const AI = {
     else { u.ai.dest = route[0]; u.ai.route = route.slice(1); }
   },
 
+  // the way there on the real ground: round houses, over a river only by a ford or a bridge (field.js Path).
+  // (It used to aim at a named crossing ±30 m, which walked columns into the water wherever the
+  // river bent or the bridge sat off the line — the user saw it at bridges.)
   route(B, x0, y0, x1, y1) {
-    const f = B.field, d = dist(x0, y0, x1, y1), n = Math.ceil(d / 5);
-    let blocked = false;
-    for (let k = 1; k < n && !blocked; k++) if (Field.typeAt(f, lerp(x0, x1, k / n), lerp(y0, y1, k / n)) === T.WATER) blocked = true;
-    const cs = B.scenario.crossings;
-    if (!blocked || !cs) return [{ x: x1, y: y1 }];
-    let best = cs[0], bd = Infinity;
-    for (const c of cs) { const dd = dist(x0, y0, c[0], c[1]) + dist(c[0], c[1], x1, y1); if (dd < bd) { bd = dd; best = c; } }
-    const s = y0 < best[1] ? 1 : -1;
-    return [{ x: best[0], y: best[1] - s * 30 }, { x: best[0], y: best[1] }, { x: best[0], y: best[1] + s * 30 }, { x: x1, y: y1 }];
+    const r = Path.find(B.field, x0, y0, x1, y1);
+    // a column must take a bridge or a ford square on, not cut across its corner: stand off it first
+    const out = [];
+    let px = x0, py = y0;
+    for (const w of r) {
+      const crossing = AI.crossingOn(B.field, px, py, w.x, w.y);
+      if (crossing) {
+        const ux = (w.x - px), uy = (w.y - py), L = Math.hypot(ux, uy) || 1;
+        out.push({ x: crossing.x - ux / L * 14, y: crossing.y - uy / L * 14 });
+      }
+      out.push(w); px = w.x; py = w.y;
+    }
+    return out;
+  },
+  // the first ford or bridge cell on a leg (where the column meets the water), if any
+  crossingOn(f, ax, ay, bx, by) {
+    const d = dist(ax, ay, bx, by), n = Math.ceil(d / 2);
+    for (let k = 1; k < n; k++) {
+      const x = lerp(ax, bx, k / n), y = lerp(ay, by, k / n), t = Field.typeAt(f, x, y);
+      if (t === T.BRIDGE || t === T.FORD) return k * 2 > 16 ? { x, y } : null;
+    }
+    return null;
   },
 
   // march to the post, then form line on it facing the way headquarters said. true = busy getting there

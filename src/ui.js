@@ -21,8 +21,11 @@ const UI = {
   init() {
     $('btn-new').onclick = () => App.newCampaign();
     $('btn-continue').onclick = () => App.continueCampaign();
-    $('btn-quick').onclick = () => App.quickBattle($('quick-scenario').value);
-    $('quick-scenario').innerHTML = BATTLE_POOL.concat('finale').map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('');
+    $('btn-quick').onclick = () => App.quickBattle($('quick-scenario').value, {
+      stage: +$('quick-stage').value, size: +$('quick-size').value, type: $('quick-type').value || null, horse: $('quick-horse').checked });
+    // the small fields, then the big battles
+    $('quick-scenario').innerHTML = `<optgroup label="Skirmishes">${BATTLE_POOL.map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('')}</optgroup>`
+      + `<optgroup label="Battles">${SETPIECE_POOL.concat('finale').map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('')}</optgroup>`;
     $('btn-resume').onclick = () => UI.togglePause();
     $('btn-withdraw').onclick = () => { UI.togglePause(); Battle.withdraw(App.B); };
     $('btn-leavefield').onclick = () => UI.leaveField();
@@ -145,12 +148,32 @@ const UI = {
   },
 
   // ── battle HUD ──
+  // what the ground is doing for your men against the nearest enemy you can see. Cover only ever
+  // protects the man IN it: your shots out of it are not affected — but a wall or wood in front of
+  // THEM spoils your aim at them exactly the same way
+  coverLine(B, u) {
+    let E = null, bd = Infinity;
+    for (const e of B.units) {
+      if (e.team === u.team || !e.formed || e.routed || !B.seen[u.team].has(e.id)) continue;
+      const d = dist(u.cx, u.cy, e.cx, e.cy); if (d < bd) { bd = d; E = e; }
+    }
+    const sx = E ? E.cx : u.cx + Math.cos(u.form.facing) * 150, sy = E ? E.cy : u.cy + Math.sin(u.form.facing) * 150;
+    const men = u.men.filter(m => m.role === 'line' && m.state === 'formed');
+    if (!men.length) return '';
+    const cv = men.map(m => Field.coverFor(B.field, m.x, m.y, sx, sy));
+    const wall = cv.filter(c => c <= 0.4).length, wood = cv.filter(c => c > 0.4 && c <= 0.8).length;
+    const theirs = E ? E.men.filter(m => m.state === 'formed' && Field.coverFor(B.field, m.x, m.y, u.cx, u.cy) <= 0.8).length / Math.max(1, E.formed) : 0;
+    const mine = wall >= men.length * 0.4 ? `Behind a wall — they hit you a third as often`
+      : wood + wall >= men.length * 0.4 ? `In cover — they hit you about half as often` : 'In the open';
+    return `<div class="row wide"><span>${mine}${theirs > 0.4 ? ' · <b class="warn">they are in cover</b>' : ''}</span></div>`;
+  },
+
   hud(B) {
     const u = B.player, c = B.cmd;
     const loaded = u.men.filter(m => m.role === 'line' && m.state === 'formed' && m.m !== 'reloading').length;
     const pres = u.men.filter(m => m.m === 'present').length;
     const word = Unit.moraleWord(u);
-    const orderWord = { follow: 'In column, following you', hold: u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'square' ? 'In square' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', retire: 'Retiring to the road', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
+    const orderWord = { follow: 'In column, following you', hold: u.shelled && B.t - u.shelled < 4 ? (u.form.kind === 'square' ? 'In square — under the guns' : 'Under artillery fire') : u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'square' ? 'In square' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', retire: 'Retiring to the road', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
     const windWord = u.wind > 0.7 ? 'Fresh' : u.wind > 0.35 ? 'Puffing' : u.wind > 0.1 ? 'Winded' : 'Blown';
     const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will', byrank: 'Firing by rank' }[u.fire];
     const dist0 = Math.round(dist(c.x, c.y, u.cx, u.cy));
@@ -161,6 +184,7 @@ const UI = {
       <div class="row"><span>Men</span><b>${u.formed}<small> / ${u.startSize}</small></b><span>Loaded</span><b>${loaded}</b></div>
       <div class="row wide"><span>${orderWord}</span></div>
       <div class="row wide"><span>${fireWord}</span></div>
+      ${UI.coverLine(B, u)}
       <div class="row wide"><span>Breath</span><b class="${u.wind < 0.35 ? 'warn' : ''}">${windWord}</b>${u.saved ? `<span>Off the field</span><b>${u.saved}</b>` : ''}</div>
       <div class="kit">${Unit.hasRole(u, 'ensign') ? '⚑' : u.coloursLost ? '<s>⚑</s>' : '<s>⚑</s>'} ${Unit.hasRole(u, 'drummer') ? '◉' : '<s>◉</s>'} ${Unit.hasRole(u, 'fifer') ? '♪' : '<s>♪</s>'} <span class="${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'warn' : 'bad') : ''}">${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'by drum' : 'out of earshot') : 'in earshot'}</span></div>
       ${task}
@@ -217,7 +241,7 @@ const UI = {
       <h1>${{ won: 'Victory', lost: 'Defeat', fell: 'Struck down', nightfall: 'Nightfall', withdrew: 'Withdrawal' }[rep.how]}</h1>
       <table class="renown">${rep.lines.map(([w, n]) => `<tr><td>${esc(w)}</td><td>${n > 0 ? '+' : ''}${n || ''}</td></tr>`).join('')}
         <tr class="total"><td>Renown</td><td>${rep.renown >= 0 ? '+' : ''}${rep.renown}</td></tr></table>
-      <p>${rep.wounded ? `${rep.wounded} wounded will march again. ` : ''}${rep.recruits ? `A draft of ${rep.recruits} recruit${rep.recruits > 1 ? 's' : ''} came up from the depot. ` : ''}${rep.stragglers ? `${rep.stragglers} stragglers came back to the colours. ` : ''}</p>
+      <p>${rep.wounded ? `${rep.wounded} wounded will march again. ` : ''}${rep.horseLost ? 'Your horse was killed under you. ' : ''}${rep.recruits ? `A draft of ${rep.recruits} recruit${rep.recruits > 1 ? 's' : ''} came up from the depot. ` : ''}${rep.stragglers ? `${rep.stragglers} stragglers came back to the colours. ` : ''}</p>
       ${dead.length ? `<p class="dead"><b>Killed:</b> ${dead.map(d => esc(d.name)).join(', ')}</p>` : '<p>Nobody was killed.</p>'}
       ${des.length ? `<p class="dead"><b>Missing:</b> ${des.map(d => esc(d.name)).join(', ')}</p>` : ''}
       ${cap.length ? `<p class="dead"><b>Taken prisoner:</b> ${cap.map(d => esc(d.name)).join(', ')}</p>` : ''}

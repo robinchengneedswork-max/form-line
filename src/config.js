@@ -33,6 +33,14 @@ const CFG = {
   CMD_SPRINT: 4.6,         // you, running flat out — faster than a charge, for a little while
   CMD_WIND_DRAIN: 1 / 14,  // a full sprint lasts ~14 s
   CMD_WIND_REST: 1 / 30,
+  // your horse (bought from the quartermaster): you ride, you are seen
+  HORSE_WALK: 2.4,
+  HORSE_GALLOP: 7.0,
+  HORSE_WIND_DRAIN: 1 / 30, // a gallop lasts ~30 s
+  HORSE_VOICE: 20,         // a mounted officer is heard this much further off
+  HORSE_TARGETED: 2,       // …and every skirmisher picks him out (× the officer-targeting chance)
+  HORSE_TAKES_HIT: 0.6,    // a ball that finds you finds the horse instead this often (once)
+  HORSE_COST: 30,
   SLOPE_PENALTY: 0.06,     // speed lost per % of uphill grade
 
   // ── the musket ──
@@ -66,6 +74,10 @@ const CFG = {
   WIND_WALK: 1 / 90,
   POINT_BLANK: 30,         // a line still presented when a charge reaches this lets fly on its own
   CHARGE_TEST: 22,
+  NERVE_LOST: 22,          // a defender that loses the nerve test loses this…
+  NERVE_BREAK: 10,         // …and gives way at once if that leaves it below SHAKEN + this
+  VOLLEY_CHARGE: 20,       // charge within this many seconds of a volley…
+  VOLLEY_CHARGE_BONUS: 1.3, // …and it carries this much more (the British "volley and charge")
   STEADY_AFTER: 6,
   AI_CHARGE_BREATH: 0.6,
   CREST_STEP: 75,          // a holding company will step this far off its post to see over a crest
@@ -107,7 +119,36 @@ const CFG = {
   SQUARE_DEF: 8,           // a formed square's nerve against horse (a shaken one can still be broken)
   SQUARE_DRESS: 9,         // seconds to dress a square and close its corners (× 1.25 − drill)
   SQUARE_EXPOSED: 1.35,    // muskets (and guns) into a square: every ball finds somebody
-  SQUARE_FORMED: 0.7,      // share of men in their places before a square counts as formed
+  SQUARE_FORMED: 0.7,
+
+  // ── artillery ──
+  // A field gun fired two rounds a minute to a musket's one, and reached three times as far.
+  // Roundshot is what makes a square (or a column) a terrible place to stand; canister is what
+  // makes walking up to a battery a terrible idea. A crest between you and the guns is everything.
+  GUN_CREW: 5,
+  GUN_RELOAD: 26,          // seconds, full crew (fewer hands, slower)
+  GUN_RANGE: 650,
+  GUN_TRAVERSE: 0.25,      // radians per second to lay the piece across the battery's front (handspikes on the trail)
+  GUN_ARC: 0.4,            // …beyond this either side of the front the trail must be dragged round:
+  GUN_SWING: 0.04,         // radians per second — come at a battery from the flank
+  GUN_GAP: 16,             // metres between pieces in a battery
+  ROUND_SD: 0.006,         // left/right error, radians, for an average crew (laying for line was easy; range was the hard part)
+  ROUND_LONG_SD: 0.05,     // over/short error, × range
+  ROUND_SHORT: 25,         // first graze this far short of the fall of shot…
+  ROUND_SKIP: 140,         // …and it skips on this far beyond
+  ROUND_WIDTH: 0.55,       // a man this close to its path is hit
+  ROUND_KILLS: 6,
+  ROUND_P: 0.3,            // a man in its path is hit (the rest of the time it bounds over him, or he sees it coming)
+  ROUND_SCARE: 0.7,        // morale lost by a company a ball passes through or near, hit or miss
+  BALL_SPEED: 260,         // m/s, for the picture
+  CANISTER_RANGE: 140,     // about a musket's reach: skirmishers can duel the crews from just outside it
+  CANISTER_SPREAD: 0.13,   // radians either side
+  CANISTER_BALLS: 30,
+  CANISTER_FALLOFF: 110,
+  CANISTER_P: 0.4,         // most of a tin went high, low or into the ground
+  CANISTER_KILLS: 6,
+  GUN_CAPTURE: 8,          // no gunner of its own within 6 m and an enemy this close: the piece is taken
+  GUN_LOST: 15,      // share of men in their places before a square counts as formed
 
   // ── morale (0..100) ──
   MORALE_BASE: 58,

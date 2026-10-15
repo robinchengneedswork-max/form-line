@@ -33,7 +33,7 @@ const Combat = {
 
   // fire by rank: the front rank lets go, then the next, so part of the company is always loaded
   rankFire(B, u) {
-    if (u.fire !== 'byrank' || u.arm === 'cav' || B.t < (u.rankNext || 0)) return;
+    if (u.fire !== 'byrank' || u.arm !== 'foot' || B.t < (u.rankNext || 0)) return;
     const nr = Math.min(CFG.FIRING_RANKS, Unit.grid(u, Math.max(1, u.formed)).ranks);
     const r = (u.rankTurn || 0) % nr;
     let tot = 0;
@@ -48,7 +48,7 @@ const Combat = {
 
   muskets(B, dt) {
     for (const u of B.units) {
-      if (u.arm === 'cav') continue;   // (horsemen carry sabres and lances here, not carbines)
+      if (u.arm !== 'foot') continue;   // (horsemen carry sabres and lances here, not carbines; gunners serve the guns)
       Combat.rankFire(B, u);
       const relMul = u.morale >= CFG.SHAKEN ? 1 : 1.3;
       for (const m of u.men) {
@@ -122,7 +122,8 @@ const Combat = {
     const officer = tu.team === TEAM_PLAYER ? B.cmd : tu.leader;
     // officers draw fire — and riflemen go looking for them
     const rifle = m.weapon === 'rifle';
-    if (officer && officer.state === 'formed' && dist2(officer.x, officer.y, t.x, t.y) < (rifle ? 900 : 144) && B.rng() < (rifle ? 0.4 : CFG.OFFICER_TARGETED)) t = officer;
+    const mounted = officer && officer.horse && officer.isCommander;
+    if (officer && officer.state === 'formed' && dist2(officer.x, officer.y, t.x, t.y) < (rifle || mounted ? 900 : 144) && B.rng() < (rifle ? 0.4 : CFG.OFFICER_TARGETED) * (mounted ? CFG.HORSE_TARGETED : 1)) t = officer;
     tu.morale -= CFG.SUPPRESS;
     const d = dist(m.x, m.y, t.x, t.y);
     let p = CFG.HIT_P0 * Math.exp(-d / (rifle ? CFG.HIT_FALLOFF * 2 : CFG.HIT_FALLOFF));
@@ -145,6 +146,14 @@ const Combat = {
   // a man goes down. Morale, colours and leadership all follow from here.
   hit(B, t, by) {
     if (t === B.cmd) {
+      // the horse takes it: you go down with it, and get up again on foot
+      if (t.horse && B.rng() < CFG.HORSE_TAKES_HIT) {
+        t.horse = null; t.horseLost = true; t.wind = Math.min(t.wind, 0.5);
+        B.events.push({ type: 'cmdhit', x: t.x, y: t.y });
+        Battle.log(B, 'Your horse is shot from under you! You are on foot.', 'bad');
+        if (B.player) B.player.morale -= 3;
+        return;
+      }
       t.hp--;
       B.events.push({ type: 'cmdhit', x: t.x, y: t.y });
       Battle.log(B, t.hp > 0 ? 'You are hit — but still standing.' : 'You are struck down.');
@@ -297,7 +306,7 @@ const Combat = {
   },
 
   // the player is told what beat him, so the next charge can be better
-  whyFalter(c, d) {
+  whyFalter(c, d, B) {
     const n = c.lastNerve || {};
     if (n.imp < 0.5) return ' — no run at them, the men never got going';
     if (n.dh < -2) return ' — uphill, they had nothing left';
@@ -305,6 +314,7 @@ const Combat = {
     if (c.formed < d.formed * 0.7) return ' — too few against too many';
     if (n.loaded > 0.6) return ' — their muskets were levelled; catch them reloading';
     if (c.morale < CFG.STEADY) return ' — the men were already shaken';
+    if (!c.men.some(m => B.t - (m.firedAt || -99) < CFG.VOLLEY_CHARGE)) return ' — they stood; close to 40 m and give them a volley first';
     return ' — they stood';
   },
 
@@ -337,7 +347,9 @@ const Combat = {
     const loaded = line.filter(m => m.m === 'present' || m.m === 'presenting' || (!horse && B.t - (m.firedAt || -99) < CFG.STEADY_AFTER)).length / Math.max(1, line.length);
     // a wall or a wood stops a horse far better than it stops a man
     const cover = d.men.some(m => m.state === 'formed' && Field.coverFor(B.field, m.x, m.y, c.cx, c.cy) < 1) ? (horse ? 2 : 1.3) : 1;
-    const att = c.morale * push;
+    // volley and charge: a company that has just fired goes in through its own smoke while the enemy is still reeling
+    const volleyed = c.men.filter(m => m.role === 'line' && m.state === 'formed' && B.t - (m.firedAt || -99) < CFG.VOLLEY_CHARGE).length > c.formed * 0.4;
+    const att = c.morale * push * (volleyed ? CFG.VOLLEY_CHARGE_BONUS : 1);
     // horse against foot: a formed square is a hedge of bayonets no horse will ride onto;
     // a line or a column taken in the flank cannot even turn its muskets round
     let vsHorse = 1;
@@ -349,11 +361,13 @@ const Combat = {
       if (d.form.kind === 'skirmish') vsHorse *= 0.65;
     }
     // a company charging too meets you with its own momentum, not its muskets
-    const def = d.order === 'charge' ? d.morale * Combat.momentum(B, d, c) : d.morale * (0.75 + 0.6 * loaded) * cover * vsHorse * (d.form.kind === 'skirmish' ? 0.6 : 1);
+    const def = d.order === 'charge' ? d.morale * Combat.momentum(B, d, c) : d.morale * (0.65 + 0.7 * loaded) * cover * vsHorse * (d.form.kind === 'skirmish' ? 0.6 : 1);
     const p = att * att / (att * att + def * def);
     c.lastNerve = { p, imp: c.impetus || 0, loaded, dh: Field.heightAt(B.field, c.cx, c.cy) - Field.heightAt(B.field, d.cx, d.cy) };
     if (B.rng() < p) {
-      d.morale -= 18;
+      // most bayonet charges ended here, before steel crossed: a shaken company simply gives way
+      d.morale -= CFG.NERVE_LOST;
+      if (d.morale < CFG.SHAKEN + CFG.NERVE_BREAK && !(horse && d.form.kind === 'square')) { Morale.rout(B, d); return; }
       Battle.log(B, `${d.name} wavers before the bayonets!`, d.team === TEAM_PLAYER ? 'bad' : 'good');
       B.fx.push({ kind: 'say', x: d.cx, y: d.cy, text: d.team === TEAM_PLAYER ? 'They\u2019re wavering!' : 'Ils fl\u00e9chissent!', t: B.t, team: d.team, foreign: d.team !== TEAM_PLAYER });
     } else if (horse) {
@@ -365,7 +379,7 @@ const Combat = {
     } else {
       c.morale -= 10;
       Combat.endCharge(B, c);
-      Battle.log(B, `${c.name}: the charge falters in front of them${c.team === TEAM_PLAYER ? Combat.whyFalter(c, d) : ''}.`, c.team === TEAM_PLAYER ? 'bad' : 'good');
+      Battle.log(B, `${c.name}: the charge falters in front of them${c.team === TEAM_PLAYER ? Combat.whyFalter(c, d, B) : ''}.`, c.team === TEAM_PLAYER ? 'bad' : 'good');
       B.fx.push({ kind: 'say', x: c.cx, y: c.cy, text: c.team === TEAM_PLAYER ? 'The charge falters!' : 'Halte!', t: B.t, team: c.team, foreign: c.team !== TEAM_PLAYER });
     }
   },

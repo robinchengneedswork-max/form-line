@@ -147,8 +147,85 @@ const Paint = {
         const t = k / n;
         if (gaps.some(([gs, gt]) => gs === s && Math.abs(gt - t) * len < 5)) continue;
         const i = Field.idx(f, lerp(ax, bx, t), lerp(ay, by, t));
-        if (i >= 0) f.type[i] = type;
+        // a road through a wall is a gateway (the user found village roads walled shut)
+        if (i >= 0 && f.type[i] !== T.ROAD && f.type[i] !== T.BRIDGE) f.type[i] = type;
       }
     });
+  },
+};
+
+// ━━ PATH ━━ the way round: A* over the 4 m ground grid that avoids houses and open water (fords and bridges
+// are fine), then pulled tight so a column walks a few straight legs, not a staircase.
+const PATH_CELL = CFG.CELL;
+const Path = {
+  blockedAt(f, x, y) {
+    const t = Field.typeAt(f, x, y);
+    return t === T.BUILDING || t === T.WATER;
+  },
+  closed(f, cx, cy) { return Path.blockedAt(f, cx * PATH_CELL + PATH_CELL / 2, cy * PATH_CELL + PATH_CELL / 2); },
+  // a straight walk from a to b crosses nothing impassable
+  clear(f, ax, ay, bx, by) {
+    const d = dist(ax, ay, bx, by), n = Math.ceil(d / 2);
+    for (let k = 1; k < n; k++) if (Path.blockedAt(f, lerp(ax, bx, k / n), lerp(ay, by, k / n))) return false;
+    return true;
+  },
+  find(f, x0, y0, x1, y1) {
+    if (Path.clear(f, x0, y0, x1, y1)) return [{ x: x1, y: y1 }];
+    // captains ask the same question every second: remember the answer (to within 12 m)
+    const key = [x0, y0, x1, y1].map(v => Math.round(v / 12)).join(',');
+    f.pathCache = f.pathCache || new Map();
+    const hit = f.pathCache.get(key);
+    if (hit) return hit.map(p => ({ x: p.x, y: p.y }));
+    const out = Path.search(f, x0, y0, x1, y1);
+    if (f.pathCache.size > 400) f.pathCache.clear();
+    f.pathCache.set(key, out);
+    return out.map(p => ({ x: p.x, y: p.y }));
+  },
+  search(f, x0, y0, x1, y1) {
+    const W = Math.ceil(f.w / PATH_CELL), H = Math.ceil(f.h / PATH_CELL);
+    if (!f.pathClosed) {
+      f.pathClosed = new Uint8Array(W * H);
+      for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) f.pathClosed[cy * W + cx] = Path.closed(f, cx, cy) ? 1 : 0;
+    }
+    const C = f.pathClosed;
+    const cell = (x, y) => [clamp(Math.floor(x / PATH_CELL), 0, W - 1), clamp(Math.floor(y / PATH_CELL), 0, H - 1)];
+    const [sx, sy] = cell(x0, y0), [gx, gy] = cell(x1, y1);
+    const start = sy * W + sx, goal = gy * W + gx;
+    const g = new Float32Array(W * H).fill(Infinity), from = new Int32Array(W * H).fill(-1);
+    // a tiny binary heap of [f, node]
+    const heap = [];
+    const push = (pri, n) => { heap.push([pri, n]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+    const h = n => Math.hypot(n % W - gx, Math.floor(n / W) - gy);
+    g[start] = 0; push(h(start), start);
+    let found = false, steps = 0;
+    while (heap.length && steps++ < 150000) {
+      const [, n] = pop();
+      if (n === goal) { found = true; break; }
+      const nx = n % W, ny = Math.floor(n / W);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const mx = nx + dx, my = ny + dy;
+        if (mx < 0 || my < 0 || mx >= W || my >= H) continue;
+        const m = my * W + mx;
+        if (C[m] && m !== goal) continue;
+        if (dx && dy && (C[ny * W + mx] || C[my * W + nx])) continue;   // no cutting a corner of a house
+        const t = Field.typeAt(f, mx * PATH_CELL + PATH_CELL / 2, my * PATH_CELL + PATH_CELL / 2);
+        const cost = (dx && dy ? 1.414 : 1) * (t === T.WALL ? 2.5 : t === T.WOODS || t === T.MARSH ? 1.6 : 1);
+        if (g[n] + cost < g[m]) { g[m] = g[n] + cost; from[m] = n; push(g[m] + h(m), m); }
+      }
+    }
+    if (!found) return [{ x: x1, y: y1 }];
+    const pts = [];
+    for (let n = goal; n !== start && n >= 0; n = from[n]) pts.push({ x: (n % W) * PATH_CELL + PATH_CELL / 2, y: Math.floor(n / W) * PATH_CELL + PATH_CELL / 2 });
+    pts.reverse(); pts[pts.length - 1] = { x: x1, y: y1 };
+    // pull the string tight
+    const out = []; let ax = x0, ay = y0, i = 0;
+    while (i < pts.length) {
+      let j = pts.length - 1;
+      while (j > i && !Path.clear(f, ax, ay, pts[j].x, pts[j].y)) j--;
+      out.push(pts[j]); ax = pts[j].x; ay = pts[j].y; i = j + 1;
+    }
+    return out;
   },
 };

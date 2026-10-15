@@ -23,7 +23,7 @@ const Battle = {
       events: [], fx: [], pending: [], dropped: [], messages: [],
       seen: [new Set(), new Set()], visT: 0, endT: 0, checkT: 0,
       over: false, result: null, autoPlayer: !!opts.autoPlayer,
-      stats: { coloursTaken: 0, coloursLost: 0 },
+      stats: { coloursTaken: 0, coloursLost: 0, gunsTaken: 0 },
     };
     B.smokeGrid = new Float32Array(B.smokeCols * B.smokeRows);
 
@@ -32,7 +32,8 @@ const Battle = {
     const cm = opts.commander || { name: 'You', hp: 3, maxHp: 3 };
     const p = dep.player;
     B.cmd = { id: NEXT_ID++, team: TEAM_PLAYER, isCommander: true, x: p.x, y: p.y + 7, facing: p.facing, aim: p.facing,
-      hp: cm.hp, maxHp: cm.maxHp, state: 'formed', dest: null, mvx: 0, mvy: 0, run: false, sprint: false, wind: 1, moving: 0, rallyCd: 0 };
+      hp: cm.hp, maxHp: cm.maxHp, state: 'formed', dest: null, mvx: 0, mvy: 0, run: false, sprint: false, wind: 1, moving: 0, rallyCd: 0,
+      horse: cm.horse ? '#6b4a2c' : null, horseLost: false };
     // the line of retreat: where your men may leave the field (scenario's own, else the road behind you)
     const rt = sc.retreat || {};
     B.retreat = { x: rt.x != null ? rt.x : p.x, y: rt.y != null ? rt.y : FH - 14, r: rt.r || 34, label: rt.label || 'The road to the rear' };
@@ -72,6 +73,7 @@ const Battle = {
     }
     Move.men(B, dt);
     Combat.muskets(B, dt);
+    Artillery.step(B, dt);
     Combat.melee(B, dt);
     Combat.shock(B, dt);
     Morale.step(B, dt);
@@ -174,8 +176,8 @@ const Battle = {
       how, won: how === 'won', time: B.t,
       enemyDown: et.down, enemyFled: et.fled,
       enemyRouted: enemies.filter(u => u.everRouted).length, enemyUnits: enemies.length,
-      coloursTaken: B.stats.coloursTaken, coloursLost: B.player.coloursLost,
-      commanderHp: Math.max(0, B.cmd.hp), commanderKills: B.cmd.kills || 0,
+      coloursTaken: B.stats.coloursTaken, coloursLost: B.player.coloursLost, gunsTaken: B.stats.gunsTaken || 0,
+      commanderHp: Math.max(0, B.cmd.hp), commanderKills: B.cmd.kills || 0, horseLost: B.cmd.horseLost,
       orders: B.hq ? Command.obeyed(B) : null,
       saved: B.player.men.filter(m => m.saved && m.role !== 'drummer' && m.role !== 'fifer').length, captured,
       player: B.player,

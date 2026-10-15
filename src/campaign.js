@@ -34,6 +34,25 @@ const Campaign = {
       recruiters: 0 };  // a recruiting party, 0..3: raw men come up after every battle
   },
 
+  // a company for a quick battle: as big and as seasoned as the chosen point in a campaign would make it
+  quickCompany(seed, q = {}) {
+    const rng = makeRng(seed ^ 0x51ed), stage = q.stage != null ? q.stage : 0.3, size = q.size || 24;
+    const co = Campaign.defaultCompany(rng);
+    co.soldiers = [];
+    for (let i = 0; i < size; i++) co.soldiers.push(Campaign.newSoldier(rng, rng() < 0.15 + stage * 0.5 ? 2 : rng() < 0.4 ? 1 : 0));
+    // NCOs: a sergeant per twelve men, a corporal per eight, from the most experienced
+    const best = co.soldiers.slice().sort((a, b) => b.xp - a.xp);
+    best.slice(0, Math.floor(size / 12)).forEach(s => { s.rank = 'sgt'; });
+    best.slice(Math.floor(size / 12), Math.floor(size / 12) + Math.floor(size / 8)).forEach(s => { s.rank = 'cpl'; });
+    co.drill = clamp(0.3 + stage * 0.35, 0, 0.9);
+    co.drills = Object.keys(LEARNED_DRILLS);
+    co.type = q.type || null;
+    if (co.type === 'line') co.drill = clamp(co.drill + 0.05, 0, 0.95);
+    co.rifles = co.type === 'light' ? 4 : stage >= 0.45 ? 2 : 0;
+    Campaign.armRifles(co);
+    return co;
+  },
+
   newRun(seed) {
     const rng = makeRng(seed);
     const run = {
@@ -131,6 +150,7 @@ const Campaign = {
     add(Math.round(R.enemyFled * 0.4), `${R.enemyFled} of the enemy scattered`);
     add(R.enemyRouted * 6, `${R.enemyRouted} enemy compan${R.enemyRouted === 1 ? 'y' : 'ies'} broken`);
     add(R.coloursTaken * 25, `${R.coloursTaken} enemy colour${R.coloursTaken === 1 ? '' : 's'} taken`);
+    add((R.gunsTaken || 0) * 20, `${R.gunsTaken} gun${R.gunsTaken === 1 ? '' : 's'} taken`);
     add(R.commanderKills * 2, 'Your own sword');
     if (R.coloursLost) add(-20, 'Your colours lost');
     if (R.how === 'withdrew') {
@@ -176,6 +196,7 @@ const Campaign = {
     if (best && best.kills >= 2) rep.promoted = { name: best.src.name, kills: best.kills };
 
     run.commander.hp = R.commanderHp;
+    if (R.horseLost) { run.commander.horse = false; rep.horseLost = true; }
     run.renown = Math.max(0, run.renown + rep.renown);
     run.total += Math.max(0, rep.renown);
     run.battles++;
@@ -285,6 +306,7 @@ const Campaign = {
         return { key: k, name: `${E.name} ${['I', 'II', 'III'][Math.min(l, 2)]}`, desc: l >= 3 ? 'At full establishment.' : E.desc(l), cost: E.costs[Math.min(l, 2)], ok: l < 3 };
       }),
       { key: 'surgeon', name: 'Surgeon', desc: 'Patch up your own wounds (+1).', cost: 9, ok: run.commander.hp < run.commander.maxHp },
+      { key: 'horse', name: 'A horse', desc: 'You ride: faster about the field, a gallop that lasts, and your voice carries further. The first ball that finds you may find the horse instead — but every skirmisher on the field picks out a mounted officer.', cost: CFG.HORSE_COST, ok: !run.commander.horse },
     ];
   },
   buy(run, key) {
@@ -301,6 +323,7 @@ const Campaign = {
     if (key === 'colours') co.colours = true;
     if (Campaign.ESTAB[key]) co[key] = (co[key] || 0) + 1;
     if (key === 'surgeon') run.commander.hp = Math.min(run.commander.maxHp, run.commander.hp + 1);
+    if (key === 'horse') run.commander.horse = true;
     return true;
   },
 

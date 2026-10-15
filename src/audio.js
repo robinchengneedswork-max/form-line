@@ -120,6 +120,17 @@ const Sound = {
     }
   },
 
+  // a field gun: a deep thump and a long rolling boom
+  cannon(x, y) {
+    const ac = Sound.ctx(); if (!ac) return;
+    const [gain, pan] = Sound.place(x, y, 160), out = Sound.chain(Math.min(1, gain * 1.4), pan), t = ac.currentTime + Math.random() * 0.03;
+    const o = ac.createOscillator(), env = ac.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(32, t + 0.5);
+    env.gain.setValueAtTime(0.9, t); env.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+    o.connect(env); env.connect(out); o.start(t); o.stop(t + 0.75);
+    Sound.noise(t, 1.8, 'lowpass', 260, 0.7, 0.9, out, 0.004);
+  },
+
   // the ground shaking: a low drumming that swells as the squadron opens into the gallop
   hooves(x, y) {
     const ac = Sound.ctx(); if (!ac) return;
@@ -148,6 +159,8 @@ const Sound = {
         const u = B.units.find(v => v.id === e.unit);
         if (u && u.arm === 'cav') { Sound.trumpet(u.cx, u.cy, true); Sound.hooves(u.cx, u.cy); }
         else if (u) Sound.roar(u.cx, u.cy);
+      } else if (e.type === 'cannon') {
+        Sound.cannon(e.x, e.y);
       } else if (e.type === 'trumpet') {
         Sound.trumpet(e.x, e.y, false);
       } else if (e.type === 'dispatch') {
