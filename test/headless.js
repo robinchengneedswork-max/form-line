@@ -8,7 +8,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const { load, SIM_FILES } = require('./load');
 const { X } = load();
-const { AI, TEAM_PLAYER, TEAM_ENEMY, angDiff, knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
+const { CAV_TYPES, makeUnit, AI, TEAM_PLAYER, TEAM_ENEMY, angDiff, knowsDrill, SETPIECE_POOL, Command, dist, Battle, CFG, Campaign, makeRng, Field, Orders, Combat, Morale, Unit, SCENARIOS, BATTLE_POOL, T, MAP_ROWS, EVENTS, TUNES, CADENCES, DRUM_CALLS, noteFreq } = X;
 
 let pass = 0, fail = 0;
 const chk = (name, cond, extra) => {
@@ -231,8 +231,8 @@ console.log('§10 set pieces');
   const B = fresh('sp_ridge', 51, { autoPlayer: true });
   chk('a set piece is a bigger field', B.field.w > 900);
   chk('…with a headquarters and a dispatch for you', !!B.hq && B.dispatch && /ridge/i.test(B.dispatch.text));
-  chk('…and every company has a task', B.units.every(u => u.task));
-  const waves = B.units.filter(u => u.team === 1 && u.task.kind === 'reserve' && u.task.wave);
+  chk('…and every company of foot has a task (horse finds its own)', B.units.every(u => u.task || u.arm === 'cav'));
+  const waves = B.units.filter(u => u.team === 1 && u.task && u.task.kind === 'reserve' && u.task.wave);
   run(B, Math.max(...waves.map(w => w.task.wave)) + 4);
   chk('enemy waves go in when their hour comes', waves.every(w => w.routed || w.task.kind === 'attack'));
   chk('the colonel tracks whether you obeyed', B.orders.total > 20 && B.orders.good / B.orders.total > 0.5, B.orders.good + '/' + B.orders.total);
@@ -329,6 +329,55 @@ console.log('§11 the charge, wind & the road');
     const toE3 = Math.atan2(E3.cy - u2.form.y, E3.cx - u2.form.x);
     chk('Re-form calls off a charge and closes them up in line, facing the enemy', u2.order === 'hold' && u2.form.kind === 'line' && u2.men.every(m => !m.foe) && Math.abs(angDiff(u2.form.facing, toE3)) < 0.01);
   }
+  // a charge ordered from close in still gets its run-up before the nerve test (it used to falter at once)
+  {
+    let early = 0;
+    for (let k = 0; k < 12; k++) {
+      const b = fresh('plain', 800 + k), c = b.player; facing(b, 15);
+      Orders.apply(b, c, 'charge', {});
+      let tested = null;
+      for (let i = 0; i < 30 * 6 && !tested; i++) { Battle.step(b, CFG.STEP); if (c.lastNerve) tested = { t: c.chargeT, imp: c.lastNerve.imp }; }
+      if (!tested || tested.t < CFG.CHARGE_TEST_AFTER - 0.05 || tested.imp < 0.5) early++;
+    }
+    chk('a charge from 15 m is tested only once the men are running at them', early === 0, early + '/12 early');
+  }
+  // rally: a broken company stays on the field to be rallied, and you among them bring it back
+  {
+    const b = fresh('plain', 72), u2 = b.player, c = b.cmd;
+    for (const e of b.units) if (e.team === TEAM_ENEMY) { e.delay = 1e9; e.ai.next = 1e9; }
+    run(b, 2);
+    u2.morale = 5; u2.lastHit = b.t; run(b, 0.2);
+    const broke = u2.routed;
+    let back = false;
+    for (let i = 0; i < 30 * 30 && !b.over && !back; i++) {
+      const fl = u2.men.filter(m => m.state === 'fleeing');
+      if (fl.length) { c.x = fl.reduce((a, m) => a + m.x, 0) / fl.length; c.y = fl.reduce((a, m) => a + m.y, 0) / fl.length; }
+      if (i % 90 === 0) Morale.rally(b);
+      Battle.step(b, CFG.STEP);
+      back = !u2.routed;
+    }
+    chk('a broken company can be rallied in person, and the battle waits for you to try', broke && back && !b.over && u2.formed > u2.startSize * 0.5, 'formed ' + u2.formed);
+    const b2 = fresh('plain', 73), u3 = b2.player;
+    for (const e of b2.units) if (e.team === TEAM_ENEMY) { e.delay = 1e9; e.ai.next = 1e9; }
+    b2.cmd.x = 50; b2.cmd.y = 50;
+    u3.morale = 5; u3.lastHit = b2.t;
+    run(b2, CFG.RALLY_WINDOW + 10);
+    chk('…but left alone it does not wait forever', b2.over && b2.result.how === 'lost', b2.over && b2.result.how);
+  }
+  // an officer alone among the enemy is everybody's target (the captain-slap exploit)
+  {
+    let died = 0;
+    for (let k = 0; k < 16; k++) {
+      const b = fresh('plain', 900 + k), E4 = facing(b, 120), L = E4.leader, c = b.cmd;
+      for (let i = 0; i < 30 * 30; i++) {
+        if (L.state === 'formed') { const d = Math.hypot(L.x - c.x, L.y - c.y); if (d > 0.9) { c.x += (L.x - c.x) / d * 1.5; c.y += (L.y - c.y) / d * 1.5; } }
+        Battle.step(b, CFG.STEP);
+        if (L.state !== 'formed' || c.state !== 'formed') break;
+      }
+      if (c.state !== 'formed') died++;
+    }
+    chk('running alone at the enemy captain usually gets you killed', died >= 6, died + '/16');
+  }
 
   // the establishment: surgeon's mates and a recruiting party
   {
@@ -398,6 +447,133 @@ console.log('§11 the charge, wind & the road');
   const r2 = Campaign.newRun(92), n0 = r2.company.soldiers.length;
   const rep2 = Campaign.afterBattle(r2, r2.map[0][0], Object.assign(B.result, {}));
   chk('…and they are gone from the company', rep2.captured === u.men.filter(m => m.captured && m.src).length && !u.men.some(m => m.captured && r2.company.soldiers.includes(m.src)), rep2.captured);
+}
+
+console.log('§12 cavalry & the square');
+{
+  // a squadron of horse 'at' a place, frozen until we let it go
+  const squadron = (B, x, y, facing, type = 'chasseurs', size = 24) => {
+    const C = makeUnit({ team: TEAM_ENEMY, faction: 'french', arm: 'cav', cavType: type, x, y, facing, size, drill: 0.5, doctrine: 'cavalry', drummer: true }, B.rng);
+    B.units.push(C); Unit.survey(C); return C;
+  };
+  const still = B => { for (const e of B.units) if (e.team === TEAM_ENEMY) e.delay = 1e9; };
+
+  // the square: four faces, two ranks, every man facing out, the colours in the middle
+  {
+    const B = fresh('plain', 1201), u = B.player;
+    Orders.apply(B, u, 'square', {});
+    Unit.layout(u);
+    const faces = new Set(), out = u.men.filter(m => m.role === 'line').every(m => {
+      faces.add(Math.round(angDiff(u.form.facing, m.slotFacing) / (Math.PI / 2)));
+      return Math.cos(m.slotFacing) * (m.sx - u.form.x) + Math.sin(m.slotFacing) * (m.sy - u.form.y) > 1;
+    });
+    const ens = u.men.find(m => m.role === 'ensign');
+    chk('a square has four faces and every man faces out', faces.size === 4 && out);
+    chk('…with the colours in the hollow middle', dist(ens.sx, ens.sy, u.form.x, u.form.y) < 2);
+    run(B, 1.5);
+    const early = Combat.squareReady(u, B);
+    run(B, 12);
+    chk('…it takes some seconds to dress, then it is formed', early < 0.5 && Combat.squareFormed(u, B), early.toFixed(2));
+    chk('a square cannot march: Advance opens it into line', (Orders.apply(B, u, 'advance', {}), u.form.kind === 'line'));
+  }
+  // horse against foot: square, line from the flank, ready line from the front
+  const clash = (seed, setup, type) => {
+    const B = fresh('plain', seed), P = B.player; still(B);
+    const front = setup === 'front';
+    const C = squadron(B, P.cx + (front ? 0 : 160), P.cy - (front ? 160 : 0), front ? Math.PI / 2 : Math.PI, type);
+    if (setup === 'square') { Orders.apply(B, P, 'square', {}); run(B, 12); }
+    if (front) { Orders.apply(B, P, 'ready', {}); run(B, 4); }
+    Orders.apply(B, C, 'charge', {});
+    for (let i = 0; i < 30 * 40; i++) { Battle.step(B, CFG.STEP); B.events.length = 0; if (P.routed) return 'broke'; if (C.order !== 'charge') return 'off'; }
+    return 'none';
+  };
+  let sq = 0, fl = 0, fr = 0;
+  for (let k = 0; k < 10; k++) {
+    if (clash(1300 + k, 'square', 'cuirassiers') === 'broke') sq++;
+    if (clash(1400 + k, 'flank', 'chasseurs') === 'broke') fl++;
+    if (clash(1500 + k, 'front', 'chasseurs') === 'broke') fr++;
+  }
+  chk('no horse breaks a formed square (not even cuirassiers)', sq <= 1, sq + '/10');
+  chk('…but a line taken in the flank is ridden over', fl >= 7, fl + '/10');
+  chk('…and a ready line facing them is a coin toss for light horse', fr >= 2 && fr <= 8, fr + '/10');
+
+  // a square still forming when they arrive is worse than none
+  {
+    let broke = 0;
+    for (let k = 0; k < 10; k++) {
+      const B = fresh('plain', 1600 + k), P = B.player; still(B);
+      const C = squadron(B, P.cx + 160, P.cy, Math.PI);
+      Orders.apply(B, C, 'charge', {});
+      for (let i = 0; i < 30 * 40 && !P.routed && C.order === 'charge'; i++) {
+        Battle.step(B, CFG.STEP); B.events.length = 0;
+        if (P.form.kind !== 'square' && dist(C.cx, C.cy, P.cx, P.cy) < 55) Orders.apply(B, P, 'square', {});
+      }
+      if (P.routed) broke++;
+    }
+    chk('a square ordered with the horse already on you is often caught', broke >= 2, broke + '/10');
+  }
+  // horsemen ride down men who are running
+  {
+    const B = fresh('plain', 1700), P = B.player; still(B);
+    const C = squadron(B, P.cx + 60, P.cy + 30, Math.PI);
+    Morale.rout(B, P);
+    Orders.apply(B, C, 'charge', {});
+    const down0 = P.stats.down;
+    run(B, 12);
+    chk('horse cuts down fugitives', P.stats.down - down0 >= 3, P.stats.down - down0);
+  }
+  // blown horses draw off to get their wind
+  {
+    const B = fresh('plain', 1701), P = B.player; still(B);
+    const C = squadron(B, P.cx, P.cy - 250, Math.PI / 2); C.delay = 0; C.wind = 0.3;
+    C.ai.home = { x: P.cx, y: 40, facing: Math.PI / 2 };
+    run(B, 6);
+    chk('blown horses draw off toward home rather than charge', C.order !== 'charge' && C.cy < P.cy - 250, C.order + ' ' + C.cy.toFixed(0));
+  }
+  // the AI: horse hangs about a square, goes for skirmishers; foot form square when horse comes on
+  {
+    const B = fresh('plain', 1702, { autoPlayer: true }), P = B.player;
+    for (const e of B.units) if (e.team === TEAM_ENEMY) e.delay = 1e9;
+    const C = squadron(B, P.cx + 150, P.cy - 60, Math.PI); C.delay = 0;
+    Orders.apply(B, P, 'skirmish', {});
+    let charged = false, squared = false;
+    for (let i = 0; i < 30 * 60 && !charged; i++) { Battle.step(B, CFG.STEP); B.events.length = 0; charged = C.order === 'charge' || !!C.ai.target; squared = squared || P.form.kind === 'square'; }
+    chk('horse goes for skirmishers in the open', charged);
+    for (let i = 0; i < 30 * 20 && !squared; i++) { Battle.step(B, CFG.STEP); B.events.length = 0; squared = P.form.kind === 'square'; }
+    chk('…and AI foot form square when it comes on', squared);
+  }
+  {
+    const B = fresh('woods', 1703, { autoPlayer: true }), P = B.player; still(B);
+    // stand them in the wood
+    let wx = null, wy = null;
+    for (let y = 40; y < B.field.h - 40 && wx == null; y += 8) for (let x = 60; x < 660; x += 8) if (Field.typeAt(B.field, x, y) === T.WOODS && Field.typeAt(B.field, x + 12, y) === T.WOODS && Field.typeAt(B.field, x - 12, y) === T.WOODS) { wx = x; wy = y; break; }
+    if (wx != null) {
+      for (const m of P.men) { m.x = wx + (m.x - P.cx) * 0.3; m.y = wy + (m.y - P.cy) * 0.3; }
+      Unit.setForm(P, 'line', wx, wy, -Math.PI / 2); Unit.survey(P);
+      const C = squadron(B, wx + 120, wy, Math.PI);
+      chk('foot in a wood are no mark for horse', AI.cavMark(B, C, P) < CFG.CAV_MARK && !AI.cavThreat(B, P), AI.cavMark(B, C, P).toFixed(2));
+    } else chk('foot in a wood are no mark for horse (no wood found)', false);
+  }
+  // the campaign: horse comes in, and gets heavier
+  {
+    let early = 0, late = 0, heavy = 0;
+    for (let s = 0; s < 40; s++) {
+      const d0 = SCENARIOS.plain.deploy(makeRng(s + 1), 0.1), d1 = SCENARIOS.plain.deploy(makeRng(s + 1), 0.9);
+      early += d0.enemies.some(e => e.arm === 'cav'); late += d1.enemies.some(e => e.arm === 'cav');
+      heavy += d1.enemies.some(e => e.cavType === 'cuirassiers' || e.cavType === 'lancers');
+    }
+    const h = SCENARIOS.heath.deploy(makeRng(3), 0.1);
+    chk('no horse on open ground early in a campaign, often later — and lancers/cuirassiers by the end', early === 0 && late > 10 && heavy === late, early + ' / ' + late + ' / ' + heavy);
+    chk('The Heath always has horse, and is in the battle pool', h.enemies.some(e => e.arm === 'cav') && BATTLE_POOL.includes('heath'));
+    const R = fresh('sp_ridge', 1704);
+    chk('the Long Ridge has cuirassiers coming in the afternoon', R.units.filter(u => u.cav && u.cav === CAV_TYPES.cuirassiers && u.delay > 300).length === 2);
+  }
+  // a battle with horse in it still ends
+  {
+    const B = fresh('heath', 1705, { autoPlayer: true });
+    run(B, CFG.NIGHTFALL);
+    chk('a battle with horse in it ends (not at nightfall)', B.over && B.result.how !== 'nightfall', B.result && B.result.how);
+  }
 }
 
 console.log('§8 music & the page');

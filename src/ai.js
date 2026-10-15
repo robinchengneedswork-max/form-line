@@ -9,6 +9,10 @@
 //               that is wavering, or break a long deadlock with the bayonet.
 //    hold     — stand, face the threat, hold fire until it is close.
 //    skirmish — loose order, fire at will, give ground if rushed.
+//    cavalry  — (horse only) hang about out of musket range, wait for a mark
+//               — skirmishers, a line reloading or taken in flank, a square
+//               still forming, anyone running — and go in; then ride back
+//               and get the horses' wind. Foot form square when they come on.
 //
 //  Several ideas are borrowed from DoDoCat's "Day of Slaughter" NW AI mod
 //  (TaleWorlds forum, 2026-07): spread targets by centroid, march on until
@@ -33,6 +37,7 @@ const AI = {
     for (const e of B.units) {
       if (e.team === u.team || e.routed || !e.formed || !B.seen[u.team].has(e.id)) continue;
       let s = dist(u.cx, u.cy, e.cx, e.cy);
+      if (e.arm === 'cav' && u.arm !== 'cav') s += 250;
       for (const f of B.units) if (f !== u && f.team === u.team && !f.routed && f.ai.target === e.id) s += 90;
       if (u.ai.target === e.id) s -= 30;
       if (s < bs) { bs = s; best = e; }
@@ -61,12 +66,26 @@ const AI = {
 
   think(B, u) {
     if (u.routed) {
-      if (u.morale >= CFG.RALLY_AT && !u.isPlayer && u.leader && u.leader.state === 'formed') Morale.unrout(B, u);
+      if (u.morale >= CFG.RALLY_AT + CFG.RALLY_BOOST && !u.isPlayer && u.leader && u.leader.state === 'formed') Morale.unrout(B, u);
       return;
     }
     if (!u.formed || B.t < u.delay || u.order === 'charge') return;
     if (!u.leader && !u.isPlayer) AI.promote(B, u);
+    if (u.arm === 'cav') return AI.cavalry(B, u);
     Command.apply(u);
+
+    // horse coming on and no wall or wood to stand in: form square, and stay in it while they are about
+    const H = AI.cavThreat(B, u);
+    if (H) {
+      if (u.form.kind !== 'square' || u.order !== 'hold') { Orders.give(B, u, 'square', { facing: Math.atan2(H.cy - u.cy, H.cx - u.cx) }); return; }
+      if (u.fire === 'hold' || u.fire === 'ready') Orders.give(B, u, 'atwill');
+      return;
+    }
+    if (u.form.kind === 'square') {
+      if (B.t - (u.ai.cavSeen || 0) < 8) return;
+      Orders.give(B, u, 'line', { x: u.cx, y: u.cy, facing: u.ai.lastSeen ? Math.atan2(u.ai.lastSeen.y - u.cy, u.ai.lastSeen.x - u.cx) : u.form.facing });
+      return;
+    }
 
     const E = AI.nearestEnemy(B, u);
     // a company with a post to hold goes there first, unless the enemy is already on it
@@ -181,6 +200,110 @@ const AI = {
       else if (d > 190) Orders.give(B, u, 'advance');
       else if (u.order !== 'hold') Orders.give(B, u, 'halt');
       else if (u.fire !== 'atwill') Orders.give(B, u, 'atwill');
+    }
+  },
+
+  // seen horse close enough to come on: the nearest squadron within CAV_WARN that is not beaten or blown
+  cavThreat(B, u) {
+    if (u.arm === 'cav' || u.order === 'retire') return null;
+    // a company in a wood, a village or behind a wall is safe from horse where it stands
+    if (AI.inCover(B, u) || Field.typeAt(B.field, u.cx, u.cy) === T.WOODS) return null;
+    let best = null, bd = CFG.CAV_WARN;
+    for (const e of B.units) {
+      if (e.team === u.team || e.arm !== 'cav' || e.routed || e.formed < 3 || !B.seen[u.team].has(e.id)) continue;
+      const d = dist(u.cx, u.cy, e.cx, e.cy);
+      // a squadron hanging about out there is a worry, not a threat; one coming on, or close, is
+      const coming = e.order === 'charge' || (e.order === 'ride' && e.ride && dist(e.ride.x, e.ride.y, u.cx, u.cy) < 130);
+      if (d < bd && (coming || d < 120)) { bd = d; best = e; }
+    }
+    if (best) u.ai.cavSeen = B.t;
+    return best;
+  },
+
+  // how inviting a mark this company is for horse: ~0 for a formed square, >1 for men running
+  cavMark(B, u, e) {
+    if (e.arm === 'cav') return 0;
+    if (e.routed) return 1.4;
+    if (AI.inCover(B, e) || Field.typeAt(B.field, e.cx, e.cy) === T.WOODS || Field.typeAt(B.field, e.cx, e.cy) === T.ORCHARD) return 0.1;
+    let s;
+    if (e.form.kind === 'square') s = Combat.squareFormed(e, B) ? (e.morale < CFG.SHAKEN ? 0.75 : 0.05) : 1.2;
+    else s = e.form.kind === 'skirmish' ? 1.15 : e.form.kind === 'column' ? 1.05 : e.form.kind === 'attack' ? 0.65 : 0.55;
+    if (e.form.kind !== 'square') {
+      // taken in the flank or the rear
+      if (Math.abs(angDiff(e.form.facing, Math.atan2(u.cy - e.cy, u.cx - e.cx))) > Math.PI / 3) s += 0.45;
+      // caught with their muskets empty
+      const line = e.men.filter(m => m.role === 'line' && m.state === 'formed');
+      const ready = line.filter(m => m.m === 'loaded' || m.m === 'present' || m.m === 'presenting').length / Math.max(1, line.length);
+      s += ready < 0.35 ? 0.35 : ready > 0.75 ? -0.15 : 0;
+    }
+    s += e.morale < CFG.SHAKEN ? 0.4 : e.morale < CFG.STEADY ? 0.15 : 0;
+    return s * (u.morale < CFG.STEADY ? 0.7 : 1);
+  },
+
+  // a squadron trots (or walks) somewhere as a block
+  ride(B, u, x, y, pace, facing) {
+    if (u.order === 'ride' && u.ride && dist2(u.ride.x, u.ride.y, x, y) < 400) return;
+    if (u.order === 'hold' && dist2(u.form.x, u.form.y, x, y) < 100) return;
+    Orders.apply(B, u, 'ride', { x, y, pace, facing });
+  },
+
+  cavalry(B, u) {
+    const a = u.ai, edge = u.team === TEAM_ENEMY ? 4 : B.field.h - 4;
+    if (!a.home) a.home = { x: u.form.x, y: u.form.y, facing: u.form.facing };
+    // their own foot are beaten (or they are): the squadron covers the retreat and leaves the field
+    const friends = B.units.some(o => o !== u && o.team === u.team && o.arm !== 'cav' && !Battle.out(o));
+    if (!friends || u.morale < CFG.SHAKEN - 5) {
+      AI.ride(B, u, u.cx, edge, CFG.CAV_TROT);
+      if (Math.abs(u.cy - edge) < 25) for (const m of u.men) if (m.state === 'formed') { m.state = 'gone'; m.saved = true; }
+      return;
+    }
+    // blown, or just back from a charge: draw off toward home a little way and get their wind
+    if (u.wind < 0.55 || B.t < (a.restUntil || 0)) {
+      if (!a.restAt) {
+        const d = dist(u.cx, u.cy, a.home.x, a.home.y) || 1, k = Math.min(160, d) / d;
+        a.restAt = { x: u.cx + (a.home.x - u.cx) * k, y: u.cy + (a.home.y - u.cy) * k };
+      }
+      if (dist(u.cx, u.cy, a.restAt.x, a.restAt.y) > 20) AI.ride(B, u, a.restAt.x, a.restAt.y, CFG.CAV_TROT * 0.7, a.home.facing);
+      return;
+    }
+    a.restAt = null;
+    // the best mark in sight
+    let best = null, bs = 0, near = null, nd = Infinity;
+    for (const e of B.units) {
+      if (e.team === u.team || !B.seen[u.team].has(e.id) || e.arm === 'cav' || (!e.formed && !e.routed)) continue;
+      const d = dist(u.cx, u.cy, e.cx, e.cy);
+      if (!e.routed && d < nd) { nd = d; near = e; }
+      if (d > CFG.CAV_SCOUT) continue;
+      const s = AI.cavMark(B, u, e) * (1.15 - 0.4 * d / CFG.CAV_SCOUT);
+      if (s > bs) { bs = s; best = e; }
+    }
+    if (best && bs > CFG.CAV_MARK) {
+      const d = dist(u.cx, u.cy, best.cx, best.cy);
+      if (a.target !== best.id) { a.target = best.id; AI.warn(B, u, best); }
+      if (d > 120) AI.ride(B, u, best.cx + (u.cx - best.cx) / d * 90, best.cy + (u.cy - best.cy) / d * 90, CFG.CAV_TROT);
+      else Orders.give(B, u, 'charge');
+      return;
+    }
+    a.target = null;
+    // nothing worth the risk: hang about where they can see us, so they have to stand in square
+    if (near) {
+      const d = nd, hx = near.cx + (u.cx - near.cx) / d * CFG.CAV_HOVER, hy = near.cy + (u.cy - near.cy) / d * CFG.CAV_HOVER;
+      if (dist(u.cx, u.cy, hx, hy) > 30) AI.ride(B, u, hx, hy, d > CFG.CAV_HOVER + 120 ? CFG.CAV_TROT : CFG.CAV_WALK, Math.atan2(near.cy - hy, near.cx - hx));
+      return;
+    }
+    // nobody in sight: walk forward to look for them
+    AI.ride(B, u, lerp(u.cx, B.field.w / 2, 0.3), u.team === TEAM_ENEMY ? Math.min(B.field.h * 0.55, u.cy + 80) : Math.max(B.field.h * 0.45, u.cy - 80), CFG.CAV_WALK);
+  },
+
+  // the trumpet, and a shout down the line — so the player has a few seconds to form square
+  warn(B, u, target) {
+    B.events.push({ type: 'trumpet', x: u.cx, y: u.cy, unit: u.id });
+    if (target.team === TEAM_PLAYER && B.seen[TEAM_PLAYER].has(u.id) && B.t > (B.cavWarnT || -99)) {
+      B.cavWarnT = B.t + 15;
+      const side = Math.abs(angDiff(-Math.PI / 2, Math.atan2(u.cy - target.cy, u.cx - target.cx)));
+      const where = side < 0.6 ? 'to the front' : side > 2.5 ? 'in the rear' : u.cx < target.cx ? 'on the left' : 'on the right';
+      Battle.log(B, target.isPlayer ? `Cavalry! ${u.cav.short} ${where} — form square (E)!` : `Cavalry ${where} of ${target.name}!`, 'bad');
+      B.fx.push({ kind: 'say', x: target.cx, y: target.cy, text: 'Cavalry!', t: B.t, team: target.team, big: true });
     }
   },
 

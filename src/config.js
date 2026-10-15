@@ -71,12 +71,43 @@ const CFG = {
   CREST_STEP: 75,          // a holding company will step this far off its post to see over a crest
   CREST_STEP_RANGE: 200,   // …once the enemy is this close
   CHARGE_BLOWN: 0.2,       // below this breath, with nobody in contact, a charge (or a pursuit) is over
-  CHARGE_MAX: 45,          // seconds; nobody chases a beaten enemy across the county   // AI captains only order a charge with this much breath in the men         // a volley this recent still counts as a steady line at the clash
+  CHARGE_MAX: 45,          // seconds; nobody chases a beaten enemy across the county
   // MOMENTUM: a charge's push is how fast the men are going when it lands (wind, slope and ground
   // all slow them) plus the drop: charging down onto a line is terrifying, up into one is murder
   DOWNHILL_RUSH: 0.012,    // rush speed gained per % of downhill grade (cap +18%)
-  SLOPE_PUSH: 0.05,        // push per metre the charger stands above the defender (±8 m)         // here somebody's nerve gives: the charge goes home or falters
+  SLOPE_PUSH: 0.05,        // push per metre the charger stands above the defender (±8 m)
   CAPTURE_RANGE: 150,      // left on the field this near a formed enemy when you withdraw = taken prisoner
+
+  // ── cavalry & the square ──
+  // Horse beats foot in the open — a line caught reloading or in the flank, skirmishers, anyone running.
+  // A formed square stops horse cold (the horses will not ride onto the bayonets), but it is slow,
+  // fires a quarter of its muskets each way, and is the densest target on the field.
+  CAV_FILE_GAP: 1.7,
+  CAV_RANK_GAP: 3.6,
+  CAV_WALK: 1.8,
+  CAV_TROT: 3.6,
+  CAV_GALLOP: 7.5,
+  CAV_FLEE: 6.5,
+  CAV_GALLOP_AT: 90,       // they only open out into the gallop this close (the charge's rush)
+  CAV_WIND_GALLOP: 1 / 22, // ~20 s of gallop and the horses are blown
+  CAV_WIND_TROT: 1 / 300,
+  CAV_REACH: 2.3,          // a sabre from the saddle reaches further than a bayonet on foot
+  CAV_MASS: 2.0,           // push of a horseman at the gallop against a man on foot
+  CAV_HIT: 1.0,            // a horse is a bigger mark, but a hit horse often carries on
+  CAV_SABRE: 2.0,          // a horseman's melee against foot outside a square
+  CAV_PURSUIT: 0.9,        // per second: a horseman riding down a fleeing man
+  CAV_VS_HORSE: 0.5,       // a foot soldier's bayonet against a man on a horse (in a square: ×1.2 instead)
+  CAV_SHOCK: 1.6,          // charge shock from horse against foot (× CHARGE_SHOCK)
+  CAV_CHARGE_RANGE: 80,    // the ground shakes this far out
+  CAV_SCOUT: 340,          // horsemen look for a mark this far off
+  CAV_HOVER: 170,          // …and hang about this far off, so you have to stand in square
+  CAV_MARK: 0.8,           // how inviting a target must look before they go in
+  CAV_WARN: 250,           // infantry form square when horsemen come on this close
+  CAV_NERVE: 0.6,          // morale cost per trooper down (× the usual)
+  SQUARE_DEF: 8,           // a formed square's nerve against horse (a shaken one can still be broken)
+  SQUARE_DRESS: 9,         // seconds to dress a square and close its corners (× 1.25 − drill)
+  SQUARE_EXPOSED: 1.35,    // muskets (and guns) into a square: every ball finds somebody
+  SQUARE_FORMED: 0.7,      // share of men in their places before a square counts as formed
 
   // ── morale (0..100) ──
   MORALE_BASE: 58,
@@ -91,8 +122,15 @@ const CFG = {
   COMMANDER_AURA: 32,      // metres — your presence steadies the men
   RALLY_RANGE: 38,
   RALLY_BOOST: 12,
-  RALLY_COOLDOWN: 25,
-  RALLY_AT: 38,            // a routed unit can be rallied once morale is back to this
+  RALLY_COOLDOWN: 20,
+  RALLY_RETRY: 5,          // a rally that does not take can be tried again this soon
+  RALLY_AT: 26,            // a routed unit can be rallied once morale (with the shout) is back to this
+  RALLY_WINDOW: 35,        // seconds your broken company stays on the field to be rallied before the day is lost
+  RALLY_HOLD: 0.45,        // fleeing men with you among them run this much slower (you are grabbing them)
+  CHARGE_TEST_AFTER: 1.5,  // the nerve test waits this long into a charge, so a short dash still gets its run-up
+  CMD_ALONE: 7,            // no man of yours within this: you are alone among them
+  MOB_RANGE: 8,            // …and every enemy this close comes for you
+  CMD_ALONE_HIT: 1.0,      // bayonet odds against a lone officer (0.6 with your men about you)
   COLOURS_LOST: 22,
   OFFICER_LOST: 12,
 

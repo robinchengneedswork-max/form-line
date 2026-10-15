@@ -25,7 +25,7 @@ const WHEEL_GROUPS = [
   { name: 'Bayonet', angle: 0, opts: [
     { cmd: 'charge', label: 'Charge!', hot: true, at: 0 }, { cmd: 'rally', label: 'Rally', at: 1 }, { cmd: 'reform', label: 'Re-form', at: -1 }] },
   { name: 'Form', angle: Math.PI / 2, opts: [
-    { cmd: 'close', label: 'Close up', at: -1 }, { cmd: 'line', label: 'Line', at: 0 }, { cmd: 'skirmish', label: 'Skirmish', at: 1 }, { cmd: 'attackcol', label: 'Column', at: -2 }] },
+    { cmd: 'close', label: 'Close up', at: -1 }, { cmd: 'line', label: 'Line', at: 0 }, { cmd: 'skirmish', label: 'Skirmish', at: 1 }, { cmd: 'attackcol', label: 'Column', at: -2 }, { cmd: 'square', label: 'Square', at: 2 }] },
   { name: 'Move', angle: Math.PI, opts: [
     { cmd: 'advance', label: 'Advance', at: 1 }, { cmd: 'follow', label: 'Follow me', at: 0 }, { cmd: 'halt', label: 'Halt', at: -1 }, { cmd: 'fallback', label: 'Fall back', at: -2 }, { cmd: 'retire', label: 'Retire', at: 2 }] },
 ];

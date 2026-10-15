@@ -105,6 +105,28 @@ const Sound = {
     }
   },
 
+  // a cavalry trumpet: the charge (rising, urgent) or a call to advance
+  trumpet(x, y, charge) {
+    const ac = Sound.ctx(); if (!ac) return;
+    const [gain, pan] = Sound.place(x, y, 90), out = Sound.chain(gain * 0.5, pan), t = ac.currentTime + 0.05;
+    const notes = charge ? [[392, 0.12], [523, 0.12], [659, 0.12], [784, 0.36], [659, 0.12], [784, 0.5]] : [[523, 0.3], [392, 0.15], [523, 0.15], [659, 0.5]];
+    let at = t;
+    for (const [f, d] of notes) {
+      const o = ac.createOscillator(), env = ac.createGain(), lp = ac.createBiquadFilter();
+      o.type = 'sawtooth'; o.frequency.value = f; lp.type = 'lowpass'; lp.frequency.value = 2200;
+      env.gain.setValueAtTime(0, at); env.gain.linearRampToValueAtTime(0.22, at + 0.025); env.gain.setValueAtTime(0.2, at + d * 0.8); env.gain.linearRampToValueAtTime(0, at + d);
+      o.connect(lp); lp.connect(env); env.connect(out); o.start(at); o.stop(at + d + 0.02);
+      at += d + 0.02;
+    }
+  },
+
+  // the ground shaking: a low drumming that swells as the squadron opens into the gallop
+  hooves(x, y) {
+    const ac = Sound.ctx(); if (!ac) return;
+    const [gain, pan] = Sound.place(x, y, 120), out = Sound.chain(gain, pan), t = ac.currentTime;
+    for (let k = 0; k < 40; k++) Sound.noise(t + k * 0.11 + Math.random() * 0.04, 0.09, 'lowpass', 140 + Math.random() * 60, 1, 0.25 + 0.35 * Math.min(1, k / 25), out);
+  },
+
   // ── per-frame: drain the battle's sound events ──
   battle(B) {
     const ac = Sound.ac;
@@ -124,7 +146,10 @@ const Sound = {
         }
       } else if (e.type === 'charge') {
         const u = B.units.find(v => v.id === e.unit);
-        if (u) Sound.roar(u.cx, u.cy);
+        if (u && u.arm === 'cav') { Sound.trumpet(u.cx, u.cy, true); Sound.hooves(u.cx, u.cy); }
+        else if (u) Sound.roar(u.cx, u.cy);
+      } else if (e.type === 'trumpet') {
+        Sound.trumpet(e.x, e.y, false);
       } else if (e.type === 'dispatch') {
         // a galloper's bugle: five rising notes
         const out = Sound.chain(0.5, 0);

@@ -11,7 +11,7 @@ const ORDER_TEXT = {
   ready: 'Make ready!', fire: 'Present — FIRE!', atwill: 'Fire at will!', cease: 'Cease fire!',
   charge: 'Fix bayonets — CHARGE!', fallback: 'Fall back!', skirmish: 'Extend — skirmish order!',
   close: 'Close order!', rally: 'Rally! Rally on me!',
-  byrank: 'Fire by rank!', attackcol: 'Column of attack!', retire: 'Retire! To the rear!', reform: 'Re-form! Re-form on the colours!',
+  byrank: 'Fire by rank!', attackcol: 'Column of attack!', square: 'Form square! Prepare to receive cavalry!', ride: 'Trot!', retire: 'Retire! To the rear!', reform: 'Re-form! Re-form on the colours!',
 };
 
 // drills a company must LEARN (at camp) before it can be ordered to do them. AI companies know them all.
@@ -68,6 +68,7 @@ const Orders = {
       case 'atwill': return u.fire === 'atwill';
       case 'byrank': return u.fire === 'byrank';
       case 'attackcol': return u.form.kind === 'attack';
+      case 'square': return u.form.kind === 'square' && u.order === 'hold';
       case 'cease': return u.fire === 'hold';
       case 'skirmish': return u.form.kind === 'skirmish' && u.order === 'hold';
       default: return false;
@@ -101,7 +102,8 @@ const Orders = {
       case 'advance':
         // advancing toward somewhere else wheels the formation about its own centre first
         // (a column of attack stays a column of attack — that is the point of it)
-        if (f.kind === 'column') toLine(u.cx, u.cy, o.facing != null ? o.facing : f.facing);
+        // (a square cannot march: it opens out into line first)
+        if (f.kind === 'column' || f.kind === 'square') toLine(u.cx, u.cy, o.facing != null ? o.facing : f.facing);
         else if (o.facing != null && Math.abs(angDiff(f.facing, o.facing)) > 0.35) Unit.setForm(u, f.kind, u.cx, u.cy, o.facing);
         u.order = 'advance';
         break;
@@ -111,7 +113,7 @@ const Orders = {
         if (f.kind !== 'column') { f.x = lerp(f.x, u.cx, 0.5); f.y = lerp(f.y, u.cy, 0.5); }
         break;
       case 'fallback':
-        if (f.kind === 'column') toLine(u.cx, u.cy, o.facing != null ? o.facing : f.facing);
+        if (f.kind === 'column' || f.kind === 'square') toLine(u.cx, u.cy, o.facing != null ? o.facing : f.facing);
         u.order = 'fallback';
         break;
       case 'ready': u.fire = 'ready'; break;
@@ -148,7 +150,7 @@ const Orders = {
       case 'retire': {
         // about face and march for the line of retreat; can't fire, and every hit hurts like a flank
         if (u.order === 'charge') Combat.endCharge(B, u);
-        if (f.kind === 'column') toLine(u.cx, u.cy, f.facing);
+        if (f.kind === 'column' || f.kind === 'square') toLine(u.cx, u.cy, f.facing);
         const r = B.retreat;
         if (!r) break;
         u.order = 'retire'; u.fire = 'hold';
@@ -158,7 +160,7 @@ const Orders = {
       case 'charge':
         u.order = 'charge'; u.chargeT = 0; u.lastFoe = B.t; u.fire = 'hold'; u.tested = [];
         u.chargeFrom = f.kind;
-        if (f.kind === 'column') f.kind = 'line';
+        if (f.kind === 'column' || f.kind === 'square') f.kind = 'line';
         B.events.push({ type: 'charge', team: u.team, unit: u.id });
         B.fx.push({ kind: 'say', x: u.cx, y: u.cy, text: u.F.cry, t: B.t, team: u.team, big: true });
         break;
@@ -166,6 +168,20 @@ const Orders = {
         u.order = 'hold'; u.fire = 'atwill';
         Unit.setForm(u, 'skirmish', o.x != null ? o.x : u.cx, o.y != null ? o.y : u.cy, o.facing != null ? o.facing : f.facing);
         break;
+      case 'square':
+        // on the spot, around the company's middle; every face presents outward and fires at will
+        u.order = 'hold';
+        if (u.fire === 'hold' || u.fire === 'byrank') u.fire = 'ready';
+        if (f.kind !== 'square') u.squareT = B.t;
+        Unit.setForm(u, 'square', u.cx, u.cy, o.facing != null ? o.facing : f.facing);
+        break;
+      case 'ride': {
+        // horse: the whole squadron moves as a block toward a point, at a walk or a trot
+        u.order = 'ride';
+        u.ride = { x: o.x, y: o.y, pace: o.pace || CFG.CAV_TROT, face: o.facing };
+        Unit.setForm(u, 'line', u.cx, u.cy, Math.atan2(o.y - u.cy, o.x - u.cx));
+        break;
+      }
       case 'close':
         u.order = 'hold';
         toLine(o.x != null ? o.x : u.cx, o.y != null ? o.y : u.cy, o.facing != null ? o.facing : f.facing);

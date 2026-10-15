@@ -25,6 +25,7 @@ function makeMan(unit, role, spec, rng) {
     m: role === 'line' ? 'loaded' : 'none', mt: 0,   // musket: loaded · presenting · present · reloading
     rank: 0, sx: 0, sy: 0, jx: rng.range(-1.2, 1.2), jy: rng.range(-1.5, 1.5),
     foe: null, downT: 0, wounded: false, carrying: null,
+    horse: unit.arm === 'cav' ? HORSE_COATS[Math.floor(rng() * HORSE_COATS.length)] : null,
   };
 }
 
@@ -33,15 +34,18 @@ function makeUnit(spec, rng) {
   // company type: Light / Grenadier / Line. The player's comes from the campaign; others from their name
   const name = spec.name || rng.pick(F.companies);
   const ctype = spec.ctype || (/Voltigeur|Light/i.test(name) ? 'light' : /Grenad/i.test(name) ? 'grenadier' : null);
+  // a squadron of horse: troopers in two loose ranks, a trumpeter, no colours, no muskets
+  const cav = spec.arm === 'cav' ? CAV_TYPES[spec.cavType || 'chasseurs'] : null;
   const u = {
-    id: NEXT_ID++, team: spec.team, faction: spec.faction, F, ctype,
-    melee: F.meleeSkill * (ctype === 'grenadier' ? 1.2 : 1),
-    name, isPlayer: !!spec.isPlayer,
+    id: NEXT_ID++, team: spec.team, faction: spec.faction, F: cav ? Object.assign({}, F, { coat: cav.coat, facings: cav.facings, hat: cav.hat }) : F, ctype,
+    arm: cav ? 'cav' : 'foot', cav,
+    melee: cav ? F.meleeSkill * cav.melee : F.meleeSkill * (ctype === 'grenadier' ? 1.2 : 1),
+    name: cav && !spec.name ? rng.pick(cav.names) : name, isPlayer: !!spec.isPlayer,
     men: [], leader: null,
     form: { kind: 'line', x: spec.x, y: spec.y, facing: spec.facing },
-    ranks: F.ranks,
+    ranks: cav ? 2 : F.ranks,
     order: 'hold', fire: 'hold', volleyAt: -1,
-    drill: spec.drill, nerveBonus: (spec.nerve || 0) + F.nerve + (ctype === 'grenadier' ? 6 : 0),
+    drill: spec.drill, nerveBonus: (spec.nerve || 0) + F.nerve + (ctype === 'grenadier' ? 6 : 0) + (cav ? cav.nerve : 0),
     drills: spec.drills || null,   // null = knows every drill (AI companies)
     morale: CFG.MORALE_BASE + (spec.nerve || 0), startSize: 0,
     routed: false, everRouted: false,
@@ -49,17 +53,18 @@ function makeUnit(spec, rng) {
     task: spec.task || null, taskApplied: null, anchor: null,
     trail: [], slotOrder: [], reslot: 0,
     lossLog: [], lastHit: -99, flanked: 0, beingCharged: 0, chargeT: 0,
-    colours: null, coloursLost: false, wind: 1, hasColours: spec.colours !== false,
+    colours: null, coloursLost: false, wind: 1, hasColours: spec.colours !== false && !cav,
     rallyCd: 0, ai: { next: 0, phase: 'deploy', route: null },
     cx: spec.x, cy: spec.y, formed: 0, visible: spec.team === TEAM_PLAYER,
     lastSeen: null, stats: { shots: 0, hits: 0, down: 0, fled: 0 },
   };
   const roster = spec.roster || [];
   const n = spec.roster ? roster.length : spec.size;
-  for (let i = 0; i < n; i++) u.men.push(makeMan(u, 'line', roster[i] || {}, rng));
+  for (let i = 0; i < n; i++) u.men.push(makeMan(u, 'line', Object.assign({}, roster[i] || {}, cav ? { weapon: cav.weapon } : {}), rng));
+  if (cav) for (const m of u.men) m.m = 'none';
   if (u.hasColours) u.men.push(makeMan(u, 'ensign', { name: 'Ensign' }, rng));
-  if (spec.drummer) u.men.push(makeMan(u, 'drummer', { name: 'Drummer' }, rng));
-  if (spec.fifer) u.men.push(makeMan(u, 'fifer', { name: 'Fifer' }, rng));
+  if (spec.drummer) u.men.push(makeMan(u, 'drummer', { name: cav ? 'Trumpeter' : 'Drummer' }, rng));
+  if (spec.fifer && !cav) u.men.push(makeMan(u, 'fifer', { name: 'Fifer' }, rng));
   if (!spec.isPlayer) {
     const off = makeMan(u, 'officer', { name: F.name === 'French' ? 'Capitaine' : 'Captain', aim: 1 }, rng);
     u.men.push(off);
@@ -91,6 +96,17 @@ const Unit = {
     const men = Unit.lineMen(u);
     const f = u.form, rx = Math.cos(f.facing + Math.PI / 2), ry = Math.sin(f.facing + Math.PI / 2);
     const fx = Math.cos(f.facing), fy = Math.sin(f.facing);
+    if (f.kind === 'square') {
+      const free = men.slice(), order = [];
+      for (let i = 0; i < men.length; i++) {
+        const p = Unit.squareSlot(u, i, men.length);
+        let bi = 0, bd = Infinity;
+        free.forEach((m, j) => { const d = dist2(m.x, m.y, p.x, p.y); if (d < bd) { bd = d; bi = j; } });
+        order.push(free.splice(bi, 1)[0]);
+      }
+      u.slotOrder = order;
+      return;
+    }
     if (f.kind === 'column') {   // nearest to the leader leads
       const L = u.leader || { x: f.x, y: f.y };
       men.sort((a, b) => dist2(a.x, a.y, L.x, L.y) - dist2(b.x, b.y, L.x, L.y));
@@ -117,7 +133,8 @@ const Unit = {
     const k = u.form.kind;
     if (k === 'skirmish') return { ranks: 1, files: Math.max(1, n), gap: CFG.SKIRMISH_GAP };
     if (k === 'attack') { const files = Math.max(1, Math.min(CFG.ATTACK_FILES, n)); return { ranks: Math.ceil(n / files), files, gap: CFG.FILE_GAP }; }
-    return { ranks: u.ranks, files: Math.max(1, Math.ceil(n / u.ranks)), gap: CFG.FILE_GAP };
+    if (k === 'square') return { ranks: 2, files: Math.max(1, Math.ceil(n / 8)), gap: CFG.FILE_GAP };
+    return { ranks: u.ranks, files: Math.max(1, Math.ceil(n / u.ranks)), gap: u.arm === 'cav' ? CFG.CAV_FILE_GAP : CFG.FILE_GAP };
   },
 
   // slot positions from the current formation. Runs every tick (cheap).
@@ -143,16 +160,27 @@ const Unit = {
       }
       return;
     }
+    if (f.kind === 'square') {
+      men.forEach((m, i) => { const p = Unit.squareSlot(u, i, n); m.sx = p.x; m.sy = p.y; m.rank = p.rank; m.slotFacing = p.dir; });
+      // colours, drum, fife and the captain in the hollow middle
+      for (const m of u.men) {
+        if (m.state !== 'formed' || m.role === 'line') continue;
+        const lat = m.role === 'drummer' ? 1.2 : m.role === 'fifer' ? -1.2 : 0, b = m.role === 'officer' ? 1.4 : 0;
+        m.sx = f.x + rx * lat - fx * b; m.sy = f.y + ry * lat - fy * b; m.slotFacing = f.facing;
+      }
+      return;
+    }
     const { ranks, files, gap } = Unit.grid(u, n);
+    const rg = u.arm === 'cav' ? CFG.CAV_RANK_GAP : CFG.RANK_GAP;
     halfW = (files - 1) / 2 * gap;
     men.forEach((m, i) => {
       const rank = Math.floor(i / files), file = i % files;
       const off = (file - (files - 1) / 2) * gap;
-      let sx = f.x + rx * off - fx * rank * CFG.RANK_GAP, sy = f.y + ry * off - fy * rank * CFG.RANK_GAP;
+      let sx = f.x + rx * off - fx * rank * rg, sy = f.y + ry * off - fy * rank * rg;
       if (f.kind === 'skirmish') { sx += rx * m.jx + fx * m.jy * 2; sy += ry * m.jx + fy * m.jy * 2; }
       m.sx = sx; m.sy = sy; m.rank = rank; m.slotFacing = f.facing;
     });
-    back = ranks * CFG.RANK_GAP;
+    back = ranks * rg;
     for (const m of u.men) {
       if (m.state !== 'formed' || m.role === 'line') continue;
       let lat = 0, b = back + 0.3;
@@ -161,6 +189,17 @@ const Unit = {
       if (m.role === 'officer') { lat = halfW + 2.2; b = 1.2; }
       m.sx = f.x + rx * lat - fx * b; m.sy = f.y + ry * lat - fy * b; m.slotFacing = f.facing;
     }
+  },
+
+  // the i-th of n places in a hollow square: four faces, two ranks, every man facing out
+  squareSlot(u, i, n) {
+    const f = u.form, face = i % 4, j = Math.floor(i / 4);
+    const per = Math.ceil(n / 4), files = Math.max(1, Math.ceil(per / 2));
+    const rank = Math.floor(j / files), file = j % files;
+    const dir = f.facing + face * Math.PI / 2, ux = Math.cos(dir), uy = Math.sin(dir);
+    const half = (files - 1) / 2 * CFG.FILE_GAP + CFG.RANK_GAP * 2 + 0.8;
+    const out = half - rank * CFG.RANK_GAP, lat = (file - (files - 1) / 2) * CFG.FILE_GAP;
+    return { x: f.x + ux * out - uy * lat, y: f.y + uy * out + ux * lat, dir, rank };
   },
 
   // ── the leader's footsteps ──

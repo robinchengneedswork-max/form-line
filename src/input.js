@@ -24,6 +24,7 @@ const ORDER_KEYS = [
   { code: 'KeyC', key: 'C', cmd: 'charge', label: 'Charge!' },
   { code: 'KeyR', key: 'R', cmd: 'rally', label: 'Rally' },
   { code: 'KeyT', key: 'T', cmd: 'reform', label: 'Re-form' },
+  { code: 'KeyE', key: 'E', cmd: 'square', label: 'Form square' },
 ];
 
 const Input = {

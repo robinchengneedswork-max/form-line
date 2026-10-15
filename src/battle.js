@@ -114,6 +114,11 @@ const Battle = {
   },
 
   out(u) { return u.routed || u.formed <= 2; },
+  // your own broken company, still on the field with you able to reach it: not over yet
+  rallyable(B, u) {
+    return u.isPlayer && u.routed && B.cmd.state === 'formed' && B.t - (u.routT || 0) < CFG.RALLY_WINDOW
+      && u.men.filter(m => m.state === 'fleeing' && m.role === 'line').length > Math.max(2, u.startSize * 0.25);
+  },
 
   checkEnd(B) {
     const nightfall = B.t >= CFG.NIGHTFALL;
@@ -122,7 +127,7 @@ const Battle = {
     const P = B.player;
     if (P.saved && Battle.atRetreat(B, B.cmd.x, B.cmd.y) && !P.men.some(m => m.state === 'formed' && m.role !== 'officer')) return Battle.finish(B, 'withdrew');
     // a company that has marched off the field is not beaten
-    const mineOut = B.units.filter(u => u.team === TEAM_PLAYER && !(u.isPlayer && u.saved && !u.routed)).every(Battle.out);
+    const mineOut = B.units.filter(u => u.team === TEAM_PLAYER && !(u.isPlayer && u.saved && !u.routed)).every(u => Battle.out(u) && !Battle.rallyable(B, u));
     const theirsOut = B.units.filter(u => u.team === TEAM_ENEMY).every(Battle.out);
     if (mineOut || theirsOut) { B.endT += 1; } else B.endT = 0;
     if (B.endT >= 6) return Battle.finish(B, theirsOut ? 'won' : 'lost');

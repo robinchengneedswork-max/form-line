@@ -182,6 +182,7 @@ const Render = {
 
   // a standing man, top-down. Local frame: +x is the way he faces.
   man(g, m, u, t) {
+    if (m.horse) return Render.rider(g, m, u, t);
     const F = u.F, s = SPRITE;
     g.save(); g.translate(m.x, m.y); g.rotate(m.facing); g.scale(s, s);
     const flee = m.state === 'fleeing';
@@ -219,6 +220,44 @@ const Render = {
     if (m.role === 'ensign' && m.state === 'formed') Render.flag(g, m.x, m.y, u, t);
   },
 
+  // a trooper: the horse long under him, the rider on top, sabre or lance out when they charge
+  rider(g, m, u, t) {
+    const F = u.F, cv = u.cav || {}, s = SPRITE;
+    const flee = m.state === 'fleeing', charging = u.order === 'charge' && !flee;
+    const gait = m.moving > 4.5 ? Math.sin(t * 14 + m.id) * 0.05 : m.moving > 1 ? Math.sin(t * 8 + m.id) * 0.03 : 0;
+    g.save(); g.translate(m.x, m.y); g.rotate(m.facing); g.scale(s, s);
+    // shadow, horse, head and mane
+    g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(0.1, 0.12, 0.95, 0.4, 0, 0, 7); g.fill();
+    g.fillStyle = m.horse; g.beginPath(); g.ellipse(gait, 0, 0.82, 0.3, 0, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(0.88 + gait * 2, 0, 0.3, 0.14, 0, 0, 7); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(0.55 + gait, 0, 0.28, 0.05, 0, 0, 7); g.fill();
+    g.strokeStyle = 'rgba(20,12,6,0.8)'; g.lineWidth = 0.07; g.beginPath(); g.moveTo(-0.78, 0); g.lineTo(-1.05, (m.jx || 0) * 0.08); g.stroke();   // tail
+    // saddle cloth in the facings
+    g.fillStyle = F.facings; g.beginPath(); g.ellipse(-0.12, 0, 0.26, 0.33, 0, 0, 7); g.fill();
+    // weapon
+    if (!flee) {
+      if (cv.weapon === 'lance') {
+        g.strokeStyle = '#6b4a2a'; g.lineWidth = 0.06; g.beginPath();
+        if (charging) { g.moveTo(-0.5, 0.26); g.lineTo(2.1, 0.22); }
+        g.stroke();
+        if (charging) { g.fillStyle = '#c0262b'; g.beginPath(); g.moveTo(1.75, 0.22); g.lineTo(1.5, 0.14); g.lineTo(1.5, 0.3); g.fill(); g.fillStyle = '#f2efe6'; g.beginPath(); g.moveTo(1.5, 0.22); g.lineTo(1.3, 0.12); g.lineTo(1.3, 0.32); g.fill(); }
+        else { g.strokeStyle = '#6b4a2a'; g.beginPath(); g.moveTo(-0.2, 0.3); g.lineTo(-0.2, -0.9); g.stroke(); g.fillStyle = '#c0262b'; g.fillRect(-0.2, -0.9, 0.3, 0.12); }
+      } else {
+        g.strokeStyle = '#d9dde0'; g.lineWidth = 0.05; g.beginPath();
+        if (charging) { g.moveTo(0.05, 0.28); g.lineTo(1.05, 0.34); } else { g.moveTo(-0.05, 0.28); g.lineTo(-0.15, 0.9); }
+        g.stroke();
+      }
+    }
+    // rider: coat, cuirass, helmet
+    g.fillStyle = F.coat; g.beginPath(); g.ellipse(-0.05, 0, 0.19, 0.3, 0, 0, 7); g.fill();
+    if (cv.cuirass) { g.fillStyle = '#c9ced2'; g.beginPath(); g.ellipse(-0.03, 0, 0.13, 0.22, 0, 0, 7); g.fill(); }
+    g.fillStyle = flee ? '#d9b89a' : F.hat; g.beginPath(); g.arc(-0.03, 0, 0.14, 0, 7); g.fill();
+    if (cv.cuirass && !flee) { g.strokeStyle = '#111'; g.lineWidth = 0.06; g.beginPath(); g.moveTo(-0.03, 0); g.lineTo(-0.38, (m.jx || 0) * 0.06); g.stroke(); }   // horsehair mane
+    if (m.role === 'drummer') { g.fillStyle = '#d8b440'; g.beginPath(); g.arc(0.15, -0.2, 0.09, 0, 7); g.fill(); }   // the trumpet
+    if (m.role === 'officer') { g.strokeStyle = '#d8b440'; g.lineWidth = 0.07; g.beginPath(); g.moveTo(-0.17, -0.2); g.lineTo(0.1, 0.22); g.stroke(); }
+    g.restore();
+  },
+
   commander(g, c, t) {
     const F = FACTIONS.british;
     g.save(); g.translate(c.x, c.y); g.rotate(c.facing); g.scale(SPRITE * 1.15, SPRITE * 1.15);
@@ -238,6 +277,16 @@ const Render = {
   body(g, m) {
     const u = m.unit, F = u ? u.F : FACTIONS.british;
     g.save(); g.translate(m.x, m.y); g.rotate((m.id * 2.399) % 6.28); g.scale(SPRITE, SPRITE);
+    if (m.horse) {
+      // a dead horse is the biggest thing on the field after the guns
+      g.fillStyle = 'rgba(70,20,15,0.35)'; g.beginPath(); g.ellipse(0.2, 0.15, 0.9, 0.45, 0, 0, 7); g.fill();
+      g.globalAlpha = 0.85;
+      g.fillStyle = m.horse; g.beginPath(); g.ellipse(0, 0, 0.8, 0.34, 0, 0, 7); g.fill();
+      g.beginPath(); g.ellipse(0.85, 0.25, 0.28, 0.13, 0.6, 0, 7); g.fill();
+      g.fillStyle = F.coat; g.beginPath(); g.ellipse(-0.2, -0.55, 0.3, 0.15, 0.3, 0, 7); g.fill();
+      g.restore();
+      return;
+    }
     g.fillStyle = 'rgba(70,20,15,0.35)'; g.beginPath(); g.ellipse(0.15, 0.1, 0.35, 0.3, 0, 0, 7); g.fill();
     g.globalAlpha = 0.8;
     g.fillStyle = F.coat; g.beginPath(); g.ellipse(0, 0, 0.42, 0.18, 0, 0, 7); g.fill();

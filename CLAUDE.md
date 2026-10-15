@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 124 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 146 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -38,6 +38,7 @@ export line). A headless check asserts that index.html's script order matches.
 | `orders.js` | `shout` (player: voice ≤48 m, else only via a living drummer, 1.8 s late), `give` (AI), `apply` |
 | `ai.js` | every non-player captain (enemy AND allied): doctrines attack / hold / skirmish. Several ideas borrowed from DoDoCat's *Day of Slaughter* NW AI mod (spread targets, march until the centres can see each other, a firing distance kills push in and losses push out, sideways realignment with a deadzone, troop-ratio retreat/charge) |
 | `command.js` | brigade **headquarters** for set pieces: every company has a task (hold / reserve / attack); waves, reserves committed to retake a lost post, general advance; YOUR task arrives as a dispatch and obedience is scored |
+| `data/factions.js` CAV_TYPES | the three kinds of French horse |
 | `data/setpieces.js` | the big battles (bigger `size`, `setpiece: true`): The Long Ridge, The Village on the Stream, and the finale |
 | `place.js` | **drag to place** (the user asked for it): a stroke gives centre (midpoint) + alignment; the company faces across it toward the nearest enemy you can see, else away from you; at most `PLACE_RANGE` from where it stands. Mouse = left-drag (keeps the current shape); touch = Form → Line/Skirmish/Column arms it, the next drag places, a tap forms on the spot, a hold re-opens the wheel. Pure `plan()` is in the headless sim |
 | `touch.js` | phone controls: tap = walk, hold = two-level order wheel (Fire up / Bayonet right / Form down / Move left), drag = look, pinch = zoom |
@@ -83,10 +84,30 @@ The user chose: **keep ~1 round/min and fix the charge instead**; a **retreat zo
 - Steadiness at the clash counts a volley in the last `STEADY_AFTER` 6 s (holding fire pays); a line caught reloading defends at 0.75×. Two charges meeting = ONE test, each side with its own momentum (two tests at once broke companies).
 - Charges end at `CHARGE_MAX` 45 s or breath < `CHARGE_BLOWN` with nobody in contact (no 80 s pursuits). AI captains never charge with breath < `AI_CHARGE_BREATH` — before that they re-ordered a dead charge every 2 s.
 - **Re-form** (T, Bayonet → Re-form): off the chase, line on the colours, facing the nearest seen enemy.
-- **Halt** calls a charge off. **Rally** never did — it is morale + un-rout, in person.
+- **Halt** calls a charge off. **Rally** never did — it is morale + un-rout, in person (fixed in round 5, below).
 - **You sprint** at `CMD_SPRINT` 4.6 (faster than the 4.0 rush) for ~14 s, then walk until you rest. Shift (hold), Q / touch-bar Run (toggle).
 - **Line of retreat** `B.retreat` (scenario `retreat:{x,r,label}`, default the south edge behind your start). `retire` (X, Move→Retire) marches the line there, no firing, hits count as flank; men inside leave (`m.saved`, `u.saved`). Standing in it you can **Leave the field** (L); with everyone off it ends by itself. Withdrawing anywhere = whoever is formed within `CAPTURE_RANGE` of a formed enemy is **captured** (lost; colours too), the rest walk back.
   ⚠ Saved men must count as present in `Morale.baseline` and the rout rule, or a company filing off the field routs itself.
+
+## Round 5 bugs (user: "rally seems to do nothing", "it just instantly wavers", "slap the captain")
+
+- **Rally** was dead: a broken company that was your last formed unit ended the battle 6 s later, and un-routing needed morale 38 that a routed company took ~45 s to regain. Now: your broken company holds the battle open for `RALLY_WINDOW` 35 s (`Battle.rallyable`) while > a quarter are still on the field; with you among them they recover even under fire and run `RALLY_HOLD`× slower; un-rout at `RALLY_AT` 26 (shout included) **if more than a quarter are within 70 m of you** (else they re-rout at once). A rally that fails says why and can be retried after `RALLY_RETRY` 5 s; on cooldown it says so. AI companies still un-rout at the old 38.
+- **Instant falter**: a charge ordered inside `CHARGE_TEST` was nerve-tested 0.6 s in at impetus 0 (80–93% falter from 15 m). The test now waits `CHARGE_TEST_AFTER` 1.5 s. A charge only stops for morale below WAVERING+5 (was: below SHAKEN, silently). A failed player charge says why (`Combat.whyFalter`).
+- **Captain-slap exploit**: you, alone with no man of yours within `CMD_ALONE` 7 m, are mobbed by every enemy within `MOB_RANGE` 8 m at `CMD_ALONE_HIT` ×1.0 (×0.6 among your men). Rushing a captain alone: 39/40 kills → ~60% death.
+
+## Cavalry & the square (round 5 — the user: "more varied enemy types… i guess thats where we implement artillery and cav?")
+
+The agreed roadmap for a rewarding progression curve: **cavalry + square first, then enemy guns, then a Major commanding a second company (orders by runner, delayed), then a three-act campaign.** Only the first is built.
+
+- **Horse** = a unit with `arm: 'cav'`, `cav: CAV_TYPES[type]` (factions.js: chasseurs → lancers → cuirassiers; melee / mass / armour / speed / nerve). Men have `m.horse` (= the horse's coat colour), no musket (`m.m = 'none'`, skipped in `Combat.muskets`). Two loose ranks (`CAV_FILE_GAP`, `CAV_RANK_GAP`), a trumpeter (role drummer), no colours.
+- **Movement**: order `ride` moves the squadron's frame as a block toward `u.ride` at walk/trot (`Move.unit`); charge = trot, then gallop inside `CAV_GALLOP_AT` 90 m (horse breath `CAV_WIND_GALLOP` ~20 s). `Move.horseGround`: woods/walls/marsh slow horses further. Separation radius is larger for horses.
+- **Combat**: momentum × `CAV_MASS`·mass vs foot; shock range 80 m ×1.6 (×0.15 against a formed square); sabre ×2 vs foot; bayonet ×0.5 vs horse (×1.2 from a square); hits on horses × armour; horsemen ride down **fleeing** men (`CAV_PURSUIT`) — the real killer. Squadron morale loss per man ×`CAV_NERVE` 0.6.
+- **Nerve test vs horse**: only muskets still *presented* count as steady (a line that just volleyed has bayonets only); flank/rear ×0.55; skirmish ×0.65; cover ×2. **Square**: `Combat.squareReady` 0..1 = min(men in place, time dressed `SQUARE_DRESS`·(1.25−drill) ≈ 8 s); def ×lerp(0.6, `SQUARE_DEF` 8, k³) — a square still forming is worse than a line, a formed one is a wall unless it is shaken. Horses that lose the test **refuse** and sheer off.
+- **Square** (`E`, Form → Square): `Unit.squareSlot` — 4 faces × 2 ranks, slot facings outward, colours/drum/captain inside; fires `ready`/at will per face (pickTarget uses `slotFacing`); hits ×`SQUARE_EXPOSED`; Advance/Fall back/Retire/Charge open it into line.
+- **Horse AI** (`AI.cavalry`): pick the best mark (`AI.cavMark`: routed 1.4, unformed square 1.2, skirmish 1.15, column 1.05, line 0.55 +flank +empty muskets +shaken; cover/woods ~0) within `CAV_SCOUT`; > `CAV_MARK` → trot to 90 m off it, then charge (trumpet + "Cavalry! … form square (E)!" to the player via `AI.warn`). Else hover `CAV_HOVER` 170 m off the nearest foot. Blown / after a charge (`restUntil` 20 s): draw off ≤160 m toward home. When its own foot are all beaten it rides off the field (so battles still end).
+- **Foot AI** (`AI.cavThreat`): seen horse charging, riding at them, or within 120 m, and not in cover/woods → square, fire at will; back to line 8 s after the threat goes.
+- **Where**: new small map **The Heath** (always horse); Open Ground (50%) and The Reverse Slope (35%) from campaign level 0.3; the type gets heavier with level. **The Long Ridge** gets two cuirassier squadrons at ~7 min.
+- Duels (`$TEMP/fl/cav2.js`): formed square vs cuirassiers ~0–1/10 broken; line in the flank ~9/10 ridden over; ready line facing chasseurs ~50/50; square ordered with the horse at 60 m ~30% caught, at 90 m safe.
 
 ## Company customization (campaign)
 
@@ -133,7 +154,7 @@ Save = `localStorage['formline.run']` (per-viewer convenience, try/catch'd); bes
 ## Known gaps / next
 
 - **Never played by a human.** Browser-verified by script (quick battle, volley, charge, victory, report, map, briefing), not by hand.
-- No cavalry, so no square. Skirmish order exists; light-infantry bugle calls don't.
+- Cavalry + square built (round 5); no artillery yet. Light-infantry bugle calls don't exist.
 - Set pieces are CPU-heavier (~90 ms of sim per battle-second for the finale): fine on desktop at 1×, untested on a phone.
 - The autoplayer in `tune.js` is a crude proxy for a human; some scenarios (ridge, ford: 2 enemy companies) are hard for it by design.
 - Civil War era = a second pair of factions + tunes. Not built.

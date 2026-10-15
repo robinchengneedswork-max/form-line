@@ -36,6 +36,21 @@ const SURNAMES = ['Harris', 'Costello', 'Hopkins', 'Plunket', 'Green', 'Tanner',
   'Gunn', 'Hale', 'Moyle', 'Brennan', 'Doyle', "O'Neil", 'Walsh', 'Ellis', 'Hughes', 'Price', 'Rowe', 'Fenn',
   'Keating', 'Mudge', 'Pritchard', 'Sweeney', 'Varley', 'Webb', 'Yates', 'Dunn', 'Bligh'];
 
+// HORSE — French squadrons (a company's worth of troopers). The campaign brings the heavier ones in later.
+//   melee: with the sabre/lance · mass: weight at the gallop · armour: × chance a ball hits home
+const CAV_TYPES = {
+  chasseurs: { name: 'Chasseurs à cheval', short: 'Chasseurs', coat: '#2f5a35', facings: '#c0262b', hat: '#121212', horse: 0,
+    melee: 1.0, mass: 1.0, armour: 1, speed: 1.05, weapon: 'sabre', nerve: 0,
+    names: ['2e Esc., 7e Chasseurs', '1er Esc., 13e Chasseurs', '3e Esc., 20e Chasseurs'] },
+  lancers: { name: 'Lanciers', short: 'Lancers', coat: '#1c2f6e', facings: '#c0262b', hat: '#c0262b', horse: 1,
+    melee: 1.15, mass: 1.05, armour: 1, speed: 1.0, weapon: 'lance', nerve: 2, pursuit: 1.4,
+    names: ['1er Esc., 2e Chevau-légers lanciers', '2e Esc., 5e Lanciers', 'Lanciers polonais de la Garde'] },
+  cuirassiers: { name: 'Cuirassiers', short: 'Cuirassiers', coat: '#233f8c', facings: '#c0262b', hat: '#c9ced2', horse: 2,
+    melee: 1.3, mass: 1.4, armour: 0.75, speed: 0.92, weapon: 'sabre', nerve: 5, cuirass: true,
+    names: ['1er Esc., 4e Cuirassiers', '2e Esc., 9e Cuirassiers', '3e Esc., 12e Cuirassiers'] },
+};
+const HORSE_COATS = ['#5a3a22', '#3d2a1c', '#6b4a2c', '#2a201a', '#7a5a3a', '#4a3424'];
+
 const RANKS = [
   { title: 'Lieutenant', renown: 0, company: 24 },
   { title: 'Captain', renown: 70, company: 32 },

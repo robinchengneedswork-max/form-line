@@ -55,8 +55,11 @@ Object.assign(SCENARIOS, {
           post(1, attack(750, 470), sz, e.drill, { nerve: e.nerve, y: 100, fifer: false }),
           post(1, wave(380, 40, 300 + rng() * 60, { x: 420, y: 480 }), sz, e.drill, { nerve: e.nerve, fifer: false }),
           post(1, wave(620, 40, 330 + rng() * 60, { x: 600, y: 480 }), sz, e.drill, { nerve: e.nerve, fifer: false }),
+          // the afternoon: heavy horse comes over the valley to break whatever the foot have shaken
+          horse(250, 30, SOUTH, Math.max(lv, 0.8), rng, { cavType: 'cuirassiers', delay: 420 }),
+          horse(760, 30, SOUTH, Math.max(lv, 0.8), rng, { cavType: 'cuirassiers', delay: 450 }),
         ],
-        note: 'Five companies of ours on the ridge. Six of theirs, in two waves.',
+        note: 'Five companies of ours on the ridge. Six of theirs, in two waves — and their heavy cavalry behind.',
       };
     },
   },

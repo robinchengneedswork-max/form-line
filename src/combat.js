@@ -33,7 +33,7 @@ const Combat = {
 
   // fire by rank: the front rank lets go, then the next, so part of the company is always loaded
   rankFire(B, u) {
-    if (u.fire !== 'byrank' || B.t < (u.rankNext || 0)) return;
+    if (u.fire !== 'byrank' || u.arm === 'cav' || B.t < (u.rankNext || 0)) return;
     const nr = Math.min(CFG.FIRING_RANKS, Unit.grid(u, Math.max(1, u.formed)).ranks);
     const r = (u.rankTurn || 0) % nr;
     let tot = 0;
@@ -48,6 +48,7 @@ const Combat = {
 
   muskets(B, dt) {
     for (const u of B.units) {
+      if (u.arm === 'cav') continue;   // (horsemen carry sabres and lances here, not carbines)
       Combat.rankFire(B, u);
       const relMul = u.morale >= CFG.SHAKEN ? 1 : 1.3;
       for (const m of u.men) {
@@ -133,6 +134,8 @@ const Combat = {
     if (tu.form.kind === 'skirmish') p *= tu.ctype === 'light' ? 0.42 : 0.55;
     else if (tu.form.kind === 'attack') p *= CFG.ATTACK_EXPOSED;
     else if (tu.form.kind === 'column') p *= 1.3;   // a deep target: a ball that misses one man finds the next
+    else if (tu.form.kind === 'square') p *= CFG.SQUARE_EXPOSED;
+    if (t.horse) p *= CFG.CAV_HIT * (tu.cav ? tu.cav.armour : 1);
     const dh = Field.heightAt(B.field, m.x, m.y) - Field.heightAt(B.field, t.x, t.y);
     p *= dh > 3 ? 1.08 : dh < -3 ? 0.94 : 1;
     if (t.moving > 2.5) p *= 0.85;
@@ -170,29 +173,59 @@ const Combat = {
       if (u.order === 'charge') {
         u.chargeT += dt;
         let near = false;
+        const horse = u.arm === 'cav';
         for (const m of u.men) {
           if (m.role !== 'line' || m.state !== 'formed') continue;
-          if (!m.foe || m.foe.state !== 'formed' || B.rng() < dt * 0.8) m.foe = Combat.nearestFoe(B, m, 140);
+          const live = m.foe && (m.foe.state === 'formed' || (horse && m.foe.state === 'fleeing'));
+          if (!live || B.rng() < dt * 0.8) m.foe = Combat.nearestFoe(B, m, horse ? 200 : 140, horse);
           if (m.foe) near = true;
         }
         if (near) u.lastFoe = B.t;
         if (u.wind < CFG.CHARGE_BLOWN && !u.engaged) { Combat.endCharge(B, u); Battle.log(B, `${u.name}: the men are blown — the pursuit is called off.`, u.team === TEAM_PLAYER ? 'bad' : ''); }
-        else if (B.t - (u.lastFoe || 0) > 3 || u.chargeT > CFG.CHARGE_MAX || u.morale < CFG.SHAKEN) Combat.endCharge(B, u);
+        else if (u.morale < CFG.WAVERING + 5) { Combat.endCharge(B, u); Battle.log(B, `${u.name}: the men's nerve goes — the charge stops.`, u.team === TEAM_PLAYER ? 'bad' : ''); }
+        else if (B.t - (u.lastFoe || 0) > 3 || u.chargeT > CFG.CHARGE_MAX) Combat.endCharge(B, u);
       }
     }
     for (const u of B.units) u.engaged = 0;
+    // an officer alone among the enemy, with none of his own men about him, is everybody's target
+    const c0 = B.cmd, mob2 = CFG.MOB_RANGE * CFG.MOB_RANGE;
+    B.cmdAlone = false;
+    if (c0.state === 'formed') {
+      let friends = false, foes = false;
+      Move.near(B, c0.x, c0.y, CFG.CMD_ALONE, a => {
+        if (a === c0 || a.state !== 'formed') return;
+        if (a.team === TEAM_PLAYER) friends = true; else foes = true;
+      });
+      B.cmdAlone = foes && !friends;
+      if (B.cmdAlone) Move.near(B, c0.x, c0.y, CFG.MOB_RANGE, a => {
+        if (a.team !== TEAM_PLAYER && a.state === 'formed' && (a.role === 'line' || a.role === 'officer') && !(a.foe && a.foe !== c0 && a.foe.state === 'formed')) a.foe = c0;
+      });
+    }
     // every man within reach of an enemy fights him, charging or not
     for (const u of B.units) {
       for (const m of u.men) {
         if (m.state !== 'formed' || m.role === 'drummer' || m.role === 'fifer') continue;
-        let foe = m.foe && m.foe.state === 'formed' && dist2(m.x, m.y, m.foe.x, m.foe.y) < CFG.MELEE_REACH * CFG.MELEE_REACH ? m.foe : null;
-        if (!foe) Move.near(B, m.x, m.y, CFG.MELEE_REACH, a => { if (!foe && a.team !== m.team && a.state === 'formed') foe = a; });
-        if (!foe) { if (u.order !== 'charge') m.foe = null; continue; }
+        const reach = m.horse ? CFG.CAV_REACH : CFG.MELEE_REACH;
+        // a horseman riding down a man who is running: he cannot fight back
+        if (m.horse && m.foe && m.foe.state === 'fleeing' && m.foe !== c0) {
+          if (dist2(m.x, m.y, m.foe.x, m.foe.y) < reach * reach) {
+            u.engaged++;
+            if (B.rng() < CFG.CAV_PURSUIT * (u.cav.pursuit || 1) * (0.5 + 0.5 * u.wind) * dt) Combat.hit(B, m.foe, m);
+          }
+          continue;
+        }
+        let foe = m.foe && m.foe.state === 'formed' && dist2(m.x, m.y, m.foe.x, m.foe.y) < reach * reach ? m.foe : null;
+        if (!foe) Move.near(B, m.x, m.y, reach, a => { if (!foe && a.team !== m.team && a.state === 'formed') foe = a; });
+        // (men closing on a lone officer keep after him)
+        if (!foe) { if (u.order !== 'charge' && !(B.cmdAlone && m.foe === c0 && dist2(m.x, m.y, c0.x, c0.y) < mob2)) m.foe = null; continue; }
         m.foe = foe;
         m.aimAt = Math.atan2(foe.y - m.y, foe.x - m.x);
         u.engaged++;
         let p = CFG.MELEE_KILL * u.melee * Combat.moraleMul(u) * (u.order === 'charge' ? 1 + 0.5 * clamp(u.impetus || 0, 0, 1.2) : 1) * (m.role === 'officer' ? 1.5 : 1) * (0.55 + 0.45 * u.wind);
-        if (foe === B.cmd) p *= 0.6;
+        if (foe === B.cmd) p *= B.cmdAlone ? CFG.CMD_ALONE_HIT : 0.6;
+        // sabre from the saddle against foot; a bayonet against a horseman (far better from inside a square)
+        if (m.horse && !foe.horse) p *= foe.unit && foe.unit.form.kind === 'square' ? 0.5 : CFG.CAV_SABRE;
+        else if (!m.horse && foe.horse) p *= u.form.kind === 'square' ? 1.2 : CFG.CAV_VS_HORSE;
         if (B.rng() < p * dt) Combat.hit(B, foe, m);
       }
     }
@@ -205,13 +238,14 @@ const Combat = {
     }
   },
 
-  nearestFoe(B, m, r) {
+  // (horsemen will ride down men who are running, too)
+  nearestFoe(B, m, r, fleeing) {
     let best = null, bd = r * r;
     for (const e of B.units) {
       if (e.team === m.team) continue;
       if (dist2(m.x, m.y, e.cx, e.cy) > (r + 40) * (r + 40)) continue;
       for (const o of e.men) {
-        if (o.state !== 'formed') continue;
+        if (o.state !== 'formed' && !(fleeing && o.state === 'fleeing')) continue;
         const d = dist2(m.x, m.y, o.x, o.y);
         if (d < bd) { bd = d; best = o; }
       }
@@ -222,6 +256,7 @@ const Combat = {
   endCharge(B, u) {
     u.order = 'hold';
     for (const m of u.men) m.foe = null;
+    if (u.arm === 'cav') { u.ai.restUntil = B.t + 20; u.ai.charged = (u.ai.charged || 0) + 1; }
     let fx = 0, fy = 0;
     for (const m of u.men) if (m.state === 'formed') { fx += Math.cos(m.facing); fy += Math.sin(m.facing); }
     Unit.setForm(u, 'line', u.cx, u.cy, Math.atan2(fy, fx));
@@ -238,18 +273,20 @@ const Combat = {
       for (const d of B.units) {
         if (d.team === c.team || !d.formed || d.routed) continue;
         const dd = dist(c.cx, c.cy, d.cx, d.cy);
-        if (dd > CFG.CHARGE_RANGE) continue;
+        const horse = c.arm === 'cav';
+        if (dd > (horse ? CFG.CAV_CHARGE_RANGE : CFG.CHARGE_RANGE)) continue;
         const push = Combat.momentum(B, c, d);
         const odds = push * (c.morale / 60);
         const loaded = d.men.filter(m => m.m === 'present').length / Math.max(1, d.formed);
         d.beingCharged = 1;
-        d.morale -= CFG.CHARGE_SHOCK * odds * (1 - loaded * 0.5) * dt;
+        const vsHorse = horse && d.arm !== 'cav' ? (Combat.squareFormed(d, B) ? 0.15 : CFG.CAV_SHOCK) : 1;
+        d.morale -= CFG.CHARGE_SHOCK * odds * (1 - loaded * 0.5) * vsHorse * dt;
         // "wait for it": a line still presented gives them a volley in the face, unordered
         if (dd < CFG.POINT_BLANK && !d.routed) {
           for (const m of d.men) if (m.m === 'present' && !m.volleyAt && m.state === 'formed') m.volleyAt = B.t + B.rng() * 0.35;
         }
         // and then one side's nerve goes. Most bayonet charges ended here, before steel crossed
-        if (dd < CFG.CHARGE_TEST && !c.tested.includes(d.id)) {
+        if (dd < CFG.CHARGE_TEST && c.chargeT >= CFG.CHARGE_TEST_AFTER && !c.tested.includes(d.id)) {
           c.tested.push(d.id);
           // two charges meeting: one clash, not two
           if (d.order === 'charge' && d.tested) d.tested.push(c.id);
@@ -259,10 +296,33 @@ const Combat = {
     }
   },
 
+  // the player is told what beat him, so the next charge can be better
+  whyFalter(c, d) {
+    const n = c.lastNerve || {};
+    if (n.imp < 0.5) return ' — no run at them, the men never got going';
+    if (n.dh < -2) return ' — uphill, they had nothing left';
+    if (c.wind < 0.4) return ' — the men were blown';
+    if (c.formed < d.formed * 0.7) return ' — too few against too many';
+    if (n.loaded > 0.6) return ' — their muskets were levelled; catch them reloading';
+    if (c.morale < CFG.STEADY) return ' — the men were already shaken';
+    return ' — they stood';
+  },
+
+  // a square with most of its men in their places: horses will not face it
+  squareFormed(u, B) { return Combat.squareReady(u, B) > 0.99; },
+  // 0..1: how far a square is from being a hedge of bayonets (men in their places, ranks dressed, corners closed)
+  squareReady(u, B) {
+    if (u.form.kind !== 'square') return 0;
+    const placed = clamp((u.inSlot - 0.3) / (CFG.SQUARE_FORMED - 0.3), 0, 1);
+    const dressed = clamp((B.t - (u.squareT || 0)) / (CFG.SQUARE_DRESS * Math.max(0.3, 1.25 - u.drill)), 0, 1);
+    return Math.min(placed, dressed);
+  },
+
   // a charge's weight: numbers × how fast they are coming × the drop, × column / grenadiers / steel
   momentum(B, c, d) {
     const dh = clamp(Field.heightAt(B.field, c.cx, c.cy) - Field.heightAt(B.field, d.cx, d.cy), -8, 8);
-    return clamp(c.formed / d.formed, 0.4, 2.5) * c.melee
+    const horse = c.arm === 'cav' && d.arm !== 'cav' ? CFG.CAV_MASS * c.cav.mass : c.arm === 'cav' ? c.cav.mass : 1;
+    return clamp(c.formed / d.formed, 0.4, 2.5) * c.melee * horse
       * (0.35 + 0.65 * clamp(c.impetus || 0, 0, 1.2)) * (1 + dh * CFG.SLOPE_PUSH)
       * (c.chargeFrom === 'attack' ? CFG.ATTACK_SHOCK : 1) * (c.ctype === 'grenadier' ? 1.25 : 1);
   },
@@ -272,20 +332,40 @@ const Combat = {
     // steadiness: muskets still levelled, or a volley delivered in the last few seconds (holding fire to the last pays);
     // a line caught with its ramrods out is the weakest thing on the field
     const line = d.men.filter(m => m.role === 'line' && m.state === 'formed');
-    const loaded = line.filter(m => m.m === 'present' || m.m === 'presenting' || B.t - (m.firedAt || -99) < CFG.STEADY_AFTER).length / Math.max(1, line.length);
-    const cover = d.men.some(m => m.state === 'formed' && Field.coverFor(B.field, m.x, m.y, c.cx, c.cy) < 1) ? 1.3 : 1;
+    const horse = c.arm === 'cav' && d.arm !== 'cav';
+    // (against horse only a musket still levelled counts: a line that has just fired has nothing left but bayonets)
+    const loaded = line.filter(m => m.m === 'present' || m.m === 'presenting' || (!horse && B.t - (m.firedAt || -99) < CFG.STEADY_AFTER)).length / Math.max(1, line.length);
+    // a wall or a wood stops a horse far better than it stops a man
+    const cover = d.men.some(m => m.state === 'formed' && Field.coverFor(B.field, m.x, m.y, c.cx, c.cy) < 1) ? (horse ? 2 : 1.3) : 1;
     const att = c.morale * push;
+    // horse against foot: a formed square is a hedge of bayonets no horse will ride onto;
+    // a line or a column taken in the flank cannot even turn its muskets round
+    let vsHorse = 1;
+    if (horse) {
+      // (a square's bayonets are the point, loaded or not)
+      // a square half-formed is worse than a line: men running to their places, corners open
+      if (d.form.kind === 'square') { const k = Combat.squareReady(d, B), k3 = k * k * k; vsHorse = lerp(0.6, CFG.SQUARE_DEF, k3) * (0.75 + 0.6 * lerp(loaded, 1, k3)) / (0.75 + 0.6 * loaded); }
+      else if (Math.abs(angDiff(d.form.facing, Math.atan2(c.cy - d.cy, c.cx - d.cx))) > Math.PI / 3) vsHorse = 0.55;
+      if (d.form.kind === 'skirmish') vsHorse *= 0.65;
+    }
     // a company charging too meets you with its own momentum, not its muskets
-    const def = d.order === 'charge' ? d.morale * Combat.momentum(B, d, c) : d.morale * (0.75 + 0.6 * loaded) * cover * (d.form.kind === 'skirmish' ? 0.6 : 1);
+    const def = d.order === 'charge' ? d.morale * Combat.momentum(B, d, c) : d.morale * (0.75 + 0.6 * loaded) * cover * vsHorse * (d.form.kind === 'skirmish' ? 0.6 : 1);
     const p = att * att / (att * att + def * def);
+    c.lastNerve = { p, imp: c.impetus || 0, loaded, dh: Field.heightAt(B.field, c.cx, c.cy) - Field.heightAt(B.field, d.cx, d.cy) };
     if (B.rng() < p) {
       d.morale -= 18;
       Battle.log(B, `${d.name} wavers before the bayonets!`, d.team === TEAM_PLAYER ? 'bad' : 'good');
       B.fx.push({ kind: 'say', x: d.cx, y: d.cy, text: d.team === TEAM_PLAYER ? 'They\u2019re wavering!' : 'Ils fl\u00e9chissent!', t: B.t, team: d.team, foreign: d.team !== TEAM_PLAYER });
+    } else if (horse) {
+      // the horses refuse: the squadron sheers off round the bayonets and rides back, taking fire as it goes
+      c.morale -= 8;
+      Combat.endCharge(B, c);
+      Battle.log(B, c.team === TEAM_PLAYER ? `${c.name}: the horses refuse.` : `The ${c.cav.short.toLowerCase()} sheer off — the horses will not face ${d.name}${d.form.kind === 'square' ? '\u2019s square' : ''}.`, c.team === TEAM_PLAYER ? 'bad' : 'good');
+      B.fx.push({ kind: 'say', x: d.cx, y: d.cy, text: d.team === TEAM_PLAYER ? 'Steady — they won\u2019t come on!' : 'Tenez bon!', t: B.t, team: d.team, foreign: d.team !== TEAM_PLAYER });
     } else {
       c.morale -= 10;
       Combat.endCharge(B, c);
-      Battle.log(B, `${c.name}: the charge falters in front of them.`, c.team === TEAM_PLAYER ? 'bad' : 'good');
+      Battle.log(B, `${c.name}: the charge falters in front of them${c.team === TEAM_PLAYER ? Combat.whyFalter(c, d) : ''}.`, c.team === TEAM_PLAYER ? 'bad' : 'good');
       B.fx.push({ kind: 'say', x: c.cx, y: c.cy, text: c.team === TEAM_PLAYER ? 'The charge falters!' : 'Halte!', t: B.t, team: c.team, foreign: c.team !== TEAM_PLAYER });
     }
   },

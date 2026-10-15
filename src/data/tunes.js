@@ -50,6 +50,7 @@ const DRUM_CALLS = {
   fallback: ['X', '.', '.', 'x', 'X', '.', '.', 'x'],
   retire:   ['X', '.', '.', '.', 'X', '.', '.', '.', 'X'],
   reform:   ['X', 'x', 'X', '.', 'X', 'x', 'X'],
+  square:   ['r', 'r', 'X', '.', 'r', 'r', 'X', '.', 'X'],
   skirmish: ['x', 'x', 'X', '.', 'x', 'x', 'X'],
   close:    ['X', '.', 'X', 'x', 'X', '.'],
   byrank:   ['X', 'x', '.', 'X', 'x', '.'],

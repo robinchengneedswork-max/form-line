@@ -30,6 +30,16 @@ function coy(team, x, y, facing, size, drill, doctrine, extra = {}) {
   return Object.assign({ team, x, y, facing, size, drill, doctrine,
     drummer: true, fifer: team === TEAM_ENEMY ? size >= 28 : true, colours: true }, extra);
 }
+// a squadron of French horse. Which kind depends on how far into the campaign you are:
+// chasseurs early, lancers in the middle, cuirassiers at the end
+function horse(x, y, facing, lv, rng, extra = {}) {
+  const cavType = lv < 0.45 ? 'chasseurs' : lv < 0.75 ? rng.pick(['chasseurs', 'lancers']) : rng.pick(['lancers', 'cuirassiers']);
+  return Object.assign({ team: TEAM_ENEMY, x, y, facing, size: Math.round(20 + lv * 10 + rng.int(-2, 2)), drill: 0.5,
+    doctrine: 'cavalry', arm: 'cav', cavType, drummer: true, fifer: false, colours: false }, extra);
+}
+// from a third of the way into a campaign, the enemy sometimes brings horse
+const bringsHorse = (lv, rng, p) => lv >= 0.3 && rng() < p;
+
 const enemyStrength = (level, rng) => ({
   size: Math.round(22 + level * 16 + rng.int(-2, 3)),
   drill: clamp(0.25 + level * 0.5 + rng.range(-0.08, 0.08), 0.1, 0.95),
@@ -45,7 +55,29 @@ const SCENARIOS = {
       return {
         player: { x: 360, y: 470, facing: NORTH },
         allies: [],
-        enemies: [coy(1, 360 + rng.range(-60, 60), 95, SOUTH, e.size, e.drill, 'attack', { nerve: e.nerve })],
+        enemies: [coy(1, 360 + rng.range(-60, 60), 95, SOUTH, e.size, e.drill, 'attack', { nerve: e.nerve })]
+          .concat(bringsHorse(lv, rng, 0.5) ? [horse(rng() < 0.5 ? 130 : 590, 70, SOUTH, lv, rng)] : []),
+      };
+    },
+  },
+
+  heath: {
+    name: 'The Heath', blurb: 'Open heath and firm going — cavalry country. A company of French foot, and a squadron of horse with it. There is a little copse on your left.',
+    build(f, rng) {
+      baseGround(f, rng, { amp: 3, wheat: 0.12, woods: 0 });
+      Paint.disc(f, 150, 380, 42, T.WOODS);
+      Paint.disc(f, 610, 210, 28, T.WOODS);
+    },
+    deploy(rng, lv) {
+      const e = enemyStrength(lv, rng);
+      return {
+        player: { x: 360, y: 450, facing: NORTH },
+        allies: [],
+        enemies: [
+          coy(1, 330 + rng.range(-40, 40), 95, SOUTH, Math.round(e.size * 0.8), e.drill, 'attack', { nerve: e.nerve }),
+          horse(560, 75, SOUTH, lv, rng, { size: Math.round(18 + lv * 10) }),
+        ],
+        note: 'Foot and horse. When the horse come on, form square (E) — or get into the copse.',
       };
     },
   },
@@ -68,7 +100,7 @@ const SCENARIOS = {
         enemies: [
           coy(1, 280, 90, SOUTH, Math.round(e.size * 0.75), e.drill - 0.05, 'attack', { nerve: e.nerve }),
           coy(1, 450, 80, SOUTH, Math.round(e.size * 0.65), e.drill - 0.05, 'attack', { nerve: e.nerve, fifer: false, delay: 40 }),
-        ],
+        ].concat(bringsHorse(lv, rng, 0.35) ? [horse(620, 60, SOUTH, lv, rng, { delay: 60 })] : []),
         note: 'They bring two companies. You have the ridge.',
       };
     },
@@ -246,4 +278,4 @@ const SCENARIOS = {
   },
 };
 
-const BATTLE_POOL = ['plain', 'ridge', 'farm', 'ford', 'woods', 'village', 'lane'];
+const BATTLE_POOL = ['plain', 'ridge', 'farm', 'ford', 'woods', 'village', 'lane', 'heath'];

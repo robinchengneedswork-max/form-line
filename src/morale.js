@@ -23,6 +23,8 @@ const Morale = {
     if (flank) { d *= CFG.FLANK_MULT; u.flanked = B.t; }
     // the depth of a column of attack is what carries it: the men feel the mass behind them
     if (u.form.kind === 'attack') d *= CFG.ATTACK_NERVE;
+    // a squadron is a handful of men here, and horsemen at the gallop do not see who fell
+    if (u.arm === 'cav') d *= CFG.CAV_NERVE;
     if (role === 'officer') d += CFG.OFFICER_LOST;
     u.morale -= d;
     u.lastHit = B.t;
@@ -56,7 +58,8 @@ const Morale = {
       const quiet = B.t - u.lastHit > CFG.QUIET;
       const aura = Morale.aura(B, u);
       if (u.routed) {
-        if (B.t - u.lastHit > 8) u.morale += CFG.REGEN * 0.5 * dt * (aura ? 3 : 1);
+        // with an officer among them they start to steady even while the balls are still coming
+        if (aura || B.t - u.lastHit > 8) u.morale += CFG.REGEN * 0.5 * dt * (aura ? 3 : 1);
         u.morale = clamp(u.morale, 0, 100);
         continue;
       }
@@ -93,7 +96,7 @@ const Morale = {
 
   rout(B, u) {
     if (u.routed) return;
-    u.routed = true; u.everRouted = true;
+    u.routed = true; u.everRouted = true; u.routT = B.t;
     u.order = 'rout'; u.fire = 'hold';
     for (const m of u.men) if (m.state === 'formed') { m.state = 'fleeing'; m.foe = null; m.m = m.role === 'line' ? 'loaded' : 'none'; }
     B.events.push({ type: 'rout', team: u.team, x: u.cx, y: u.cy });
@@ -110,6 +113,8 @@ const Morale = {
   unrout(B, u) {
     const L = u.isPlayer ? B.cmd : u.leader;
     if (!L || L.state !== 'formed') return false;
+    // enough of them have to stop to make a stand, or they just keep going
+    if (Morale.gathered(u, L) <= Math.max(2, u.startSize * 0.25)) return false;
     u.routed = false;
     let n = 0;
     for (const m of u.men) {
@@ -124,12 +129,15 @@ const Morale = {
     return true;
   },
 
+  gathered(u, L) { return u.men.filter(m => m.state === 'fleeing' && m.role === 'line' && dist2(m.x, m.y, L.x, L.y) < 70 * 70).length; },
+
   // the player's "Rally!" — immediate, not relayed. Only works in person.
   rally(B) {
     const c = B.cmd;
-    if (c.state !== 'formed' || B.t < (c.rallyCd || 0)) return false;
+    if (c.state !== 'formed') return false;
+    if (B.t < (c.rallyCd || 0)) { Battle.log(B, `Your voice is gone — rally again in ${Math.ceil(c.rallyCd - B.t)}s.`, 'bad'); return false; }
     c.rallyCd = B.t + CFG.RALLY_COOLDOWN;
-    let any = false;
+    let any = false, took = false, failed = null;
     for (const u of B.units) {
       if (u.team !== TEAM_PLAYER) continue;
       let near = dist2(c.x, c.y, u.cx, u.cy) < CFG.RALLY_RANGE * CFG.RALLY_RANGE * 2;
@@ -137,9 +145,20 @@ const Morale = {
       if (!near) continue;
       any = true;
       u.morale = clamp(u.morale + CFG.RALLY_BOOST * (u.isPlayer ? 1 : 0.6), 0, 100);
-      if (u.routed && u.morale >= CFG.RALLY_AT - CFG.RALLY_BOOST) Morale.unrout(B, u);
+      if (u.routed) {
+        if (u.morale >= CFG.RALLY_AT && Morale.unrout(B, u)) took = true;
+        else failed = u;
+      } else took = true;
     }
     B.fx.push({ kind: 'rally', x: c.x, y: c.y, t: B.t });
+    if (!any) { Battle.log(B, 'Nobody near enough to hear you rally — get among them.', 'bad'); c.rallyCd = B.t + CFG.RALLY_RETRY; }
+    else if (failed && !took) {
+      // it did not take: say why, and let him try again soon
+      const few = Morale.gathered(failed, c) <= Math.max(2, failed.startSize * 0.25);
+      Battle.log(B, few ? `${failed.name}: too few of them near you to make a stand — get in front of the rest.`
+        : `${failed.name} won't stop yet — stay among them and try again.`, 'bad');
+      c.rallyCd = B.t + CFG.RALLY_RETRY;
+    }
     return any;
   },
 };
