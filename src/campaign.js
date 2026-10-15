@@ -29,7 +29,9 @@ const Campaign = {
     return { name: 'No. 4 Company, 1/52nd Foot', drill: 0.35, nerve: 0, drummer: true, fifer: true, colours: true, soldiers,
       type: null,       // chosen at Captain: 'light' | 'grenadier' | 'line'
       drills: [],       // learned drills (see LEARNED_DRILLS in orders.js)
-      rifles: 0 };      // Baker rifles owned; the best shots carry them
+      rifles: 0,        // Baker rifles owned; the best shots carry them
+      surgeons: 0,      // surgeon's mates, 0..3: more of the wounded live to march again
+      recruiters: 0 };  // a recruiting party, 0..3: raw men come up after every battle
   },
 
   newRun(seed) {
@@ -48,6 +50,7 @@ const Campaign = {
   migrate(run) {
     const co = run.company;
     co.drills = co.drills || []; co.rifles = co.rifles || 0; co.type = co.type || null;
+    co.surgeons = co.surgeons || 0; co.recruiters = co.recruiters || 0;
     for (const s of co.soldiers) { s.rank = s.rank || 'pte'; s.weapon = s.weapon || 'musket'; }
     return run;
   },
@@ -116,7 +119,7 @@ const Campaign = {
   afterBattle(run, node, R) {
     const rng = Campaign.rng(run);
     const co = run.company;
-    const rep = { how: R.how, orders: R.orders, lines: [], renown: 0, dead: [], wounded: 0, returned: 0, stragglers: 0, promoted: null };
+    const rep = { how: R.how, orders: R.orders, lines: [], renown: 0, dead: [], wounded: 0, returned: 0, stragglers: 0, promoted: null, captured: 0, saved: R.saved || 0 };
     const add = (n, why) => { if (!n) return; rep.renown += n; rep.lines.push([why, n]); };
     if (R.won) add(node.type === 'elite' ? 35 : node.type === 'finale' ? 60 : node.type === 'setpiece' ? 40 : 20, 'Victory');
     if (R.orders != null) {
@@ -129,7 +132,11 @@ const Campaign = {
     add(R.coloursTaken * 25, `${R.coloursTaken} enemy colour${R.coloursTaken === 1 ? '' : 's'} taken`);
     add(R.commanderKills * 2, 'Your own sword');
     if (R.coloursLost) add(-20, 'Your colours lost');
-    if (R.how === 'withdrew') rep.lines.push(['You withdrew from the field', 0]);
+    if (R.how === 'withdrew') {
+      rep.lines.push(['You withdrew from the field', 0]);
+      if (R.captured) rep.lines.push([`${R.captured} men left behind and taken prisoner`, 0]);
+      else if (R.saved >= Math.max(4, R.player.startSize * 0.5)) add(6, 'The company brought off in good order');
+    }
 
     // the men
     const U = R.player;
@@ -137,13 +144,16 @@ const Campaign = {
     for (const m of U.men) {
       if (m.role === 'drummer' || m.role === 'fifer') {
         if (m.state === 'down' && !(m.wounded && rng() < 0.6)) { co[m.role] = false; rep.lines.push([`Your ${m.role} was killed`, 0]); }
+        else if (m.captured) { co[m.role] = false; rep.lines.push([`Your ${m.role} was taken prisoner`, 0]); }
         continue;
       }
       const s = m.src;
       if (!s) continue;
       s.kills += m.kills;
+      if (m.captured) { rep.captured++; rep.dead.push(Object.assign({}, s, { captured: true })); continue; }
+      if (m.saved) { s.battles++; s.xp += 1; keep.push(s); continue; }
       if (m.state === 'down') {
-        if (m.wounded && rng() < 0.55) { rep.wounded++; s.battles++; keep.push(s); }
+        if (m.wounded && rng() < Campaign.woundedLive(co)) { rep.wounded++; s.battles++; keep.push(s); }
         else { rep.dead.push(s); run.fallen.push({ name: s.name, kills: s.kills, battles: s.battles + 1 }); }
       } else if (m.state === 'gone' || m.state === 'fleeing') {
         if (rng() < 0.85) { rep.stragglers++; s.battles++; keep.push(s); } else rep.dead.push(Object.assign({}, s, { deserted: true }));
@@ -154,6 +164,10 @@ const Campaign = {
       }
     }
     co.soldiers = keep;
+    // the recruiting party has been busy while you fought
+    const room = Campaign.capacity(run) - co.soldiers.length, n = Math.min(Math.max(0, room), co.recruiters || 0);
+    for (let i = 0; i < n; i++) co.soldiers.push(Campaign.newSoldier(rng));
+    rep.recruits = n;
     if (R.coloursLost) co.colours = false;
     const best = U.men.filter(m => m.src && m.state === 'formed').sort((a, b) => b.kills - a.kills)[0];
     if (best && best.kills >= 2) rep.promoted = { name: best.src.name, kills: best.kills };
@@ -195,6 +209,14 @@ const Campaign = {
     return true;
   },
   rifleCap(co) { return co.type === 'light' ? 6 : 4; },
+  // the establishment: [cost of level 1, 2, 3]
+  ESTAB: {
+    surgeons: { name: 'Surgeon\u2019s mate', costs: [16, 26, 40],
+      desc: l => `More of the wounded survive the surgeon's table (${Math.round(Campaign.woundedLive({ surgeons: l }) * 100)}% → ${Math.round(Campaign.woundedLive({ surgeons: l + 1 }) * 100)}%).` },
+    recruiters: { name: 'Recruiting party', costs: [18, 30, 45],
+      desc: l => `A sergeant and a drummer beating up for volunteers: ${l + 1} raw recruit${l ? 's' : ''} join after every battle, if there is room.` },
+  },
+  woundedLive(co) { return [0.55, 0.68, 0.79, 0.88][co.surgeons || 0]; },
   // the rifles go to the best shots, unless you have handed them out yourself
   armRifles(co) {
     const armed = co.soldiers.filter(s => s.weapon === 'rifle');
@@ -255,6 +277,10 @@ const Campaign = {
       { key: 'drummer', name: 'Drummer boy', desc: 'Carries your orders beyond shouting range. Steadies the men.', cost: 14, ok: !co.drummer },
       { key: 'fifer', name: 'Fifer', desc: 'Music in the ranks. Morale recovers faster.', cost: 12, ok: !co.fifer },
       { key: 'colours', name: 'New colours', desc: 'The regiment will not forget the old ones.', cost: 30, ok: !co.colours },
+      ...Object.entries(Campaign.ESTAB).map(([k, E]) => {
+        const l = co[k] || 0;
+        return { key: k, name: `${E.name} ${['I', 'II', 'III'][Math.min(l, 2)]}`, desc: l >= 3 ? 'At full establishment.' : E.desc(l), cost: E.costs[Math.min(l, 2)], ok: l < 3 };
+      }),
       { key: 'surgeon', name: 'Surgeon', desc: 'Patch up your own wounds (+1).', cost: 9, ok: run.commander.hp < run.commander.maxHp },
     ];
   },
@@ -270,6 +296,7 @@ const Campaign = {
     if (key === 'drummer') co.drummer = true;
     if (key === 'fifer') co.fifer = true;
     if (key === 'colours') co.colours = true;
+    if (Campaign.ESTAB[key]) co[key] = (co[key] || 0) + 1;
     if (key === 'surgeon') run.commander.hp = Math.min(run.commander.maxHp, run.commander.hp + 1);
     return true;
   },

@@ -14,6 +14,15 @@ const Move = {
     } else if (u.order === 'charge' && u.formed) {
       // the colours, the drum and the slot frame go in behind the bayonets
       f.x = lerp(f.x, u.cx, 0.05); f.y = lerp(f.y, u.cy, 0.05);
+    } else if (u.order === 'retire' && u.retireRoute && u.retireRoute.length) {
+      const w = u.retireRoute[0], d = dist(f.x, f.y, w.x, w.y);
+      if (d < 3 && u.retireRoute.length > 1) u.retireRoute.shift();
+      else if (d > 0.5) {
+        const ux = (w.x - f.x) / d, uy = (w.y - f.y) / d;
+        const coh = clamp(u.inSlot * 1.4 - 0.25, 0.3, 1);
+        const pace = CFG.WALK * 1.15 * Field.speedAt(B.field, f.x, f.y, ux, uy) * coh;
+        f.x += ux * Math.min(d, pace * dt); f.y += uy * Math.min(d, pace * dt);
+      }
     } else if ((u.order === 'advance' || u.order === 'fallback') && f.kind !== 'column') {
       const sign = u.order === 'advance' ? 1 : -1;
       const fx = Math.cos(f.facing) * sign, fy = Math.sin(f.facing) * sign;
@@ -42,18 +51,22 @@ const Move = {
     const len = Math.hypot(vx, vy);
     if (len > 0) {
       vx /= len; vy /= len;
-      const sp = (c.run ? CFG.CMD_RUN : CFG.CMD_WALK) * Field.speedAt(B.field, c.x, c.y, vx, vy);
+      const run = c.run && c.wind > 0;
+      const sp = (run ? lerp(CFG.CMD_WALK, CFG.CMD_SPRINT, clamp(c.wind / 0.25, 0, 1)) : CFG.CMD_WALK) * Field.speedAt(B.field, c.x, c.y, vx, vy);
+      c.wind = clamp(c.wind + (run ? -CFG.CMD_WIND_DRAIN : CFG.CMD_WIND_REST * 0.5) * dt, 0, 1);
       Move.step(B, c, vx * sp * dt, vy * sp * dt);
       c.facing = turnToward(c.facing, Math.atan2(vy, vx), 8 * dt);
       c.moving = sp;
     } else {
       c.moving = 0;
+      c.wind = clamp(c.wind + CFG.CMD_WIND_REST * dt, 0, 1);
       if (c.aim != null) c.facing = turnToward(c.facing, c.aim, 5 * dt);
     }
   },
 
   // every man in the battle
   men(B, dt) {
+    for (const u of B.units) { u.rushing = 0; u.mo = 0; u.moN = 0; }
     for (const u of B.units) {
       const fleeDir = u.team === TEAM_PLAYER ? 1 : -1;
       for (const m of u.men) {
@@ -63,7 +76,19 @@ const Move = {
           tx = m.x + m.jx * 4; ty = m.y + fleeDir * 20; max = CFG.FLEE;
           if (m.y < 2 || m.y > B.field.h - 2) { m.state = 'gone'; u.stats.fled++; continue; }
         } else if (m.foe && m.foe.state === 'formed') {
-          tx = m.foe.x; ty = m.foe.y; max = CFG.CHARGE;
+          tx = m.foe.x; ty = m.foe.y;
+          if (u.order === 'charge') {
+            const rush = dist2(m.x, m.y, tx, ty) < CFG.CHARGE_RUSH * CFG.CHARGE_RUSH;
+            if (rush) u.rushing++;
+            max = rush ? lerp(CFG.QUICK, CFG.CHARGE, clamp((u.wind - 0.05) / 0.35, 0, 1)) : CFG.QUICK;
+            if (rush) {
+              // running downhill carries you; uphill is already slowed by speedAt
+              const d0 = Math.hypot(tx - m.x, ty - m.y) || 1, ux = (tx - m.x) / d0, uy = (ty - m.y) / d0;
+              const grade = (Field.heightAt(B.field, m.x, m.y) - Field.heightAt(B.field, m.x + ux * 3, m.y + uy * 3)) / 3 * 100;
+              if (grade > 0) max *= 1 + Math.min(0.18, grade * CFG.DOWNHILL_RUSH);
+            }
+            u.mo += m.moving || 0; u.moN++;
+          } else max = CFG.QUICK;
           if (dist2(m.x, m.y, tx, ty) < CFG.MELEE_REACH * CFG.MELEE_REACH * 0.5) { m.moving = 0; m.facing = Math.atan2(ty - m.y, tx - m.x); continue; }
         } else if (m === u.leader && u.order === 'follow' && u.ai.dest) {
           tx = u.ai.dest.x; ty = u.ai.dest.y; max = CFG.WALK * 1.15;
@@ -73,6 +98,10 @@ const Move = {
           const d = dist(m.x, m.y, tx, ty);
           max = d > 5 ? CFG.CATCH_UP : (u.order === 'advance' || u.order === 'fallback' || u.order === 'follow') ? CFG.QUICK : CFG.WALK;
           if (m.state === 'formed' && m.role === 'line' && (m.m === 'present' || m.m === 'presenting') && d < CFG.SLOT_FORMED) max = 0;
+          // on the road with orders to retire: off the field and safe
+          if (u.order === 'retire' && m.state === 'formed' && B.retreat && Battle.atRetreat(B, m.x, m.y)) {
+            m.state = 'gone'; m.saved = true; u.saved = (u.saved || 0) + 1; continue;
+          }
         }
         if (u.ctype === 'light') max *= 1.1;
         const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy);
@@ -91,6 +120,22 @@ const Move = {
       }
     }
     Move.separate(B);
+    Move.wind(B, dt);
+    // impetus: how fast the charging men are actually going (1 = a fresh rush on the flat)
+    for (const u of B.units) u.impetus = lerp(u.impetus || 0, u.moN ? u.mo / u.moN / CFG.CHARGE : 0, Math.min(1, dt * 3));
+  },
+
+  // breath: the rush spends it, fighting spends it, standing still gives it back
+  wind(B, dt) {
+    for (const u of B.units) {
+      let r;
+      if (u.rushing > u.formed * 0.25) r = -CFG.WIND_RUSH;
+      else if (u.engaged) r = -CFG.WIND_FIGHT;
+      else if (u.order === 'charge') r = -CFG.WIND_QUICK;
+      else if (u.order === 'hold') r = CFG.WIND_REST;
+      else r = CFG.WIND_WALK;
+      u.wind = clamp(u.wind + r * dt, 0, 1);
+    }
   },
 
   // step with river/building avoidance: try straight, then slide along the obstacle

@@ -251,6 +251,135 @@ console.log('§10 set pieces');
   chk('the great battle is a set piece', !!SCENARIOS.finale.setpiece);
 }
 
+console.log('§11 the charge, wind & the road');
+{
+  // put the enemy N metres north of us, halted in line, and hold everyone still
+  const facing = (B, gap) => {
+    const u = B.player, E = B.units.find(e => e.team === TEAM_ENEMY);
+    for (const e of B.units) if (e !== u && e !== E) { e.men.forEach(m => { m.state = 'gone'; }); }
+    const dy = (u.cy - gap) - E.cy;
+    for (const m of E.men) { m.x += u.cx - E.cx; m.y += dy; }
+    Unit.setForm(E, 'line', u.cx, u.cy - gap, Math.PI / 2); E.order = 'hold'; E.doctrine = 'hold'; E.delay = 1e9;
+    for (const m of E.men) { m.sx = m.x; m.sy = m.y; }
+    Unit.survey(E);
+    for (const m of u.men) { m.x = m.sx; m.y = m.sy; }
+    return E;
+  };
+  let B = fresh('plain', 61), u = B.player;
+  facing(B, 130);
+  const y0 = u.cy;
+  Orders.apply(B, u, 'charge', {});
+  run(B, 6);
+  chk('a charge from 130 m goes in at quick time, not a sprint', y0 - u.cy < 6 * CFG.QUICK + 2 && u.wind > 0.9, (y0 - u.cy).toFixed(1) + ' m, wind ' + u.wind.toFixed(2));
+
+  B = fresh('plain', 62); u = B.player;
+  const E = facing(B, 34);
+  E.fire = 'hold'; for (const m of E.men) m.m = 'loaded';
+  Orders.apply(B, u, 'charge', {});
+  run(B, 1.5);
+  chk('…inside the last 40 m they rush it, and that costs wind', u.rushing > 3 || u.wind < 0.97, 'wind ' + u.wind.toFixed(2));
+
+  B = fresh('plain', 63); u = B.player; facing(B, 200);
+  Orders.apply(B, u, 'charge', {}); u.wind = 0.02; run(B, 0.5);
+  chk('blown men cannot keep a charge going', u.order === 'hold');
+
+  // the point-blank volley: a presented line fires on its own at 30 m
+  B = fresh('plain', 64); u = B.player;
+  const E2 = facing(B, 34);
+  E2.fire = 'ready'; for (const m of E2.men) if (m.role === 'line' && m.rank < CFG.FIRING_RANKS) m.m = 'present';
+  Orders.apply(B, u, 'charge', {});
+  let fired = false;
+  for (let i = 0; i < 30 * 8 && !fired; i++) { Battle.step(B, CFG.STEP); fired = E2.men.some(m => m.m === 'reloading'); }
+  chk('a line still presented gives a charge a volley in the face, unordered', fired);
+
+  // the nerve test: a steady loaded line usually stops a charge; a shaken empty one usually breaks
+  let falter = 0, broke = 0;
+  for (let k = 0; k < 60; k++) {
+    let b = fresh('plain', 400 + k), c = b.player, d = b.units.find(e => e.team === TEAM_ENEMY);
+    c.morale = 60; d.morale = 70; for (const m of d.men) if (m.role === 'line') m.m = 'present';
+    Orders.apply(b, c, 'charge', {}); Combat.nerve(b, c, d, 1);
+    if (c.order !== 'charge') falter++;
+    b = fresh('plain', 500 + k); c = b.player; d = b.units.find(e => e.team === TEAM_ENEMY);
+    c.morale = 60; d.morale = 35; for (const m of d.men) m.m = 'reloading';
+    Orders.apply(b, c, 'charge', {}); const m0 = d.morale; Combat.nerve(b, c, d, 1.4);
+    if (d.morale < m0) broke++;
+  }
+  chk('…a steady, loaded line stops most charges', falter > 36, falter + '/60');
+  chk('…a shaken line with empty muskets usually gives way', broke > 42, broke + '/60');
+
+  // momentum: the same charge, down a slope and up it
+  {
+    const b = fresh('plain', 70), c = b.player, d = b.units.find(e => e.team === TEAM_ENEMY), fl = b.field;
+    c.impetus = 1;
+    const tilt = k => { for (let i = 0; i < fl.height.length; i++) fl.height[i] = Math.floor(i / fl.cols) * CFG.CELL * k; };
+    tilt(0.03); const down = Combat.momentum(b, c, d);      // the south (you) is higher: you charge downhill
+    tilt(-0.03); const up = Combat.momentum(b, c, d);
+    chk('momentum: charging down onto a line pushes harder than charging up into it', down > up * 1.4, down.toFixed(2) + ' vs ' + up.toFixed(2));
+    c.impetus = 0.5; tilt(0);
+    const slow = Combat.momentum(b, c, d); c.impetus = 1;
+    chk('…and men arriving at a walk push far less than men at a run', slow < Combat.momentum(b, c, d) * 0.75);
+  }
+  // Re-form: off the chase, back into line on the colours, facing the enemy
+  {
+    const b = fresh('plain', 71), u2 = b.player, E3 = b.units.find(e => e.team === TEAM_ENEMY);
+    b.seen[TEAM_PLAYER].add(E3.id);
+    Orders.apply(b, u2, 'charge', {});
+    for (const m of u2.men) m.foe = E3.men[0];
+    Orders.apply(b, u2, 'reform', {});
+    const toE3 = Math.atan2(E3.cy - u2.form.y, E3.cx - u2.form.x);
+    chk('Re-form calls off a charge and closes them up in line, facing the enemy', u2.order === 'hold' && u2.form.kind === 'line' && u2.men.every(m => !m.foe) && Math.abs(angDiff(u2.form.facing, toE3)) < 0.01);
+  }
+
+  // the establishment: surgeon's mates and a recruiting party
+  {
+    const r = Campaign.newRun(93); r.renown = 500; r.total = 0;
+    const live0 = Campaign.woundedLive(r.company);
+    chk('the quartermaster offers surgeon’s mates and a recruiting party', ['surgeons', 'recruiters'].every(k => Campaign.shopItems(r).some(i => i.key === k && i.ok)));
+    for (let i = 0; i < 3; i++) Campaign.buy(r, 'surgeons');
+    chk('…three levels of surgeon’s mates save more of the wounded, then no more', Campaign.woundedLive(r.company) > live0 + 0.25 && !Campaign.buy(r, 'surgeons'), Campaign.woundedLive(r.company));
+    Campaign.buy(r, 'recruiters'); Campaign.buy(r, 'recruiters');
+    r.company.soldiers.splice(0, 6);
+    const b = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
+    Battle.finish(b, 'nightfall');
+    const before = b.player.men.filter(m => m.src).length, rep = Campaign.afterBattle(r, r.map[0][0], b.result);
+    chk('…and a recruiting party brings up men after every battle, while there is room', rep.recruits === 2 && r.company.soldiers.length === before + 2, rep.recruits);
+    const old = JSON.parse(JSON.stringify(Campaign.newRun(94))); delete old.company.surgeons; delete old.company.recruiters;
+    chk('…old saves start with none', Campaign.migrate(old).company.surgeons === 0 && old.company.recruiters === 0);
+  }
+
+  // you: sprint, and get blown
+  B = fresh('plain', 65); const c = B.cmd;
+  c.run = true; c.mvx = 1; c.mvy = 0; const x0 = c.x;
+  run(B, 2);
+  chk('sprinting, you outrun a charge', (c.x - x0) / 2 > CFG.CHARGE, ((c.x - x0) / 2).toFixed(2) + ' m/s');
+  run(B, 16); const x1 = c.x; run(B, 2);
+  chk('…for a while — then you are blown and walking', c.wind < 0.05 && (c.x - x1) / 2 < CFG.CMD_WALK + 0.3, 'wind ' + c.wind.toFixed(2));
+  c.run = false; c.mvx = 0; run(B, 20);
+  chk('…and you get your breath back standing still', c.wind > 0.5);
+
+  // the road: retire, men leave the field, you follow them off
+  B = fresh('plain', 66); u = B.player;
+  chk('every battle has a line of retreat on your side of the field', BATTLE_POOL.concat(SETPIECE_POOL, 'finale').every(k => { const b = fresh(k); return b.retreat && b.retreat.y > b.field.h * 0.7 && Field.passable(b.field, b.retreat.x, b.retreat.y); }));
+  for (const e of B.units) if (e.team === TEAM_ENEMY) e.delay = 1e9;
+  B.cmd.dest = { x: B.retreat.x, y: B.retreat.y };
+  Orders.apply(B, u, 'retire', {});
+  chk('Retire: they turn for the road and will not fire', u.order === 'retire' && !Combat.canFire(u, u.men.find(m => m.role === 'line')));
+  run(B, 150);
+  chk('…and the men who reach it leave the field, safe', u.saved > u.startSize * 0.8, u.saved + '/' + u.startSize);
+  chk('…when you are on the road with them, the battle ends in a withdrawal', B.over && B.result.how === 'withdrew' && B.result.saved > u.startSize * 0.8 && B.result.captured === 0, B.result && B.result.how);
+  const r = Campaign.newRun(91);
+  const rep = Campaign.afterBattle(r, r.map[0][0], B.result);
+  chk('…a company brought off in good order earns a little renown', rep.lines.some(l => /good order/.test(l[0])) && r.company.soldiers.length >= u.startSize * 0.8);
+
+  // abandoning the field with the enemy close: men left behind are taken
+  B = fresh('plain', 67); u = B.player; facing(B, 60);
+  Battle.withdraw(B);
+  chk('abandoning the field with the enemy close: the men left behind are taken prisoner', B.result.captured > u.startSize * 0.8, B.result.captured);
+  const r2 = Campaign.newRun(92), n0 = r2.company.soldiers.length;
+  const rep2 = Campaign.afterBattle(r2, r2.map[0][0], Object.assign(B.result, {}));
+  chk('…and they are gone from the company', rep2.captured === u.men.filter(m => m.captured && m.src).length && !u.men.some(m => m.captured && r2.company.soldiers.includes(m.src)), rep2.captured);
+}
+
 console.log('§8 music & the page');
 chk('every tune note is a real pitch', Object.values(TUNES).every(t => t.melody.every(([n]) => n === 'R' || noteFreq(n) > 200)));
 chk('every order has a drum call', ['follow', 'line', 'advance', 'halt', 'ready', 'fire', 'atwill', 'cease', 'charge', 'fallback', 'skirmish', 'rally'].every(k => DRUM_CALLS[k]));

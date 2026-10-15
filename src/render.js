@@ -106,6 +106,7 @@ const Render = {
 
     Render.helpers(B, g, ui);
     Render.objective(B, g);
+    Render.retreat(B, g);
     const seen = B.seen[TEAM_PLAYER];
     for (const u of B.units) for (const m of u.men) if (m.state === 'down') Render.body(g, m);
     for (const d of B.dropped) Render.flag(g, d.x, d.y, d.unit, B.t, true);
@@ -146,6 +147,20 @@ const Render = {
       g.beginPath(); g.arc(u.cx, u.cy, CFG.RANGE_ATWILL, f.facing - CFG.FIRE_CONE, f.facing + CFG.FIRE_CONE); g.stroke();
       g.beginPath(); g.arc(u.cx, u.cy, 80, f.facing - CFG.FIRE_CONE, f.facing + CFG.FIRE_CONE); g.stroke();
     }
+  },
+
+  // the line of retreat: a road sign on the ground
+  retreat(B, g) {
+    const r = B.retreat;
+    if (!r) return;
+    const z = Render.cam.zoom;
+    g.strokeStyle = 'rgba(60,110,60,0.75)'; g.lineWidth = 2.5 / z; g.setLineDash([5 / z, 5 / z]);
+    g.beginPath(); g.arc(r.x, r.y, r.r, 0, 7); g.stroke(); g.setLineDash([]);
+    g.fillStyle = 'rgba(60,110,60,0.08)'; g.fill();
+    g.save(); g.translate(r.x, r.y); g.scale(1 / z, 1 / z);
+    g.font = '600 13px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = 'rgba(30,50,30,0.85)'; g.fillText('\u21e3 ' + r.label, 0, 0);
+    g.restore();
   },
 
   // where the colonel wants you: a gold ring and a pennant
@@ -374,6 +389,8 @@ const Render = {
     }
     g.fillStyle = '#ffe08a'; g.beginPath(); g.arc(x0 + B.cmd.x * sc, y0 + B.cmd.y * sc, 2.6, 0, 7); g.fill();
     const tk = B.player && B.player.task;
+    const rt = B.retreat;
+    if (rt) { g.strokeStyle = '#7fb069'; g.lineWidth = 1.5; g.setLineDash([2, 2]); g.beginPath(); g.arc(x0 + rt.x * sc, y0 + rt.y * sc, Math.max(4, rt.r * sc), 0, 7); g.stroke(); g.setLineDash([]); }
     if (tk) { g.strokeStyle = '#e8be50'; g.lineWidth = 1.5; g.beginPath(); g.arc(x0 + tk.x * sc, y0 + tk.y * sc, 5, 0, 7); g.stroke(); }
     const c = Render.cam, vw = Render.W / c.zoom * sc, vh = Render.H / c.zoom * sc;
     g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1;

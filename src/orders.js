@@ -11,7 +11,7 @@ const ORDER_TEXT = {
   ready: 'Make ready!', fire: 'Present — FIRE!', atwill: 'Fire at will!', cease: 'Cease fire!',
   charge: 'Fix bayonets — CHARGE!', fallback: 'Fall back!', skirmish: 'Extend — skirmish order!',
   close: 'Close order!', rally: 'Rally! Rally on me!',
-  byrank: 'Fire by rank!', attackcol: 'Column of attack!',
+  byrank: 'Fire by rank!', attackcol: 'Column of attack!', retire: 'Retire! To the rear!', reform: 'Re-form! Re-form on the colours!',
 };
 
 // drills a company must LEARN (at camp) before it can be ordered to do them. AI companies know them all.
@@ -62,6 +62,7 @@ const Orders = {
       case 'advance': return u.order === 'advance';
       case 'halt': return u.order === 'hold';
       case 'fallback': return u.order === 'fallback';
+      case 'retire': return u.order === 'retire';
       case 'charge': return u.order === 'charge';
       case 'ready': return u.fire === 'ready';
       case 'atwill': return u.fire === 'atwill';
@@ -128,8 +129,34 @@ const Orders = {
         if (u.fire === 'hold') u.fire = 'ready';
         break;
       }
+      case 'reform': {
+        // stop chasing, close up on the colours where they are, face the nearest enemy you can see
+        if (u.order === 'charge') u.order = 'hold';
+        for (const m of u.men) m.foe = null;
+        const col = u.men.find(m => m.role === 'ensign' && m.state === 'formed');
+        const x = col ? (col.x + u.cx) / 2 : u.cx, y = col ? (col.y + u.cy) / 2 : u.cy;
+        let face = f.facing, bd = Infinity;
+        for (const e of B.units) {
+          if (e.team === u.team || e.routed || !e.formed || (u.team === TEAM_PLAYER && !B.seen[TEAM_PLAYER].has(e.id))) continue;
+          const de = dist(x, y, e.cx, e.cy);
+          if (de < bd) { bd = de; face = Math.atan2(e.cy - y, e.cx - x); }
+        }
+        u.order = 'hold';
+        Unit.setForm(u, u.form.kind === 'skirmish' ? 'skirmish' : 'line', x, y, face);
+        break;
+      }
+      case 'retire': {
+        // about face and march for the line of retreat; can't fire, and every hit hurts like a flank
+        if (u.order === 'charge') Combat.endCharge(B, u);
+        if (f.kind === 'column') toLine(u.cx, u.cy, f.facing);
+        const r = B.retreat;
+        if (!r) break;
+        u.order = 'retire'; u.fire = 'hold';
+        u.retireRoute = AI.route(B, u.cx, u.cy, r.x, r.y);
+        break;
+      }
       case 'charge':
-        u.order = 'charge'; u.chargeT = 0; u.lastFoe = B.t; u.fire = 'hold';
+        u.order = 'charge'; u.chargeT = 0; u.lastFoe = B.t; u.fire = 'hold'; u.tested = [];
         u.chargeFrom = f.kind;
         if (f.kind === 'column') f.kind = 'line';
         B.events.push({ type: 'charge', team: u.team, unit: u.id });

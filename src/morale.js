@@ -21,6 +21,8 @@ const Morale = {
     let d = CFG.LOSS_SHOCK / Math.max(8, u.startSize);
     if (sudden) d *= CFG.SUDDEN_MULT;
     if (flank) { d *= CFG.FLANK_MULT; u.flanked = B.t; }
+    // the depth of a column of attack is what carries it: the men feel the mass behind them
+    if (u.form.kind === 'attack') d *= CFG.ATTACK_NERVE;
     if (role === 'officer') d += CFG.OFFICER_LOST;
     u.morale -= d;
     u.lastHit = B.t;
@@ -40,7 +42,8 @@ const Morale = {
   },
 
   baseline(B, u) {
-    const left = u.formed / Math.max(1, u.startSize);
+    // men who have marched off by the road are not losses
+    const left = (u.formed + (u.saved || 0)) / Math.max(1, u.startSize);
     return CFG.MORALE_BASE + u.nerveBonus + Morale.ncos(u)
       + (Unit.hasRole(u, 'ensign') ? 6 : u.coloursLost ? -8 : 0)
       + (Unit.bandPlaying(u) ? 5 : 0)
@@ -74,7 +77,7 @@ const Morale = {
           if (B.rng() < pr * dt * (1 - m.nerve / 20)) { m.state = 'fleeing'; m.foe = null; u.reslot = B.t + 1; }
         }
       }
-      if (u.morale < CFG.WAVERING || (u.formed <= Math.max(2, u.startSize * 0.25) && u.formed < u.startSize)) Morale.rout(B, u);
+      if (u.morale < CFG.WAVERING || (u.formed + (u.saved || 0) <= Math.max(2, u.startSize * 0.25) && u.formed < u.startSize && !(u.saved && u.order === 'retire'))) Morale.rout(B, u);
       else if (!u.routed && u.morale >= CFG.SHAKEN + 6 && quiet) {
         // stragglers come back when the company steadies and someone calls them
         for (const m of u.men) {

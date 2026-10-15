@@ -49,7 +49,7 @@ function makeUnit(spec, rng) {
     task: spec.task || null, taskApplied: null, anchor: null,
     trail: [], slotOrder: [], reslot: 0,
     lossLog: [], lastHit: -99, flanked: 0, beingCharged: 0, chargeT: 0,
-    colours: null, coloursLost: false, hasColours: spec.colours !== false,
+    colours: null, coloursLost: false, wind: 1, hasColours: spec.colours !== false,
     rallyCd: 0, ai: { next: 0, phase: 'deploy', route: null },
     cx: spec.x, cy: spec.y, formed: 0, visible: spec.team === TEAM_PLAYER,
     lastSeen: null, stats: { shots: 0, hits: 0, down: 0, fled: 0 },

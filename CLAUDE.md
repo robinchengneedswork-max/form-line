@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 98 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 121 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -70,6 +70,24 @@ export line). A headless check asserts that index.html's script order matches.
   **Tuned so a holding line beats a column ~60% when it holds its volley to ~60 m** (`$TEMP/fl/duel.js`-style duel) — line vs column is the period's core matchup.
 - Learned drills (`LEARNED_DRILLS` in orders.js): fire by rank, column of attack, skirmish order. A campaign company learns them at camp; quick battles and AI know all.
 
+## The charge, wind and the road (round 3 — the user found charges too strong)
+
+The user chose: **keep ~1 round/min and fix the charge instead**; a **retreat zone marker** per map; **a sprint toggle** for you (not men pacing you).
+
+- **Breath** (code: `u.wind` — NOT the weather wind, which only moves smoke; the user asked. UI says Breath) (`u.wind`, `B.cmd.wind`, 0..1). Charging men go at QUICK time and only rush inside `CHARGE_RUSH` 40 m; the rush drains ~1/16 per s, fighting 1/30; halted they recover. Wind scales melee, rush speed and charge shock. A blown company (<0.04, not engaged) drops the charge.
+  The old 4 m/s from 95 m beat a 60 s reload outright — that was the whole problem.
+- **Point-blank**: a line still presented fires on its own when a charge reaches `POINT_BLANK` 30 m.
+- **Nerve test** (`Combat.nerve`) once per charge per target at `CHARGE_TEST` 22 m: att = morale·√push vs def = morale·(1+0.6·loaded)·cover; p = att²/(att²+def²). Lose → charge falters (−10, re-forms); win → defender −18.
+- **Momentum** (`Combat.momentum`, the user asked for it): numbers × impetus (how fast the charging men are actually moving, `u.impetus`) × the drop (`SLOPE_PUSH` per metre above the defender) × column/grenadier. Downhill rushes are faster (`DOWNHILL_RUSH`), uphill slower (`speedAt`). Weather wind plays NO part — the user checked.
+- Column of attack: losses cost `ATTACK_NERVE` 0.7× morale (depth carries it). Duel re-tuned to line 14/24 vs column.
+- Steadiness at the clash counts a volley in the last `STEADY_AFTER` 6 s (holding fire pays); a line caught reloading defends at 0.75×. Two charges meeting = ONE test, each side with its own momentum (two tests at once broke companies).
+- Charges end at `CHARGE_MAX` 45 s or breath < `CHARGE_BLOWN` with nobody in contact (no 80 s pursuits). AI captains never charge with breath < `AI_CHARGE_BREATH` — before that they re-ordered a dead charge every 2 s.
+- **Re-form** (T, Bayonet → Re-form): off the chase, line on the colours, facing the nearest seen enemy.
+- **Halt** calls a charge off. **Rally** never did — it is morale + un-rout, in person.
+- **You sprint** at `CMD_SPRINT` 4.6 (faster than the 4.0 rush) for ~14 s, then walk until you rest. Shift (hold), Q / touch-bar Run (toggle).
+- **Line of retreat** `B.retreat` (scenario `retreat:{x,r,label}`, default the south edge behind your start). `retire` (X, Move→Retire) marches the line there, no firing, hits count as flank; men inside leave (`m.saved`, `u.saved`). Standing in it you can **Leave the field** (L); with everyone off it ends by itself. Withdrawing anywhere = whoever is formed within `CAPTURE_RANGE` of a formed enemy is **captured** (lost; colours too), the rest walk back.
+  ⚠ Saved men must count as present in `Morale.baseline` and the rout rule, or a company filing off the field routs itself.
+
 ## Company customization (campaign)
 
 - **Grades**: private → corporal (xp 3, 5 renown) → sergeant (xp 6, 12). Slots scale with rank. In battle a sergeant adds +2 baseline morale (corporal +0.7, cap +8), closes ranks faster, calls stragglers back, and takes up fallen colours first.
@@ -77,6 +95,10 @@ export line). A headless check asserts that index.html's script order matches.
 - **Baker rifles**: bought (20), carried by the best shots (or whoever you hand them to); 2× hit falloff, 1.7× reload, reach 280–300 m, hunt officers. Cap 4 (Light 6).
 - **Company type** at Captain: Light (skirmish learned, 0.42× hits in skirmish order, +10% speed), Grenadier (melee ×1.2, nerve +6, shock ×1.25), Line (reload ×0.92, volley bonus +0.1, drill +5).
 - `Campaign.migrate` upgrades older saves.
+
+## Establishment (the user asked: medics and recruiters)
+
+`co.surgeons` and `co.recruiters` (0..3, bought from the quartermaster: 16/26/40 and 18/30/45). Wounded survive at 55/68/79/88%; recruiters bring 1/2/3 raw men after every battle, up to capacity.
 
 ## Set pieces
 

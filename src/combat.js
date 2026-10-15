@@ -109,7 +109,7 @@ const Combat = {
     let t = Combat.pickTarget(B, m, Combat.range(m, volley));
     const face = t ? Math.atan2(t.y - m.y, t.x - m.x) : m.facing;
     m.facing = face;
-    m.m = 'reloading'; m.mt = Combat.reloadTime(B, m, u); m.aimAt = null;
+    m.m = 'reloading'; m.mt = Combat.reloadTime(B, m, u); m.aimAt = null; m.firedAt = B.t;
     u.stats.shots++;
     const mx = m.x + Math.cos(face) * 1.4, my = m.y + Math.sin(face) * 1.4;
     Smoke.puff(B, mx, my, face);
@@ -156,7 +156,7 @@ const Combat = {
     B.events.push({ type: 'down', x: t.x, y: t.y, team: u.team });
     if (t.role === 'line') u.reslot = B.t + (u.men.some(s => s.grade === 'sgt' && s.state === 'formed') ? 0.8 : 1.5);   // "close up!"
     const flank = by && Math.abs(angDiff(u.form.facing, Math.atan2(by.y - t.y, by.x - t.x))) > Math.PI / 3;
-    Morale.onLoss(B, u, flank, t.role);
+    Morale.onLoss(B, u, flank || u.order === 'retire', t.role);
     if (t.role === 'ensign' || t.carrying) Colours.drop(B, t);
     if (t === u.leader) {
       u.leader = null;
@@ -176,9 +176,11 @@ const Combat = {
           if (m.foe) near = true;
         }
         if (near) u.lastFoe = B.t;
-        if (B.t - (u.lastFoe || 0) > 3 || u.chargeT > 75 || u.morale < CFG.SHAKEN) Combat.endCharge(B, u);
+        if (u.wind < CFG.CHARGE_BLOWN && !u.engaged) { Combat.endCharge(B, u); Battle.log(B, `${u.name}: the men are blown — the pursuit is called off.`, u.team === TEAM_PLAYER ? 'bad' : ''); }
+        else if (B.t - (u.lastFoe || 0) > 3 || u.chargeT > CFG.CHARGE_MAX || u.morale < CFG.SHAKEN) Combat.endCharge(B, u);
       }
     }
+    for (const u of B.units) u.engaged = 0;
     // every man within reach of an enemy fights him, charging or not
     for (const u of B.units) {
       for (const m of u.men) {
@@ -188,7 +190,8 @@ const Combat = {
         if (!foe) { if (u.order !== 'charge') m.foe = null; continue; }
         m.foe = foe;
         m.aimAt = Math.atan2(foe.y - m.y, foe.x - m.x);
-        let p = CFG.MELEE_KILL * u.melee * Combat.moraleMul(u) * (u.order === 'charge' ? 1.35 : 1) * (m.role === 'officer' ? 1.5 : 1);
+        u.engaged++;
+        let p = CFG.MELEE_KILL * u.melee * Combat.moraleMul(u) * (u.order === 'charge' ? 1 + 0.5 * clamp(u.impetus || 0, 0, 1.2) : 1) * (m.role === 'officer' ? 1.5 : 1) * (0.55 + 0.45 * u.wind);
         if (foe === B.cmd) p *= 0.6;
         if (B.rng() < p * dt) Combat.hit(B, foe, m);
       }
@@ -236,12 +239,54 @@ const Combat = {
         if (d.team === c.team || !d.formed || d.routed) continue;
         const dd = dist(c.cx, c.cy, d.cx, d.cy);
         if (dd > CFG.CHARGE_RANGE) continue;
-        const odds = clamp(c.formed / d.formed, 0.4, 2.5) * (c.morale / 60) * c.melee
-          * (c.chargeFrom === 'attack' ? CFG.ATTACK_SHOCK : 1) * (c.ctype === 'grenadier' ? 1.25 : 1);
+        const push = Combat.momentum(B, c, d);
+        const odds = push * (c.morale / 60);
         const loaded = d.men.filter(m => m.m === 'present').length / Math.max(1, d.formed);
         d.beingCharged = 1;
         d.morale -= CFG.CHARGE_SHOCK * odds * (1 - loaded * 0.5) * dt;
+        // "wait for it": a line still presented gives them a volley in the face, unordered
+        if (dd < CFG.POINT_BLANK && !d.routed) {
+          for (const m of d.men) if (m.m === 'present' && !m.volleyAt && m.state === 'formed') m.volleyAt = B.t + B.rng() * 0.35;
+        }
+        // and then one side's nerve goes. Most bayonet charges ended here, before steel crossed
+        if (dd < CFG.CHARGE_TEST && !c.tested.includes(d.id)) {
+          c.tested.push(d.id);
+          // two charges meeting: one clash, not two
+          if (d.order === 'charge' && d.tested) d.tested.push(c.id);
+          Combat.nerve(B, c, d, push);
+        }
       }
+    }
+  },
+
+  // a charge's weight: numbers × how fast they are coming × the drop, × column / grenadiers / steel
+  momentum(B, c, d) {
+    const dh = clamp(Field.heightAt(B.field, c.cx, c.cy) - Field.heightAt(B.field, d.cx, d.cy), -8, 8);
+    return clamp(c.formed / d.formed, 0.4, 2.5) * c.melee
+      * (0.35 + 0.65 * clamp(c.impetus || 0, 0, 1.2)) * (1 + dh * CFG.SLOPE_PUSH)
+      * (c.chargeFrom === 'attack' ? CFG.ATTACK_SHOCK : 1) * (c.ctype === 'grenadier' ? 1.25 : 1);
+  },
+
+  // the moment of the charge: does it go home, or falter in front of them?
+  nerve(B, c, d, push) {
+    // steadiness: muskets still levelled, or a volley delivered in the last few seconds (holding fire to the last pays);
+    // a line caught with its ramrods out is the weakest thing on the field
+    const line = d.men.filter(m => m.role === 'line' && m.state === 'formed');
+    const loaded = line.filter(m => m.m === 'present' || m.m === 'presenting' || B.t - (m.firedAt || -99) < CFG.STEADY_AFTER).length / Math.max(1, line.length);
+    const cover = d.men.some(m => m.state === 'formed' && Field.coverFor(B.field, m.x, m.y, c.cx, c.cy) < 1) ? 1.3 : 1;
+    const att = c.morale * push;
+    // a company charging too meets you with its own momentum, not its muskets
+    const def = d.order === 'charge' ? d.morale * Combat.momentum(B, d, c) : d.morale * (0.75 + 0.6 * loaded) * cover * (d.form.kind === 'skirmish' ? 0.6 : 1);
+    const p = att * att / (att * att + def * def);
+    if (B.rng() < p) {
+      d.morale -= 18;
+      Battle.log(B, `${d.name} wavers before the bayonets!`, d.team === TEAM_PLAYER ? 'bad' : 'good');
+      B.fx.push({ kind: 'say', x: d.cx, y: d.cy, text: d.team === TEAM_PLAYER ? 'They\u2019re wavering!' : 'Ils fl\u00e9chissent!', t: B.t, team: d.team, foreign: d.team !== TEAM_PLAYER });
+    } else {
+      c.morale -= 10;
+      Combat.endCharge(B, c);
+      Battle.log(B, `${c.name}: the charge falters in front of them.`, c.team === TEAM_PLAYER ? 'bad' : 'good');
+      B.fx.push({ kind: 'say', x: c.cx, y: c.cy, text: c.team === TEAM_PLAYER ? 'The charge falters!' : 'Halte!', t: B.t, team: c.team, foreign: c.team !== TEAM_PLAYER });
     }
   },
 };

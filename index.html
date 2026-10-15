@@ -41,22 +41,22 @@
   <div id="hud-clock" class="hud"></div>
   <div id="hud-log"></div>
   <div id="hud-orders"></div>
-  <div id="touch-bar"><button id="tb-speed">1×</button><button id="tb-centre" title="Back to you">⌖</button><button id="tb-pause" title="Pause">❚❚</button></div>
+  <div id="touch-bar"><button id="tb-run" title="Sprint">Run</button><button id="tb-speed">1×</button><button id="tb-centre" title="Back to you">⌖</button><button id="tb-pause" title="Pause">❚❚</button></div>
   <div id="pause" class="overlay"><div class="sheet small">
     <h1>Paused</h1>
     <button id="btn-resume" class="big">Resume</button>
     <button id="btn-mute">Sound: on</button>
     <button id="btn-help">The drill book</button>
-    <button id="btn-withdraw">Withdraw from the field</button>
+    <button id="btn-withdraw">Abandon the field</button>
   </div></div>
   <div id="help" class="overlay"><div class="sheet">
     <h1>The Drill Book</h1>
     <div class="help-cols">
       <div>
         <h3 class="touch-only">On a phone</h3>
-        <p class="touch-only"><b>Tap</b> to walk there. <b>Touch and hold</b> to open the order wheel — slide onto an order and lift. After <b>Form → Line</b> (or Skirmish, Column), <b>drag</b> where they should stand — they face the enemy across your stroke; a tap forms them on the spot instead. Drag to look around, pinch to zoom, ⌖ brings you back.</p>
+        <p class="touch-only"><b>Tap</b> to walk there. <b>Touch and hold</b> to open the order wheel — slide onto an order and lift. After <b>Form → Line</b> (or Skirmish, Column), <b>drag</b> where they should stand — they face the enemy across your stroke; a tap forms them on the spot instead. Drag to look around, pinch to zoom, ⌖ brings you back. <b>Run</b> toggles your sprint.</p>
         <h3>Yourself</h3>
-        <p><kbd>Right-click</kbd> walk there · <kbd>WASD</kbd> walk · <kbd>Shift</kbd> run<br>Your <b>mouse</b> is where you look. A line forms in front of you, facing it. <kbd>Left-drag</kbd> draws where the company should stand instead.</p>
+        <p><kbd>Right-click</kbd> walk there · <kbd>WASD</kbd> walk · <kbd>Shift</kbd> (hold) or <kbd>Q</kbd> (toggle) sprint — faster than a charge, for about fifteen seconds; then you are blown until you stand and get your breath<br>Your <b>mouse</b> is where you look. A line forms in front of you, facing it. <kbd>Left-drag</kbd> draws where the company should stand instead.</p>
         <h3>Being heard</h3>
         <p>Your voice carries ~50 m. Further off, only the <b>drummer</b> can beat your order down the line, two seconds late. Lose him and you must walk to your men.</p>
         <h3>Firing</h3>
@@ -69,13 +69,16 @@
         <h3>Nerve</h3>
         <p>Men fall back when shot, faster when it comes all at once or from the flank. The <b>colours</b>, the <b>music</b> and <b>you</b> nearby steady them. <kbd>R</kbd> Rally — in person — can turn a rout.</p>
         <h3>The bayonet</h3>
-        <p><kbd>C</kbd> Charge. Wait until they waver. Most charges are won before they arrive.</p>
+        <p><kbd>C</kbd> Charge. They go in at the double and only rush the last 40 m — order it from too far and they arrive blown. A line still presented fires on its own at 30 m, and then somebody's nerve goes — and <b>momentum</b> counts: how fast they are going when they land and whether they are running down onto you or up into you: a steady, loaded line stops most charges; a shaken one with empty muskets breaks. Charge when they waver. <kbd>T</kbd> Re-form (Bayonet → Re-form) calls a charge off and closes them up on the colours, facing the nearest enemy; <kbd>4</kbd> Halt stops them where they stand. Rally does not — Rally steadies men and turns a rout.</p>
+        <h3>The road</h3>
+        <p>Every field has a <b>line of retreat</b> (the green ring on your side). <kbd>X</kbd> Retire — about face and march for it; they cannot fire, and every hit hurts like one from the flank. Men who reach it are off the field and safe. Stand on it yourself and <b>Leave the field</b> (<kbd>L</kbd>). Anyone still out there within 150 m of the enemy is taken prisoner, colours too.</p>
         <p class="hint"><kbd>Wheel</kbd> zoom · <kbd>Arrows</kbd> look · <kbd>V</kbd> re-centre · <kbd>Tab</kbd> 1×/2×/4× · <kbd>P</kbd> pause · <kbd>M</kbd> mute · click the map to walk there</p>
       </div>
     </div>
     <button id="btn-help-close" class="big">To your duty</button>
   </div></div>
   <div id="dispatch"></div>
+  <button id="btn-leave" title="Leave the field (L)">Leave the field</button>
   <div id="end-banner"></div>
 </section>
 

@@ -75,6 +75,7 @@ const SCENARIOS = {
   },
 
   farm: {
+    retreat: { x: 120, label: 'The sunken road' },
     name: 'The Walled Farm', blurb: 'A stone-walled farm sits in the middle of the field. A company of ours holds it; the enemy means to take it. Support them.',
     build(f, rng) {
       baseGround(f, rng, { amp: 4, woods: 0.06 });
@@ -103,6 +104,7 @@ const SCENARIOS = {
   },
 
   ford: {
+    retreat: { x: 400, r: 26, label: 'The road south' },
     name: 'The Ford', blurb: 'A river cuts the field, crossed by a ford and a narrow bridge. Hold the south bank; anyone who crosses must do it in column, under your muskets.',
     // the river's centreline; crossings sit ON it so they span the whole channel
     crossings: [[190, 260 + Math.sin(190 / 90) * 18], [520, 260 + Math.sin(520 / 90) * 18]],
@@ -134,6 +136,7 @@ const SCENARIOS = {
   },
 
   woods: {
+    retreat: { x: 600, r: 28, label: 'The cart track' },
     name: 'Edge of the Wood', blurb: 'The enemy has thrown skirmishers into the wood ahead, with a formed company behind. Men in trees are hard to hit and harder to dig out.',
     build(f, rng) {
       baseGround(f, rng, { amp: 5, woods: 0.05 });

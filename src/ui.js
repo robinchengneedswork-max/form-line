@@ -25,6 +25,7 @@ const UI = {
     $('quick-scenario').innerHTML = BATTLE_POOL.concat('finale').map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('');
     $('btn-resume').onclick = () => UI.togglePause();
     $('btn-withdraw').onclick = () => { UI.togglePause(); Battle.withdraw(App.B); };
+    $('btn-leave').onclick = () => UI.leaveField();
     $('btn-mute').onclick = () => UI.toggleMute();
     $('btn-help-close').onclick = () => UI.toggleHelp();
     $('hud-orders').innerHTML = ORDER_KEYS.map(o => `<button class="order" data-cmd="${o.cmd}"><kbd>${o.key}</kbd>${esc(o.label)}</button>`).join('');
@@ -104,7 +105,8 @@ const UI = {
     $('company').innerHTML = `<h1>${esc(co.name)}</h1>${typeBlock}
       <div class="facts"><span>Drill <b>${Math.round(co.drill * 100)}</b></span><span>Renown <b>${run.renown}</b></span>
         <span>Sergeants <b>${sl.sgtUsed}/${sl.sgt}</b></span><span>Corporals <b>${sl.cplUsed}/${sl.cpl}</b></span>
-        <span>Rifles <b>${co.soldiers.filter(s => s.weapon === 'rifle').length}/${co.rifles}</b> <small>(max ${Campaign.rifleCap(co)})</small></span></div>
+        <span>Rifles <b>${co.soldiers.filter(s => s.weapon === 'rifle').length}/${co.rifles}</b> <small>(max ${Campaign.rifleCap(co)})</small></span>
+        <span>Surgeon's mates <b>${co.surgeons || 0}/3</b></span><span>Recruiting party <b>${co.recruiters || 0}/3</b></span></div>
       <div class="chips">${drills}</div>
       <p class="hint">Sergeants steady the men round them, close the ranks quicker, call back stragglers and take up fallen colours. Corporals help a little. Promotion needs experience: 3 for corporal, 6 for sergeant.</p>
       <div class="tablewrap"><table class="roster"><tr><th>Name</th><th>Rank</th><th>Arms</th><th>Fights</th><th>Down</th><th>XP</th><th>Aim</th><th></th></tr>${rows}</table></div>
@@ -148,7 +150,8 @@ const UI = {
     const loaded = u.men.filter(m => m.role === 'line' && m.state === 'formed' && m.m !== 'reloading').length;
     const pres = u.men.filter(m => m.m === 'present').length;
     const word = Unit.moraleWord(u);
-    const orderWord = { follow: 'In column, following you', hold: u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
+    const orderWord = { follow: 'In column, following you', hold: u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', retire: 'Retiring to the road', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
+    const windWord = u.wind > 0.7 ? 'Fresh' : u.wind > 0.35 ? 'Puffing' : u.wind > 0.1 ? 'Winded' : 'Blown';
     const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will', byrank: 'Firing by rank' }[u.fire];
     const dist0 = Math.round(dist(c.x, c.y, u.cx, u.cy));
     const task = u.task ? `<div class="row wide orders">Orders: ${esc(u.task.text)}</div>` : '';
@@ -158,9 +161,14 @@ const UI = {
       <div class="row"><span>Men</span><b>${u.formed}<small> / ${u.startSize}</small></b><span>Loaded</span><b>${loaded}</b></div>
       <div class="row wide"><span>${orderWord}</span></div>
       <div class="row wide"><span>${fireWord}</span></div>
+      <div class="row wide"><span>Breath</span><b class="${u.wind < 0.35 ? 'warn' : ''}">${windWord}</b>${u.saved ? `<span>Off the field</span><b>${u.saved}</b>` : ''}</div>
       <div class="kit">${Unit.hasRole(u, 'ensign') ? '⚑' : u.coloursLost ? '<s>⚑</s>' : '<s>⚑</s>'} ${Unit.hasRole(u, 'drummer') ? '◉' : '<s>◉</s>'} ${Unit.hasRole(u, 'fifer') ? '♪' : '<s>♪</s>'} <span class="${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'warn' : 'bad') : ''}">${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'by drum' : 'out of earshot') : 'in earshot'}</span></div>
       ${task}
-      <div class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}${c.rallyCd > B.t ? ` <small>rally ${Math.ceil(c.rallyCd - B.t)}s</small>` : ''}</div>`;
+      <div class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}${c.rallyCd > B.t ? ` <small>rally ${Math.ceil(c.rallyCd - B.t)}s</small>` : ''}
+        <span class="cwind" title="your breath"><i style="width:${Math.round(c.wind * 100)}%"></i></span>${c.run || c.sprint ? ' <small>sprinting</small>' : ''}</div>`;
+    const onRoad = Battle.atRetreat(B, c.x, c.y);
+    $('btn-leave').classList.toggle('show', onRoad);
+    $('tb-run').classList.toggle('on', !!c.sprint);
     const wa = B.wind.a * 180 / Math.PI;
     $('hud-clock').innerHTML = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`;
     const dp = B.dispatch;
@@ -178,6 +186,13 @@ const UI = {
     }
   },
 
+  // you are on the road: go, and whoever is not with you takes his chances
+  leaveField() {
+    const B = App.B;
+    if (!B || B.over || App.paused || !Battle.atRetreat(B, B.cmd.x, B.cmd.y)) return;
+    Battle.withdraw(B);
+  },
+
   togglePause() {
     if (App.mode !== 'battle' || !App.B || App.B.over) return;
     App.paused = !App.paused;
@@ -190,21 +205,22 @@ const UI = {
   battleOver(B, onContinue) {
     const R = B.result;
     const head = { won: 'The field is yours', lost: 'Your company is broken', fell: 'You have fallen', nightfall: 'Nightfall', withdrew: 'You withdraw from the field' }[R.how];
-    const sub = { won: `The ${R.enemyRouted > 1 ? 'enemy companies are' : 'enemy is'} in flight.`, lost: 'The men are streaming to the rear.', fell: 'A ball found you. The company fights on without its captain — for a while.', nightfall: 'Darkness ends it. Neither side gives way.', withdrew: 'Better to lose a field than a company.' }[R.how];
+    const sub = { won: `The ${R.enemyRouted > 1 ? 'enemy companies are' : 'enemy is'} in flight.`, lost: 'The men are streaming to the rear.', fell: 'A ball found you. The company fights on without its captain — for a while.', nightfall: 'Darkness ends it. Neither side gives way.', withdrew: R.captured ? `${R.captured} of your men could not get away.` : 'Better to lose a field than a company.' }[R.how];
     $('end-banner').innerHTML = `<h1>${head}</h1><p>${sub}</p><button id="btn-after" class="big">Continue</button>`;
     $('end-banner').classList.add('show');
     $('btn-after').onclick = () => { $('end-banner').classList.remove('show'); onContinue(); };
   },
 
   report(rep, run, onNext) {
-    const dead = rep.dead.filter(d => !d.deserted), des = rep.dead.filter(d => d.deserted);
+    const dead = rep.dead.filter(d => !d.deserted && !d.captured), des = rep.dead.filter(d => d.deserted), cap = rep.dead.filter(d => d.captured);
     $('report').innerHTML = `
       <h1>${{ won: 'Victory', lost: 'Defeat', fell: 'Struck down', nightfall: 'Nightfall', withdrew: 'Withdrawal' }[rep.how]}</h1>
       <table class="renown">${rep.lines.map(([w, n]) => `<tr><td>${esc(w)}</td><td>${n > 0 ? '+' : ''}${n || ''}</td></tr>`).join('')}
         <tr class="total"><td>Renown</td><td>${rep.renown >= 0 ? '+' : ''}${rep.renown}</td></tr></table>
-      <p>${rep.wounded ? `${rep.wounded} wounded will march again. ` : ''}${rep.stragglers ? `${rep.stragglers} stragglers came back to the colours. ` : ''}</p>
+      <p>${rep.wounded ? `${rep.wounded} wounded will march again. ` : ''}${rep.recruits ? `${rep.recruits} recruit${rep.recruits > 1 ? 's' : ''} came up from the depot. ` : ''}${rep.stragglers ? `${rep.stragglers} stragglers came back to the colours. ` : ''}</p>
       ${dead.length ? `<p class="dead"><b>Killed:</b> ${dead.map(d => esc(d.name)).join(', ')}</p>` : '<p>Nobody was killed.</p>'}
       ${des.length ? `<p class="dead"><b>Missing:</b> ${des.map(d => esc(d.name)).join(', ')}</p>` : ''}
+      ${cap.length ? `<p class="dead"><b>Taken prisoner:</b> ${cap.map(d => esc(d.name)).join(', ')}</p>` : ''}
       ${rep.orders != null ? `<p class="note">${rep.orders >= 0.6 ? 'The colonel was pleased with you.' : rep.orders < 0.3 ? 'The colonel will remember that you went your own way.' : 'The colonel had no complaint.'}</p>` : ''}
       ${rep.promoted ? `<p class="note">${esc(rep.promoted.name)} accounted for ${rep.promoted.kills} of the enemy, and is mentioned in despatches.</p>` : ''}
       <button id="btn-next" class="big">${run && run.over ? 'The end of it' : 'On'}</button>`;

@@ -115,14 +115,15 @@ const AI = {
     }
     const formCmd = colAtk ? 'attackcol' : 'line';
     const formed = colAtk ? u.form.kind === 'attack' : u.form.kind === 'line' || u.form.kind === 'skirmish';
-    if (colAtk && u.form.kind === 'attack' && d < 70 && u.inSlot > 0.4 && Field.los(B.field, u.cx, u.cy, E.cx, E.cy)) {
+    if (colAtk && u.form.kind === 'attack' && d < 70 && u.inSlot > 0.4 && u.wind > CFG.AI_CHARGE_BREATH && Field.los(B.field, u.cx, u.cy, E.cx, E.cy)) {
       Orders.give(B, u, 'charge'); return;
     }
 
     // the bayonet
     const inRange = u.ai.inRangeT ? B.t - u.ai.inRangeT : 0;
     const keen = u.melee > 1 ? 1.25 : 1;
-    if (u.form.kind !== 'column' && u.inSlot > 0.5 && u.morale > CFG.STEADY - 8 &&
+    // no captain sends blown men in again: let them get their breath first
+    if (u.form.kind !== 'column' && u.inSlot > 0.5 && u.morale > CFG.STEADY - 8 && u.wind > CFG.AI_CHARGE_BREATH &&
         d < (u.doctrine === 'attack' ? 95 * keen : 65) &&
         (E.morale < CFG.SHAKEN + 6 || ratio > 1.8 || (inRange > 180 / keen && u.morale > E.morale + 12))) {
       Orders.give(B, u, 'charge'); return;

@@ -1,7 +1,7 @@
 'use strict';
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  INPUT — e.code throughout. You are one man on foot:
-//    right-click   walk there        WASD  walk      Shift  run
+//    right-click   walk there        WASD  walk      Shift (hold) / Q (toggle)  sprint
 //    mouse         where you look — "Form line" faces this way
 //    left-drag     draw where the company should stand (place.js)
 //    1-9, F/Space, C, R   orders (see ORDER_KEYS)
@@ -20,8 +20,10 @@ const ORDER_KEYS = [
   { code: 'Digit0', key: '0', cmd: 'attackcol', label: 'Column of attack' },
   { code: 'Digit8', key: '8', cmd: 'skirmish', label: 'Skirmish / close' },
   { code: 'Digit9', key: '9', cmd: 'fallback', label: 'Fall back' },
+  { code: 'KeyX', key: 'X', cmd: 'retire', label: 'Retire to the road' },
   { code: 'KeyC', key: 'C', cmd: 'charge', label: 'Charge!' },
   { code: 'KeyR', key: 'R', cmd: 'rally', label: 'Rally' },
+  { code: 'KeyT', key: 'T', cmd: 'reform', label: 'Re-form' },
 ];
 
 const Input = {
@@ -56,6 +58,8 @@ const Input = {
     if (e.code === 'Tab') return UI.cycleSpeed();
     if (e.code === 'KeyV') { Input.camOff.x = Input.camOff.y = 0; return; }
     if (e.code === 'KeyH') return UI.toggleHelp();
+    if (e.code === 'KeyL') return UI.leaveField();
+    if (e.code === 'KeyQ') { B.cmd.sprint = !B.cmd.sprint; return; }
     if (App.paused || B.over) return;
     let k = ORDER_KEYS.find(o => o.code === e.code || o.alt === e.code);
     if (!k) return;
@@ -101,7 +105,7 @@ const Input = {
     c.mvx = (h.has('KeyD') ? 1 : 0) - (h.has('KeyA') ? 1 : 0);
     c.mvy = (h.has('KeyS') ? 1 : 0) - (h.has('KeyW') ? 1 : 0);
     if (c.mvx || c.mvy) c.dest = null;
-    c.run = h.has('ShiftLeft') || h.has('ShiftRight');
+    c.run = h.has('ShiftLeft') || h.has('ShiftRight') || c.sprint;
     const cam = Render.cam, k = Math.min(1, dt * 3);
     if (Touch.active) {
       // on a phone the aim is set by holding (touch.js) and the camera by dragging

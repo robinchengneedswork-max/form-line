@@ -48,6 +48,8 @@ const DRUM_CALLS = {
   cease:    ['X', '.', 'X', '.', 'X'],
   charge:   ['r', 'r', 'r', 'r', 'X', 'X'],
   fallback: ['X', '.', '.', 'x', 'X', '.', '.', 'x'],
+  retire:   ['X', '.', '.', '.', 'X', '.', '.', '.', 'X'],
+  reform:   ['X', 'x', 'X', '.', 'X', 'x', 'X'],
   skirmish: ['x', 'x', 'X', '.', 'x', 'x', 'X'],
   close:    ['X', '.', 'X', 'x', 'X', '.'],
   byrank:   ['X', 'x', '.', 'X', 'x', '.'],

@@ -32,7 +32,10 @@ const Battle = {
     const cm = opts.commander || { name: 'You', hp: 3, maxHp: 3 };
     const p = dep.player;
     B.cmd = { id: NEXT_ID++, team: TEAM_PLAYER, isCommander: true, x: p.x, y: p.y + 7, facing: p.facing, aim: p.facing,
-      hp: cm.hp, maxHp: cm.maxHp, state: 'formed', dest: null, mvx: 0, mvy: 0, run: false, moving: 0, rallyCd: 0 };
+      hp: cm.hp, maxHp: cm.maxHp, state: 'formed', dest: null, mvx: 0, mvy: 0, run: false, sprint: false, wind: 1, moving: 0, rallyCd: 0 };
+    // the line of retreat: where your men may leave the field (scenario's own, else the road behind you)
+    const rt = sc.retreat || {};
+    B.retreat = { x: rt.x != null ? rt.x : p.x, y: rt.y != null ? rt.y : FH - 14, r: rt.r || 34, label: rt.label || 'The road to the rear' };
     const pu = makeUnit({
       team: TEAM_PLAYER, faction: 'british', isPlayer: true, name: co.name,
       x: p.x, y: p.y, facing: p.facing, drill: co.drill, nerve: co.nerve || 0,
@@ -113,16 +116,39 @@ const Battle = {
   checkEnd(B) {
     const nightfall = B.t >= CFG.NIGHTFALL;
     if (B.cmd.state !== 'formed') return Battle.finish(B, 'fell');
-    const mineOut = B.units.filter(u => u.team === TEAM_PLAYER).every(Battle.out);
+    // a retreat is over when you are on the road and nobody of yours is left formed on the field
+    const P = B.player;
+    if (P.saved && Battle.atRetreat(B, B.cmd.x, B.cmd.y) && !P.men.some(m => m.state === 'formed' && m.role !== 'officer')) return Battle.finish(B, 'withdrew');
+    // a company that has marched off the field is not beaten
+    const mineOut = B.units.filter(u => u.team === TEAM_PLAYER && !(u.isPlayer && u.saved && !u.routed)).every(Battle.out);
     const theirsOut = B.units.filter(u => u.team === TEAM_ENEMY).every(Battle.out);
     if (mineOut || theirsOut) { B.endT += 1; } else B.endT = 0;
     if (B.endT >= 6) return Battle.finish(B, theirsOut ? 'won' : 'lost');
     if (nightfall) Battle.finish(B, 'nightfall');
   },
 
+  atRetreat(B, x, y) { const r = B.retreat; return dist2(x, y, r.x, r.y) < r.r * r.r; },
+
   finish(B, how) {
     if (B.over) return;
     B.over = true;
+    // withdrawing: whoever is still on the field takes his chances
+    let captured = 0;
+    if (how === 'withdrew') {
+      const P = B.player;
+      for (const m of P.men) {
+        if (m.state !== 'formed' || m.role === 'officer' || m.saved) continue;
+        let near = false;
+        for (const e of B.units) {
+          if (e.team === TEAM_PLAYER || e.routed) continue;
+          if (e.men.some(o => o.state === 'formed' && dist2(o.x, o.y, m.x, m.y) < CFG.CAPTURE_RANGE * CFG.CAPTURE_RANGE)) { near = true; break; }
+        }
+        if (near) {
+          m.captured = true; captured++;
+          if (m.role === 'ensign' && !P.coloursLost) { P.coloursLost = true; B.stats.coloursLost++; }
+        } else m.saved = true;       // nobody near: they make their own way back
+      }
+    }
     const enemies = B.units.filter(u => u.team === TEAM_ENEMY);
     const tally = us => us.reduce((a, u) => {
       for (const m of u.men) if (m.role !== 'drummer' && m.role !== 'fifer') { if (m.state === 'down') a.down++; if (m.state === 'gone' || m.state === 'fleeing') a.fled++; }
@@ -136,11 +162,13 @@ const Battle = {
       coloursTaken: B.stats.coloursTaken, coloursLost: B.player.coloursLost,
       commanderHp: Math.max(0, B.cmd.hp), commanderKills: B.cmd.kills || 0,
       orders: B.hq ? Command.obeyed(B) : null,
+      saved: B.player.men.filter(m => m.saved && m.role !== 'drummer' && m.role !== 'fifer').length, captured,
       player: B.player,
     };
     B.events.push({ type: 'end', how });
   },
 
+  // give up the field now. On the road with your men that is a retreat; anywhere else it is abandoning them
   withdraw(B) { if (!B.over) Battle.finish(B, 'withdrew'); },
 
   log(B, text, tone = '') {

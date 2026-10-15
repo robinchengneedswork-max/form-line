@@ -17,6 +17,7 @@ const CFG = {
   SKIRMISH_GAP: 5,
   COLUMN_FILES: 4,         // march column (follow me)
   ATTACK_FILES: 6,         // column of attack: narrow and deep, built for the charge
+  ATTACK_NERVE: 0.7,       // morale cost per man lost while in column of attack (it takes ATTACK_EXPOSED more hits)
   ATTACK_SHOCK: 1.25,      // charge shock from a column of attack
   ATTACK_EXPOSED: 1.4,     // hits on a column of attack (a ball that misses the front rank finds the next)
   BYRANK_GAP: 5,           // fire by rank: seconds between one rank's volley and the next
@@ -29,7 +30,9 @@ const CFG = {
   CHARGE: 4.0,
   FLEE: 3.4,
   CMD_WALK: 1.7,
-  CMD_RUN: 3.8,
+  CMD_SPRINT: 4.6,         // you, running flat out — faster than a charge, for a little while
+  CMD_WIND_DRAIN: 1 / 14,  // a full sprint lasts ~14 s
+  CMD_WIND_REST: 1 / 30,
   SLOPE_PENALTY: 0.06,     // speed lost per % of uphill grade
 
   // ── the musket ──
@@ -53,6 +56,25 @@ const CFG = {
   MELEE_KILL: 0.16,        // per second, per engaged man, before modifiers
   CHARGE_SHOCK: 0.8,       // morale/s drained from a unit being charged (× odds, per charging coy)
   CHARGE_RANGE: 45,        // within this the charge is "coming home"
+  // the charge goes in at the double and only RUSHES the last stretch (period practice: the men
+  // would be blown otherwise). Wind (0..1) is a company's breath: rushing spends it fast.
+  CHARGE_RUSH: 40,         // men break into the run only this close to their man
+  WIND_RUSH: 1 / 16,       // per second while rushing: ~16 s of full tilt, ~60 m
+  WIND_QUICK: 1 / 150,     // quick time costs a little
+  WIND_FIGHT: 1 / 30,      // so does hand-to-hand
+  WIND_REST: 1 / 35,       // halted, they get it back
+  WIND_WALK: 1 / 90,
+  POINT_BLANK: 30,         // a line still presented when a charge reaches this lets fly on its own
+  CHARGE_TEST: 22,
+  STEADY_AFTER: 6,
+  AI_CHARGE_BREATH: 0.6,
+  CHARGE_BLOWN: 0.2,       // below this breath, with nobody in contact, a charge (or a pursuit) is over
+  CHARGE_MAX: 45,          // seconds; nobody chases a beaten enemy across the county   // AI captains only order a charge with this much breath in the men         // a volley this recent still counts as a steady line at the clash
+  // MOMENTUM: a charge's push is how fast the men are going when it lands (wind, slope and ground
+  // all slow them) plus the drop: charging down onto a line is terrifying, up into one is murder
+  DOWNHILL_RUSH: 0.012,    // rush speed gained per % of downhill grade (cap +18%)
+  SLOPE_PUSH: 0.05,        // push per metre the charger stands above the defender (±8 m)         // here somebody's nerve gives: the charge goes home or falters
+  CAPTURE_RANGE: 150,      // left on the field this near a formed enemy when you withdraw = taken prisoner
 
   // ── morale (0..100) ──
   MORALE_BASE: 58,

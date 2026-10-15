@@ -156,3 +156,13 @@ button.mini { font-size: 12px; padding: 2px 8px; }
 #hud-company .orders { color: #e8c766; font-size: 12px; white-space: normal; }
 @keyframes drop { from { transform: translate(-50%, -20px); opacity: 0; } }
 @media (max-width: 760px) { #dispatch { max-width: calc(100% - 200px); left: auto; right: 64px; transform: none; padding: 7px 10px; } #dispatch div { font-size: 13px; } }
+
+/* round 3: your wind, the sprint toggle, leaving by the road */
+.hud .cwind { display: inline-block; width: 54px; height: 6px; margin-left: 8px; background: rgba(0,0,0,0.35); border-radius: 3px; vertical-align: middle; overflow: hidden; }
+.hud .cwind i { display: block; height: 100%; background: #9cc7e8; }
+.hud .warn { color: #f0b46a; }
+#touch-bar #tb-run.on { background: #b08a2e; color: #fff; }
+#btn-leave { display: none; position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); z-index: 6;
+  font: 700 17px Georgia, serif; padding: 10px 22px; background: #2d4a2b; color: #f1e8d2; border: 2px solid #e8be50; border-radius: 6px; cursor: pointer; }
+#btn-leave.show { display: block; }
+body.touch #btn-leave { bottom: 84px; }

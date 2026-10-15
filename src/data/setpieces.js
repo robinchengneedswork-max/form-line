@@ -28,6 +28,7 @@ function ridgeLine(f, rng, ry, h = 16, w = 70) {
 Object.assign(SCENARIOS, {
   sp_ridge: {
     name: 'The Long Ridge', setpiece: true, size: [1000, 720],
+    retreat: { x: 520, r: 36, label: 'The Brussels road' },
     blurb: 'The whole brigade is drawn up behind a long ridge. The French will come up it in columns. Wellington wants them met at the crest.',
     build(f, rng) {
       baseGround(f, rng, { amp: 4, woods: 0.06 });
@@ -112,6 +113,7 @@ Object.assign(SCENARIOS, {
   // the campaign's last battle
   finale: {
     name: 'The Field of Glory', setpiece: true, final: true, size: [1100, 760],
+    retreat: { x: 500, r: 40, label: 'The road to Brussels' },
     blurb: 'The whole army is up. A ridge, two walled farms out in front of it, and the Emperor’s columns coming on in waves. Hold the centre.',
     build(f, rng) {
       baseGround(f, rng, { amp: 4, woods: 0.06 });

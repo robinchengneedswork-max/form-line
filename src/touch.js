@@ -23,11 +23,11 @@ const WHEEL_GROUPS = [
   { name: 'Fire', angle: -Math.PI / 2, opts: [
     { cmd: 'ready', label: 'Ready', at: -1 }, { cmd: 'fire', label: 'FIRE!', hot: true, at: 0 }, { cmd: 'atwill', label: 'At will', at: 1 }, { cmd: 'cease', label: 'Cease', at: 2 }, { cmd: 'byrank', label: 'By rank', at: -2 }] },
   { name: 'Bayonet', angle: 0, opts: [
-    { cmd: 'charge', label: 'Charge!', hot: true, at: 0 }, { cmd: 'rally', label: 'Rally', at: 1 }] },
+    { cmd: 'charge', label: 'Charge!', hot: true, at: 0 }, { cmd: 'rally', label: 'Rally', at: 1 }, { cmd: 'reform', label: 'Re-form', at: -1 }] },
   { name: 'Form', angle: Math.PI / 2, opts: [
     { cmd: 'close', label: 'Close up', at: -1 }, { cmd: 'line', label: 'Line', at: 0 }, { cmd: 'skirmish', label: 'Skirmish', at: 1 }, { cmd: 'attackcol', label: 'Column', at: -2 }] },
   { name: 'Move', angle: Math.PI, opts: [
-    { cmd: 'advance', label: 'Advance', at: 1 }, { cmd: 'follow', label: 'Follow me', at: 0 }, { cmd: 'halt', label: 'Halt', at: -1 }, { cmd: 'fallback', label: 'Fall back', at: -2 }] },
+    { cmd: 'advance', label: 'Advance', at: 1 }, { cmd: 'follow', label: 'Follow me', at: 0 }, { cmd: 'halt', label: 'Halt', at: -1 }, { cmd: 'fallback', label: 'Fall back', at: -2 }, { cmd: 'retire', label: 'Retire', at: 2 }] },
 ];
 const optAngle = (g, i) => g.angle + g.opts[i].at * OPT_SPAN;
 
@@ -41,6 +41,7 @@ const Touch = {
     canvas.addEventListener('pointercancel', Touch.cancel);
     const b = id => document.getElementById(id);
     b('tb-pause').onclick = () => UI.togglePause();
+    b('tb-run').onclick = () => { if (App.B) App.B.cmd.sprint = !App.B.cmd.sprint; };
     b('tb-centre').onclick = () => { Input.camOff.x = Input.camOff.y = 0; };
     b('tb-speed').onclick = () => { UI.cycleSpeed(); b('tb-speed').textContent = App.speed + '×'; };
     b('btn-help').onclick = () => { UI.togglePause(); UI.toggleHelp(); };
