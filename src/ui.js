@@ -41,9 +41,11 @@ const UI = {
       UI.strip(B, true);
     };
     // the card: tap for more (or less); the 📜 button in the clock: orders and what has happened
-    $('hud-company').onclick = () => { UI._cardOpen = !UI._cardOpen; };
-    $('hud-clock').onclick = e => { if (e.target.closest('[data-act=orders]')) UI.toggleOrders(); };
-    $('btn-orders-close').onclick = () => UI.toggleOrders();
+    // (null-safe: a page and scripts from two different releases must not stop the game starting)
+    const on = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+    on('hud-company', () => { UI._cardOpen = !UI._cardOpen; });
+    on('btn-orders', () => UI.toggleOrders());
+    on('btn-orders-close', () => UI.toggleOrders());
     $('hud-orders').querySelectorAll('button').forEach(b => b.onclick = () => {
       if (!App.B || App.B.over) return;
       let cmd = b.dataset.cmd;
@@ -286,7 +288,8 @@ const UI = {
     const cover = UI.coverWord(B, u);
     const open = UI._cardOpen;
     const kit = u.isDetachment ? '' : `${Unit.hasRole(u, 'ensign') ? '⚑' : '<s>⚑</s>'} ${Unit.hasRole(u, 'drummer') ? '◉' : '<s>◉</s>'} ${Unit.hasRole(u, 'fifer') ? '♪' : '<s>♪</s>'}`;
-    $('hud-company').innerHTML = `
+    // rewritten only when it changes: iOS drops a tap whose element is replaced under the finger
+    const card = `
       <div class="name"><span>${esc(UI.cardName(u))}</span><span class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}</span></div>
       <div class="bar"><i style="width:${u.morale}%;background:${UI.moraleCol(u)}"></i><span>${word}</span></div>
       <div class="row"><b>${u.formed}<small>/${u.startSize}</small></b><span>loaded ${loaded}</span>${fireShort ? `<span>${fireShort}</span>` : ''}</div>
@@ -299,12 +302,15 @@ const UI = {
         <div class="row wide"><span>Your breath</span><span class="cwind"><i style="width:${Math.round(c.wind * 100)}%"></i></span></div>
       </div>` : ''}
       <div class="toggle">${open ? '▴ less' : '▾ more'}</div>`;
+    if (card !== UI._card) { UI._card = card; $('hud-company').innerHTML = card; }
     const onRoad = Battle.atRetreat(B, c.x, c.y);
     $('btn-leavefield').classList.toggle('show', onRoad);
     $('tb-run').classList.toggle('on', !!c.sprint);
     const wa = B.wind.a * 180 / Math.PI;
-    $('hud-clock').innerHTML = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`
-      + `<button class="ob${B.weather ? ' wet' : ''}" data-act="orders" title="Orders and what has happened (O)">📜${B.weather ? ' ☂' : ''}</button>`;
+    const clock = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`;
+    if (clock !== UI._clock) { UI._clock = clock; ($('clock-text') || $('hud-clock')).innerHTML = clock; }
+    const ob = $('btn-orders'), wet = !!B.weather;
+    if (ob && ob.classList.contains('wet') !== wet) { ob.classList.toggle('wet', wet); ob.textContent = wet ? '📜 ☂' : '📜'; }
     const dp = B.dispatch;
     const showD = dp && (B.t - dp.t < 9 || performance.now() < (UI._dispatchUntil || 0));
     $('dispatch').classList.toggle('show', !!showD);

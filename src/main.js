@@ -57,7 +57,7 @@ const App = {
     const B = Battle.create(opts);
     UI.brief(B.scenario, B.deploy, node, () => {
       Sound.resume();
-      App.B = B; App.mode = 'battle'; UI._stripKey = null; App.paused = false; App.acc = 0; App.speed = 1;
+      App.B = B; App.mode = 'battle'; UI._stripKey = UI._card = UI._clock = null; App.paused = false; App.acc = 0; App.speed = 1;
       Render.terrainFor = null;
       Render.cam.x = B.cmd.x; Render.cam.y = B.cmd.y - 30; Render.cam.zoom = 5.5;
       Input.camOff.x = Input.camOff.y = 0;
@@ -91,7 +91,24 @@ const App = {
     });
   },
 
+  // something went wrong: say so on the screen (a phone has no console — a screenshot of this is the bug report)
+  oops(err) {
+    const msg = String(err && (err.stack || err.message) || err).split(/\n/).slice(0, 3).join(' · ');
+    console.error(err);
+    if (App._oops === msg) return;
+    App._oops = msg;
+    let el = document.getElementById('oops');
+    if (!el) { el = document.createElement('div'); el.id = 'oops'; el.onclick = () => el.remove(); document.body.appendChild(el); }
+    el.textContent = 'Something broke — please send a screenshot of this: ' + msg;
+  },
+
   frame(ts) {
+    // the next frame is asked for FIRST, so one bad frame cannot stop the game (it used to: the
+    // screen froze and every button seemed dead)
+    requestAnimationFrame(App.frame);
+    try { App.tick(ts); } catch (err) { App.oops(err); }
+  },
+  tick(ts) {
     const dt = Math.min(0.1, (ts - App.last) / 1000 || 0);
     App.last = ts;
     const B = App.B;
@@ -112,15 +129,16 @@ const App = {
       UI.hud(B);
       if (B.over && !App.ended) { App.ended = true; UI.battleOver(B, () => App.afterBattle()); }
     }
-    requestAnimationFrame(App.frame);
   },
 };
 
+window.addEventListener('error', e => App.oops(e.error || e.message));
+window.addEventListener('unhandledrejection', e => App.oops(e.reason));
 window.addEventListener('load', () => {
-  Render.init($('field'));
-  Input.init($('field'));
-  Touch.init($('field'));
-  UI.init();
+  // each part starts on its own: one that fails must not take the others (or the game loop) with it
+  for (const start of [() => Render.init($('field')), () => Input.init($('field')), () => Touch.init($('field')), () => UI.init()]) {
+    try { start(); } catch (err) { App.oops(err); }
+  }
   window.addEventListener('resize', () => Render.resize());
   window.addEventListener('orientationchange', () => setTimeout(() => Render.resize(), 250));
   requestAnimationFrame(App.frame);
