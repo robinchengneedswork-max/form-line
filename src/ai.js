@@ -23,6 +23,7 @@
 const AI = {
   step(B) {
     for (const u of B.units) {
+      if (u.attached === 'troop' && !B.autoPlayer) { AI.troop(B, u); continue; }
       if ((u.isPlayer || u.commanded) && !B.autoPlayer) continue;
       if (B.t < u.ai.next) continue;
       u.ai.next = B.t + 1 + B.rng() * 0.3;
@@ -77,6 +78,16 @@ const AI = {
 
   think(B, u) {
     if (u.routed) {
+      const S = u.steadiedBy;
+      if (S && !u.isPlayer && u.morale >= CFG.RALLY_AT) {
+        // they fall in on the steady company: with their captain gone, a sergeant (or the steadiest man) takes charge
+        if (!u.leader || u.leader.state !== 'formed') {
+          const c = u.men.filter(m => m.state === 'fleeing' && m.role === 'line').sort((a, b) => (b.grade === 'sgt') - (a.grade === 'sgt') || dist2(a.x, a.y, S.cx, S.cy) - dist2(b.x, b.y, S.cx, S.cy))[0];
+          if (c) { c.state = 'formed'; c.role = 'officer'; c.m = 'none'; u.leader = c; }
+        }
+        Morale.unrout(B, u);         // (it says so in the log)
+        return;
+      }
       if (u.morale >= CFG.RALLY_AT + CFG.RALLY_BOOST && !u.isPlayer && u.leader && u.leader.state === 'formed') Morale.unrout(B, u);
       return;
     }
@@ -232,8 +243,10 @@ const AI = {
       if (e.team === u.team || e.arm !== 'cav' || e.routed || e.formed < 3 || !(B.seen[u.team].has(e.id) || B.heard[u.team].has(e.id))) continue;
       const d = dist(u.cx, u.cy, e.cx, e.cy);
       // a squadron hanging about out there is a worry, not a threat; one coming on, or close, is
-      const coming = e.order === 'charge' || (e.order === 'ride' && e.ride && dist(e.ride.x, e.ride.y, u.cx, u.cy) < 130);
-      if (d < bd && (coming || d < 120)) { bd = d; best = e; }
+      // only a charge actually coming on, or horse very close: forming square for every squadron that trotted
+      // nearer meant the horse never had a chance (the user had "never seen a cav charge work")
+      const coming = e.order === 'charge' && dist(e.cx, e.cy, u.cx, u.cy) < CFG.CAV_LAUNCH + 40;
+      if (d < bd && (coming || d < CFG.CAV_CLOSE)) { bd = d; best = e; }
     }
     if (best) u.ai.cavSeen = B.t;
     return best;
@@ -256,6 +269,8 @@ const AI = {
       s += ready < 0.35 ? 0.35 : ready > 0.75 ? -0.15 : 0;
     }
     s += e.morale < CFG.SHAKEN ? 0.4 : e.morale < CFG.STEADY ? 0.15 : 0;
+    // busy in a firefight: to form square now is to be shot to pieces by the foot in front of them
+    if (e.form.kind !== 'square' && B.units.some(o => o.team === u.team && o.arm === 'foot' && o.formed && !o.routed && dist(o.cx, o.cy, e.cx, e.cy) < CFG.CAV_BUSY)) s += 0.25;
     return s * (u.morale < CFG.STEADY ? 0.7 : 1);
   },
 
@@ -301,9 +316,12 @@ const AI = {
     }
     if (best && bs > CFG.CAV_MARK) {
       const d = dist(u.cx, u.cy, best.cx, best.cy);
-      if (a.target !== best.id) { a.target = best.id; AI.warn(B, u, best); }
-      if (d > 120) AI.ride(B, u, best.cx + (u.cx - best.cx) / d * 90, best.cy + (u.cy - best.cy) / d * 90, CFG.CAV_TROT);
-      else Orders.give(B, u, 'charge');
+      // pick the mark quietly and close to charging distance at the trot; the trumpet sounds only when
+      // they go in (it used to sound as soon as they chose you, 300 m off — half a minute to form square,
+      // and the user had "never seen a cav charge work")
+      a.target = best.id;
+      if (d > CFG.CAV_LAUNCH) AI.ride(B, u, best.cx + (u.cx - best.cx) / d * (CFG.CAV_LAUNCH - 10), best.cy + (u.cy - best.cy) / d * (CFG.CAV_LAUNCH - 10), CFG.CAV_CANTER);
+      else { if (u.order !== 'charge') AI.warn(B, u, best); Orders.give(B, u, 'charge'); }
       return;
     }
     a.target = null;
@@ -447,6 +465,14 @@ const AI = {
     u.leader = c;
     u.reslot = B.t + 0.5;
     if (u.order === 'follow') u.trail = [{ x: c.x, y: c.y }];
+  },
+
+  // your own horse (bought): they wait where you put them and go in only when you call; after a charge
+  // they come back to their post, at a walk, to get their wind
+  troop(B, u) {
+    if (u.routed || !u.formed || u.order === 'charge' || !u.post) return;
+    if (u.order === 'ride') return;
+    if (B.t - (u.chargeEnd || -99) > CFG.TROOP_RETURN && dist(u.cx, u.cy, u.post.x, u.post.y) > 25) Orders.apply(B, u, 'ride', { x: u.post.x, y: u.post.y, pace: CFG.CAV_WALK, facing: u.post.facing });
   },
 
   // the headless autoplayer drives YOUR commander's legs too

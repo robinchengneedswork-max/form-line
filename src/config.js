@@ -100,7 +100,12 @@ const CFG = {
   CAV_TROT: 3.6,
   CAV_GALLOP: 7.5,
   CAV_FLEE: 6.5,
-  CAV_GALLOP_AT: 90,       // they only open out into the gallop this close (the charge's rush)
+  CAV_GALLOP_AT: 80,       // they only open out into the gallop this close (the charge's rush); a canter before.
+                           // At 120 m the horses were blown 20 m short and the charge called off every time
+  CAV_CANTER: 5.2,         // closing on a mark: faster than the trot, slower than the gallop
+  CAV_CLOSE: 100,          // foot form square for horse this close even if it is not charging (yet)
+  CAV_LAUNCH: 135,         // they close to this at the trot, quietly, then the trumpet: ~15 s to form square
+  CAV_BUSY: 130,           // a company with enemy foot this close is busy in a firefight — a mark for horse
   CAV_WIND_GALLOP: 1 / 22, // ~20 s of gallop and the horses are blown
   CAV_WIND_TROT: 1 / 300,
   CAV_REACH: 2.3,          // a sabre from the saddle reaches further than a bayonet on foot
@@ -116,7 +121,7 @@ const CFG = {
   CAV_MARK: 0.8,           // how inviting a target must look before they go in
   CAV_WARN: 250,           // infantry form square when horsemen come on this close
   CAV_NERVE: 0.6,          // morale cost per trooper down (× the usual)
-  SQUARE_DEF: 8,           // a formed square's nerve against horse (a shaken one can still be broken)
+  SQUARE_DEF: 16,           // a formed square's nerve against horse (a shaken one can still be broken)
   SQUARE_DRESS: 9,         // seconds to dress a square and close its corners (× 1.25 − drill)
   SQUARE_EXPOSED: 1.35,    // muskets (and guns) into a square: every ball finds somebody
   SQUARE_FORMED: 0.7,
@@ -136,6 +141,8 @@ const CFG = {
   ROUND_LONG_SD: 0.05,     // over/short error, × range
   ROUND_SHORT: 25,         // first graze this far short of the fall of shot…
   ROUND_SKIP: 140,         // …and it skips on this far beyond
+  ROUND_SKIP_H: 1.0,       // after its graze the ball skips about this high (m) above the graze point…
+  ROUND_SINK: 0.004,       // …losing this much height per metre: over a crest the ground falls away and it passes overhead
   ROUND_WIDTH: 0.55,       // a man this close to its path is hit
   ROUND_KILLS: 6,
   ROUND_P: 0.3,            // a man in its path is hit (the rest of the time it bounds over him, or he sees it coming)
@@ -190,7 +197,22 @@ const CFG = {
 
   // ── visibility ──
   SIGHT: 480,
-  LOG_FRESH: 12,           // seconds a report stays in the battle log on screen (all of it is under 📜)
+  LOG_FRESH: 12,
+  // your own guns (bought): they limber up, move at a walk, and unlimber before they fire again
+  GUN_LIMBER: 12,          // seconds to limber up (and again to unlimber)
+  GUN_MOVE: 1.5,           // m/s, horse-drawn at a walk
+  TROOP_SIZE: 12,          // a troop of light dragoons when bought
+  TROOP_RETURN: 6,         // s after a charge before your troop walks back to where you put it
+  // the French have more behind the hill (the user: "lots of these maps we win if I do nothing"): as their
+  // companies break, fresh ones come up — a pool per battle of BASE + LV × level (+1 in a great battle)
+  FR_RESERVE_BASE: 1,
+  FR_RESERVE_LV: 2,
+  FR_RESERVE_DELAY: 70,    // seconds after a company breaks before its replacement marches on (±25%)
+  FR_RESERVE_SIZE: 0.8,    // × a fresh company's usual strength
+  // a routed AI company rallies on a steady, well-drilled company of its own side that its men run past
+  RALLY_FRIEND_R: 35,      // metres from that company's centre
+  RALLY_FRIEND_DRILL: 0.5,
+  RALLY_FRIEND_RATE: 1.2,  // morale/s while they are among them           // seconds a report stays in the battle log on screen (all of it is under 📜)
   WOODS_BLOCK: 22,
   HEAR_HORSE: 160,         // horse at the trot or gallop is heard this far off, seen or not (the rye at Quatre Bras)
   RYE_BLOCK: 0.75,         // tall rye (a map sets f.rye): per 3 m of it, so ~90 m hides a man — and a squadron until it breaks into the gallop.

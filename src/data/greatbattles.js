@@ -66,12 +66,15 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
+          beside(you, -75, 'No. 6 Coy, 1/43rd'),
+          beside(you, 85, 'No. 2 Coy, 1/95th Rifles', null, 18, 0.6, { colours: false }),
           post(0, thenRetire(hold(300, 352, 'hold the left vineyard'), back + 25, 380, 612), 22, 0.5, { name: 'Light Coy, 1/43rd', fifer: false }),
           post(0, thenRetire(hold(660, 352, 'skirmish in the vineyards'), back - 30, 640, 600), 18, 0.6, { name: 'No. 4 Coy, 1/95th Rifles', fifer: false, colours: false }),
           post(0, hold(600, 590, 'cover the bridge from the far bank'), 22, 0.5, { name: 'No. 2 Coy, 1/52nd', fifer: false }),
           guns(450, 650, NORTH, 2, 0.5, { team: TEAM_PLAYER, name: 'Ross’s Troop, RHA' }),
         ],
         enemies: [
+          post(1, attack(450, 340), sz, e.drill, { nerve: e.nerve, x: 440, y: 50, fifer: false, name: 'Voltigeurs, 6e Léger' }),
           post(1, attack(300, 340), sz, e.drill, { nerve: e.nerve, x: 290, y: 80 }),
           post(1, attack(450, 340), sz, e.drill, { nerve: e.nerve, x: 460, y: 70, fifer: false }),
           post(1, attack(660, 340), sz, e.drill, { nerve: e.nerve, x: 680, y: 80 }),
@@ -104,6 +107,8 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: 470, y: 640, facing: NORTH, task: you },
         allies: [
+          beside(you, -80, 'No. 1 Coy, 2/31st', { x: 470, y: 640 }),
+          beside(you, 85, 'No. 4 Coy, 2/66th', { x: 470, y: 640 }),
           post(0, attack(310, 280), 24, 0.45, { name: 'No. 3 Coy, 1/3rd (The Buffs)', fifer: false, x: 300, y: 640, facing: NORTH }),
           post(0, attack(650, 280), 24, 0.45, { name: 'No. 5 Coy, 2/48th', fifer: false, x: 650, y: 640, facing: NORTH }),
           // the Fusiliers, coming up behind when the hail lifts
@@ -111,6 +116,7 @@ Object.assign(SCENARIOS, {
             task: { kind: 'reserve', x: 480, y: 715, facing: NORTH, wave: 420 + rng() * 60, goal: { x: 480, y: 250 } } }),
         ],
         enemies: [
+          post(1, hold(480, 225, '', SOUTH), sz, e.drill, { nerve: e.nerve, fifer: false, name: '4e Cie, 2/28e Léger' }),
           post(1, hold(390, 225, '', SOUTH), sz, e.drill, { nerve: e.nerve }),
           post(1, hold(570, 225, '', SOUTH), sz, e.drill, { nerve: e.nerve, fifer: false }),
           post(1, attack(480, 520), sz + 4, e.drill, { nerve: e.nerve, x: 480, y: 120, name: 'Grenadiers, 64e Ligne' }),
@@ -144,6 +150,8 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: 380, y: 570, facing: NORTH, task: you },
         allies: [
+          beside(you, -80, 'No. 9 Coy, 1/74th', { x: 380, y: 570 }),
+          beside(you, 80, 'No. 1 Coy, 2/5th', { x: 380, y: 570 }),
           post(0, attack(220, 255), 24, 0.5, { name: 'No. 2 Coy, 1/45th', fifer: false, x: 220, y: 575, facing: NORTH }),
           post(0, attack(540, 255), 24, 0.5, { name: 'No. 7 Coy, 1/88th (Connaught Rangers)', fifer: false, x: 540, y: 580, facing: NORTH }),
           // Le Marchant's heavy brigade, waiting for the foot to shake them
@@ -151,6 +159,7 @@ Object.assign(SCENARIOS, {
           horse(860, 660, NORTH, lv, rng, { team: TEAM_PLAYER, cavType: 'heavy_dragoons', name: 'C Troop, 4th Dragoons', size: 22, delay: 170 }),
         ],
         enemies: [
+          Object.assign(post(1, attack(300, 255), sz, e.drill, { nerve: e.nerve, x: 1080, y: 250, facing: WEST, fifer: false }), { arrive: 200 + rng() * 60 }),
           west(300, 0, { name: 'Voltigeurs, 1er Ligne' }),
           west(500, 1), west(700, 2), west(900, 3),
           guns(820, 170, SOUTH, 2, lv),
@@ -163,7 +172,7 @@ Object.assign(SCENARIOS, {
   },
 
   sp_maya: {
-    name: 'The Pass at Maya', setpiece: true, size: [1000, 760],
+    name: 'The Pass at Maya', setpiece: true, size: [1000, 760], noHorse: true,   // no country for horse
     weather: { kind: 'mist', label: 'Mist on the pass', sight: 200, misfire: 0.04, until: [200, 300], clears: 'The mist burns off the pass. Now you see how many there are.' },
     blurb: 'The Pyrenees. One brigade holds the pass and d’Erlon’s whole corps is coming up out of the mist. Barnes is marching up from the valley with the 7th Division. Hold until he comes.',
     build(f, rng) {
@@ -189,6 +198,8 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
+          beside(you, -65, 'No. 6 Coy, 1/92nd (Gordon Highlanders)'),
+          beside(you, 65, 'No. 8 Coy, 1/50th'),
           post(0, hold(370, 388.5, 'hold the left of the pass'), 22, 0.55, { name: 'No. 1 Coy, 1/92nd (Gordon Highlanders)', fifer: false }),
           post(0, hold(630, 388.5, 'hold the right of the pass'), 22, 0.45, { name: 'No. 4 Coy, 1/50th', fifer: false }),
           post(0, thenRetire(hold(505, 270, 'picquet the road'), 60 + rng() * 30, 520, 470), 16, 0.55, { name: 'Light Coy, 1/71st (Highland Light)', fifer: false, colours: false }),
@@ -196,6 +207,7 @@ Object.assign(SCENARIOS, {
           relief(540, 740, comes + 25, { x: 540, y: 390 }, { team: TEAM_PLAYER, size: 24, drill: 0.55, doctrine: 'hold', drummer: true, fifer: false, colours: true, name: 'No. 5 Coy, 1/6th' }),
         ],
         enemies: [
+          post(1, wave(500, 30, 260 + rng() * 50, { x: 500, y: 400 }), sz + 2, e.drill, { nerve: e.nerve, fifer: false, name: '1re Cie, 1/45e Ligne' }),
           post(1, attack(380, 400), sz, e.drill, { nerve: e.nerve, x: 390, y: 70 }),
           post(1, attack(500, 400), sz, e.drill, { nerve: e.nerve, x: 500, y: 55, fifer: false }),
           post(1, attack(620, 400), sz, e.drill, { nerve: e.nerve, x: 610, y: 70 }),
@@ -237,6 +249,8 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
+          beside(you, -60, 'No. 3 Coy, 1/32nd'),
+          beside(you, 65, 'No. 5 Coy, 1/79th (Cameron Highlanders)'),
           post(0, hold(640, 452.5, 'line the Namur road'), 22, 0.55, { name: 'No. 6 Coy, 1/28th', fifer: false }),
           post(0, hold(890, 452.5, 'hold the left'), 24, 0.55, { name: 'No. 2 Coy, 1/42nd (Black Watch)', fifer: false }),
           post(0, hold(480, 520, 'hold the crossroads'), 22, 0.55, { name: 'No. 1 Coy, 1/92nd', fifer: false }),
@@ -245,6 +259,7 @@ Object.assign(SCENARIOS, {
           relief(340, 740, guards + 20, { x: 300, y: 430 }, { team: TEAM_PLAYER, size: 26, drill: 0.7, doctrine: 'hold', drummer: true, fifer: false, colours: true, name: 'No. 3 Coy, 3/1st Foot Guards' }),
         ],
         enemies: [
+          post(1, wave(760, 40, 300 + rng() * 60, { x: 760, y: 455 }), sz, e.drill, { nerve: e.nerve, fifer: false, name: '6e Cie, 1/2e Léger' }),
           post(1, attack(640, 470), sz, e.drill, { nerve: e.nerve, x: 650, y: 90 }),
           post(1, attack(880, 455), sz, e.drill, { nerve: e.nerve, x: 870, y: 100, fifer: false }),
           post(1, attack(200, 500), sz, e.drill, { nerve: e.nerve, x: 180, y: 70, name: 'Voltigeurs, 1er Léger', fifer: false }),
@@ -292,6 +307,7 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
+          beside(you, -48, 'No. 2 Coy, 2/3rd Foot Guards'),
           post(0, hold(445, 364.5, 'hold the north gate and the wall'), 22, 0.65, { name: 'Light Coy, 2nd Coldstream Guards', fifer: false }),
           post(0, thenRetire(hold(660, 320, 'skirmish in the orchard'), 220 + rng() * 40, 640, 505), 20, 0.45, { name: 'No. 1 Coy, 1/2nd Nassau', fifer: false, colours: false }),
           post(0, thenRetire(hold(380, 320, 'hold the edge of the wood'), 160 + rng() * 40, 450, 490), 18, 0.55, { name: 'Jäger Coy, Lüneburg Field Bn.', fifer: false, colours: false }),
@@ -299,6 +315,7 @@ Object.assign(SCENARIOS, {
           guns(470, 690, NORTH, 1, 0.6, { team: TEAM_PLAYER, name: 'Bull’s Troop, RHA (howitzer)' }),
         ],
         enemies: [
+          post(1, wave(640, 30, 390 + rng() * 40, { x: 640, y: 375 }), sz + 2, e.drill, { nerve: e.nerve, fifer: false, name: '3e Cie, 1/1er Léger' }),
           post(1, attack(480, 390), sz, e.drill, { nerve: e.nerve, x: 430, y: 70 }),
           post(1, attack(640, 375), sz, e.drill, { nerve: e.nerve, x: 640, y: 70, fifer: false }),
           post(1, wave(380, 30, 220 + rng() * 40, { x: 470, y: 380 }), sz + 2, e.drill, { nerve: e.nerve, fifer: false }),

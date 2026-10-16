@@ -480,7 +480,7 @@ const Render = {
       if (off) { if (u.team === TEAM_ENEMY || own) edges.push(u); continue; }
       let text = null, pri;
       if (own) {
-        const tag = many ? (u === B.player ? 'Company' : u.name.replace(/’s party$/, '')) : '';
+        const tag = many ? Detach.tag(B, u) : '';
         text = [tag, trouble ? Unit.moraleWord(u) : ''].filter(Boolean).join(' · ') || null;
         pri = u === sel ? 0 : 1;
       } else if (u.team === TEAM_ENEMY) {

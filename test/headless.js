@@ -228,6 +228,20 @@ console.log('§9 drill & the company');
   const B3 = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
   const rm = B3.player.men.find(m => m.weapon === 'rifle'), mm = B3.player.men.find(m => m.role === 'line' && m.weapon !== 'rifle');
   chk('…a rifle reaches further and loads slower', Combat.range(rm, false) > Combat.range(mm, false) && Combat.reloadTime(B3, rm, B3.player) > Combat.reloadTime(B3, mm, B3.player) * 1.3);
+  // the muster: no cap, a rising price; take a rifle into the store and hand it to whom you like
+  const rr = Campaign.newRun(77); rr.renown = 999;
+  const c1 = Campaign.rifleCost(rr.company); Campaign.buy(rr, 'rifle'); const c2 = Campaign.rifleCost(rr.company);
+  for (let i = 0; i < 6; i++) Campaign.buy(rr, 'rifle');
+  chk('rifles: no cap — each costs more than the last', c2 > c1 && rr.company.rifles === 7 && rr.company.soldiers.filter(x => x.weapon === 'rifle').length === 7);
+  const rc = rr.company, top = rc.soldiers.find(x => x.weapon === 'rifle'), plain = rc.soldiers.find(x => x.weapon !== 'rifle');
+  Campaign.toggleRifle(rr, top.id);
+  chk('…tap a rifleman: his rifle goes into the store', top.weapon === 'musket' && rc.riflesStored === 1);
+  Campaign.armRifles(rc);
+  chk('…and stays there (it is not handed straight back to a best shot)', rc.riflesStored === 1 && rc.soldiers.filter(x => x.weapon === 'rifle').length === 6 && top.weapon === 'musket');
+  Campaign.toggleRifle(rr, plain.id);
+  chk('…tap another man: he gets it from the store', plain.weapon === 'rifle' && rc.riflesStored === 0);
+  Campaign.issueRifles(rr);
+  chk('…and "to the best shots" hands every rifle to the best shots again', rc.riflesStored === 0 && rc.soldiers.filter(x => x.weapon === 'rifle').every(x => rc.soldiers.filter(y => y.weapon !== 'rifle').every(y => y.aim <= x.aim)));
   chk('a Lieutenant cannot choose the company type yet', !Campaign.chooseType(Object.assign(Campaign.newRun(5), { total: 0 }), 'light'));
   chk('a Captain can; Light companies learn skirmish order at once', Campaign.chooseType(r, 'light') && r.company.drills.includes('skirmish'));
   const B4 = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
@@ -687,7 +701,7 @@ console.log('§13 the guns');
     chk('The Guns on the Knoll is in the battle pool, with a battery and supports', BATTLE_POOL.includes('battery') && SCENARIOS.battery.deploy(makeRng(2), 0.3).enemies.some(e => e.arm === 'gun'));
     const R = fresh('sp_ridge', 1880);
     chk('the Long Ridge has a grand battery on their ridge', R.units.filter(u => u.arm === 'gun').length === 2);
-    const b = fresh('battery', 1881, { autoPlayer: true });
+    const b = fresh('battery', 1881, { autoPlayer: true, playerDoctrine: 'attack' });   // (tune.js plays this map as an attack too)
     run(b, CFG.NIGHTFALL);
     chk('a battle against guns ends', b.over && b.result.how !== 'nightfall', b.result && b.result.how);
   }
@@ -1003,7 +1017,7 @@ console.log('§18 the great battles: each act its own');
   const n0 = M.units.length, due = M.arrivals[0].arrive;
   chk('Maya: the relief is not on the field at first', M.arrivals.length === 2 && !M.units.some(x => /82nd/.test(x.name)));
   run(M, due + 1);
-  chk('…and marches on when its hour comes', M.units.length === n0 + 1 && M.units.some(x => /82nd/.test(x.name)) && M.messages.some(x => /Barnes/.test(x.text)));
+  chk('…and marches on when its hour comes', M.units.length > n0 && M.units.some(x => /82nd/.test(x.name)) && M.messages.some(x => /Barnes/.test(x.text)));
   // Quatre Bras: tall rye hides a man at 80 m that ordinary wheat would not
   const Q = fresh('sp_quatrebras', 505), f = Q.field;
   const rye = { w: 200, h: 40, cols: 50, rows: 10, type: new Uint8Array(500).fill(T.WHEAT), height: new Float32Array(500) };
@@ -1018,6 +1032,119 @@ console.log('§18 the great battles: each act its own');
   const H = fresh('sp_hougoumont', 507);
   const behind = H.player.men.filter(x => x.role === 'line').map(x => Field.coverFor(H.field, x.sx, x.sy, x.sx, x.sy - 200)).filter(c => c <= 0.4).length;
   chk('Hougoumont: your line stands behind the garden wall', behind >= H.player.men.filter(x => x.role === 'line').length * 0.6, behind);
+}
+
+console.log('§19 round 12: horse that bites, guns everywhere late, real roundshot, reserves, rallying');
+{
+  const { Artillery, AI: AIx } = X;
+  const arms = B => { const e = B.units.filter(u => u.team === TEAM_ENEMY).concat(B.arrivals.filter(a => a.team === TEAM_ENEMY)); return { horse: e.filter(u => u.arm === 'cav').length, guns: e.filter(u => u.arm === 'gun').length }; };
+  chk('in the Hundred Days every small battle has French horse and guns', ['plain', 'woods', 'lane', 'farm', 'ford'].every(k => [1, 2, 3].every(sd => { const a = arms(fresh(k, sd, { level: 0.7 })); return a.horse >= 1 && a.guns >= 1; })));
+  chk('…but early in the Peninsula they bring none the map does not', [1, 2, 3].every(sd => { const a = arms(fresh('plain', sd, { level: 0.05 })); return a.horse === 0 && a.guns === 0; }));
+  const W = fresh('finale', 3, { level: 0.95 });
+  chk('Waterloo has a grand battery and Ney’s cuirassiers', W.units.filter(u => u.arm === 'gun').reduce((a, u) => a + u.guns.length, 0) >= 4 && W.units.filter(u => u.arm === 'cav' && u.team === TEAM_ENEMY).length >= 3);
+
+  // horse: the trumpet sounds when they go in, not when they choose you — and a line that never forms square is ridden over
+  const warnAt = [], w0 = AIx.warn;
+  AIx.warn = function (B, u, t) { warnAt.push(dist(u.cx, u.cy, t.cx, t.cy)); return w0.apply(this, arguments); };
+  let broke = 0;
+  for (const sd of [101, 202]) {
+    const H = fresh('heath', sd, { level: 0.7 });
+    H.player.fire = 'ready';                       // an unwary line: presented, never forms square
+    run(H, 420);
+    if (H.player.everRouted) broke++;
+  }
+  AIx.warn = w0;
+  chk('the trumpet sounds only when the horse go in (~135 m), not as they pick you out', warnAt.length > 0 && warnAt.every(d => d < CFG.CAV_LAUNCH + 25), warnAt.map(Math.round).join(','));
+  chk('a line that never forms square is ridden over', broke >= 1, broke);
+
+  // roundshot is a projectile: nobody falls when it is fired, only when it reaches them, and only at the height of a man
+  const shoot = shape => {
+    const S = fresh('plain', 404), f = S.field, P = S.player, gunU = S.units.find(u => u.team === TEAM_ENEMY);
+    for (let i = 0; i < f.height.length; i++) { const y = Math.floor(i / f.cols) * CFG.CELL; f.height[i] = shape(y); f.type[i] = T.GRASS; }
+    Unit.setForm(P, 'line', 360, 300, -Math.PI / 2); Unit.layout(P); for (const m of P.men) { m.x = m.sx; m.y = m.sy; }
+    gunU.drill = 1;
+    const g = { x: 360, y: 40, facing: Math.PI / 2, tx: 360, ty: 300 };
+    const p0 = CFG.ROUND_P; CFG.ROUND_P = 1;
+    const down0 = P.men.filter(m => m.state === 'down').length;
+    Artillery.roundshot(S, gunU, g, null);
+    const atOnce = P.men.filter(m => m.state === 'down').length - down0;
+    for (let k = 0; k < 40; k++) Artillery.balls(S, CFG.STEP);
+    CFG.ROUND_P = p0;
+    return { atOnce, hit: P.men.filter(m => m.state === 'down').length - down0 };
+  };
+  const flat = shoot(() => 0);
+  chk('roundshot: nobody falls the moment it is fired; on open ground it reaches the line and strikes', flat.atOnce === 0 && flat.hit > 0, JSON.stringify(flat));
+  const crest = shoot(y => (y > 262 && y < 293 ? 6 : 0));
+  chk('…a crest in front of them takes the ball', crest.hit === 0, JSON.stringify(crest));
+  const reverse = shoot(y => (y < 293 ? 5 : 0));
+  chk('…and behind a crest, on lower ground, it passes over their heads (defilade)', reverse.hit === 0, JSON.stringify(reverse));
+
+  // the French reserve: a company breaks, a fresh one comes up
+  const R = fresh('plain', 505, { level: 0.5 }), Ef = R.units.find(u => u.team === TEAM_ENEMY && u.arm === 'foot');
+  const n0 = R.units.length;
+  Morale.rout(R, Ef);
+  run(R, 2);
+  chk('when a French company breaks, a fresh one is called up and the battle is not over', R.arrivals.some(a => a.team === TEAM_ENEMY && a.objective) && !R.over);
+  run(R, CFG.FR_RESERVE_DELAY * 1.3);
+  chk('…and it marches on', R.units.length > n0 || R.over);
+
+  // rallying on a steady, drilled company of their own side
+  const Q = fresh('sp_ridge', 606), runner = Q.units.find(u => /43rd/.test(u.name)), steady = Q.units.find(u => /Grenadier Coy/.test(u.name));
+  Morale.rout(Q, runner);
+  for (const m of runner.men) if (m.state === 'fleeing') { m.x = steady.cx + Q.rng.range(-12, 12); m.y = steady.cy + Q.rng.range(-8, 8); }
+  runner.morale = CFG.RALLY_AT + 1;
+  run(Q, 3);
+  chk('a routed company that runs into a steady, drilled one rallies on it', !runner.routed, `morale ${runner.morale | 0}`);
+
+  // the big battles, closed up: friends either side of you
+  chk('in every great battle two companies of ours stand within 90 m of you', SETPIECE_POOL.concat('finale').every(k => {
+    const B = fresh(k, 7), P = B.player;
+    return B.units.filter(u => u.team === TEAM_PLAYER && u !== P && u.arm === 'foot' && dist(u.cx, u.cy, P.cx, P.cy) < 90).length >= (k === 'sp_hougoumont' ? 1 : 2);
+  }));
+}
+
+console.log('§20 things to buy: your own guns, horse and riflemen');
+{
+  const { Detach } = X;
+  const r = Campaign.newRun(808); r.renown = 9999;
+  const before = Campaign.mustered(r.company);
+  chk('the quartermaster sells a gun, a troop of horse, remounts and riflemen of the 95th — no caps, rising prices',
+    Campaign.buy(r, 'gun') && Campaign.buy(r, 'gun') && Campaign.buy(r, 'troop') && Campaign.buy(r, 'remounts') && Campaign.buy(r, 'rifleman') && Campaign.buy(r, 'rifleman')
+    && r.company.battery.pieces === 2 && r.company.troop.size === CFG.TROOP_SIZE + 4 && Campaign.shopItems(r).find(i => i.key === 'gun').cost > 70);
+  chk('…the riflemen come with their own rifles and do not count against the company’s numbers', Campaign.mustered(r.company) === before && r.company.soldiers.filter(s => s.attached && s.weapon === 'rifle').length === 2);
+  const B = Battle.create({ scenario: 'plain', seed: 31, level: 0.5, company: r.company });
+  const G = B.units.find(u => u.attached === 'guns'), Tr = B.units.find(u => u.attached === 'troop');
+  chk('in battle your guns and your troop stand beside you, on the rail', G && Tr && G.guns.length === 2 && Tr.formed === CFG.TROOP_SIZE + 4 && Detach.mine(B).includes(G) && Detach.mine(B).includes(Tr));
+  // the guns go where they are placed
+  B.selected = G;
+  const tx = G.cx + 30, ty = G.cy - 50;
+  Orders.shout(B, 'line', { x: tx, y: ty, facing: -Math.PI / 2 });
+  run(B, 30);                 // (out of earshot, a runner carries it)
+  const moving = !!G.limber;
+  run(B, 110);
+  chk('your guns limber up, move to where you drag them, and unlimber', moving && !G.limber && dist(G.form.x, G.form.y, tx, ty) < 8 && Artillery.live(G).every(g => dist(g.x, g.y, tx, ty) < 20));
+  // the troop does not go in on its own; it charges when called
+  const T2 = Battle.create({ scenario: 'heath', seed: 32, level: 0.5, company: r.company }), tr = T2.units.find(u => u.attached === 'troop');
+  let charged = false;
+  for (let i = 0; i < 120 / CFG.STEP && !T2.over; i++) { Battle.step(T2, CFG.STEP); T2.events.length = 0; if (tr.order === 'charge') charged = true; }
+  chk('your troop waits for your call — it never charges of its own accord', !charged);
+  const E = T2.units.find(u => u.team === TEAM_ENEMY && u.arm === 'foot');
+  for (const m of tr.men) { m.x += E.cx - tr.cx; m.y += E.cy + 110 - tr.cy; }
+  Unit.survey(tr); tr.form.x = tr.cx; tr.form.y = tr.cy; tr.form.facing = -Math.PI / 2;
+  T2.cmd.x = tr.cx; T2.cmd.y = tr.cy + 20;
+  T2.selected = tr;
+  Orders.shout(T2, 'charge');
+  run(T2, 3);
+  chk('…and when you call Charge! it goes in', tr.order === 'charge' || tr.chargeEnd > 0);
+  // after the battle: what is lost stays lost
+  const r2 = Campaign.newRun(809); r2.renown = 9999; Campaign.buy(r2, 'gun'); Campaign.buy(r2, 'troop');
+  const B2 = fresh('plain', 33, { company: r2.company });
+  const g2 = B2.units.find(u => u.attached === 'guns'), t2 = B2.units.find(u => u.attached === 'troop');
+  g2.guns[0].taken = true; g2.guns[0].takenBy = TEAM_ENEMY;
+  t2.men.filter(m => m.role === 'line').slice(0, 6).forEach(m => { m.state = 'down'; });
+  B2.over = false; Battle.finish(B2, 'lost');
+  Campaign.afterBattle(r2, { type: 'battle', scenario: 'plain', row: 0, id: 'x' }, B2.result);
+  chk('a gun the French took is gone; troopers who fell are gone (some come back unhorsed)', !r2.company.battery && r2.company.troop && r2.company.troop.size < CFG.TROOP_SIZE && r2.company.troop.size > CFG.TROOP_SIZE - 6);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

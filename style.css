@@ -235,3 +235,15 @@ body.touch #unit-strip kbd { display: none; }
 
 /* an error, on the screen — a phone has no console */
 #oops { position: fixed; left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 99; background: #7a1d14; color: #fff3e6; font: 12px/1.35 monospace; padding: 8px 10px; border-radius: 4px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); word-break: break-word; }
+
+/* round 12: the muster, easier on a phone — one tap to give or take a rifle */
+button.mini.rifle { min-width: 66px; }
+button.mini.rifle.on { background: #2f4a2a; color: #f1e6c8; border-color: #6c8f5a; }
+.musket { color: var(--ink-2); font-size: 12px; }
+@media (max-width: 760px) {
+  table.roster th:nth-child(5), table.roster td:nth-child(5), table.roster th:nth-child(6), table.roster td:nth-child(6),
+  table.roster th:nth-child(7), table.roster td:nth-child(7) { display: none; }
+  table.roster td:first-child { white-space: normal; max-width: 128px; }
+  table.roster td { padding: 5px 4px; }
+  button.mini { padding: 6px 9px; min-height: 30px; }
+}

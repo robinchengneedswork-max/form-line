@@ -17,6 +17,17 @@ const attack = (x, y) => ({ kind: 'attack', x, y });
 // a company spec carrying its task, standing where the task puts it
 const post = (team, task, size, drill, extra = {}) => coy(team, task.x, task.y, task.facing != null ? task.facing : (team === TEAM_ENEMY ? SOUTH : NORTH), size, drill, task.kind === 'attack' ? 'attack' : 'hold', Object.assign({ task }, extra));
 
+// a company beside you, sharing your task (the user wanted the big battles "close up, and more people":
+// shoulder to shoulder, ~65-75 m apart). `at` = where you start, for an attack (post() would put them on
+// the objective); a timed fall-back moves with them, a few seconds after yours
+function beside(you, dx, name, at, size = 22, drill = 0.5, extra = {}) {
+  const t = Object.assign({}, you, { x: you.x + dx, text: 'beside you' });
+  if (you.then) t.then = { at: you.then.at + 8, task: Object.assign({}, you.then.task, { x: you.then.task.x + dx }) };
+  if (you.kind === 'attack') t.x = you.x + dx * 0.6;
+  const start = you.kind === 'attack' && at ? { x: at.x + dx, y: at.y, facing: NORTH } : {};
+  return post(0, t, size, drill, Object.assign({ name, fifer: false }, start, extra));
+}
+
 // where a road crosses a ridge it goes through a saddle: lower the crest along the road line
 function saddle(f, x0, x1, ry, depth = 9, w = 32) {
   Paint.each(f, (x, y, i) => {
@@ -51,6 +62,8 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
+          beside(you, -75, 'No. 1 Coy, 1/9th'),
+          beside(you, 75, 'No. 5 Coy, 1/38th'),
           post(0, hold(180, 500, 'hold the left'), 22, 0.45, { name: 'Light Coy, 1/43rd', fifer: false }),
           post(0, hold(330, 505, 'hold the left-centre'), 24, 0.45, { name: 'No. 3 Coy, 1/88th', fifer: false }),
           post(0, hold(630, 505, 'hold the right-centre'), 24, 0.45, { name: 'No. 6 Coy, 1/45th', fifer: false }),
@@ -58,6 +71,7 @@ Object.assign(SCENARIOS, {
           post(0, reserve(500, 640, 'in reserve'), 24, 0.55, { name: 'Grenadier Coy, 1/28th', fifer: false }),
         ],
         enemies: [
+          post(1, wave(480, 40, 240 + rng() * 60, { x: 480, y: 480 }), sz, e.drill, { nerve: e.nerve, fifer: false, name: '3e Cie, 2/31e Léger' }),
           post(1, attack(270, 470), sz, e.drill, { nerve: e.nerve, y: 100 }),
           post(1, attack(430, 470), sz, e.drill, { nerve: e.nerve, y: 90, fifer: false }),
           post(1, attack(590, 470), sz, e.drill, { nerve: e.nerve, y: 90 }),
@@ -108,12 +122,15 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
+          beside(you, -70, 'No. 8 Coy, 2/30th'),
+          beside(you, 70, 'No. 3 Coy, 1/5th'),
           post(0, hold(458, 306, 'line the village wall'), 22, 0.45, { name: 'No. 3 Coy, 1/88th', fifer: false }),
           post(0, hold(542, 306, 'line the village wall'), 22, 0.45, { name: 'No. 6 Coy, 1/45th', fifer: false }),
           post(0, hold(300, 305, 'watch the west ford'), 20, 0.5, { name: 'Light Coy, 2/95th', fifer: false, colours: false }),
           post(0, reserve(640, 610, 'in reserve'), 24, 0.5, { name: 'No. 2 Coy, 1/7th Fusiliers', fifer: false }),
         ],
         enemies: [
+          post(1, wave(500, 40, 330 + rng() * 60, { x: 500, y: 350 }), sz, e.drill, { nerve: e.nerve, fifer: false, name: '5e Cie, 1/47e Ligne' }),
           post(1, attack(300, 300), sz, e.drill, { nerve: e.nerve, x: 300, y: 90 }),
           post(1, attack(500, 330), sz, e.drill, { nerve: e.nerve, x: 470, y: 80, fifer: false }),
           post(1, attack(520, 330), sz, e.drill, { nerve: e.nerve, x: 560, y: 80 }),
@@ -152,6 +169,8 @@ Object.assign(SCENARIOS, {
       return {
         player: { x: you.x, y: you.y, facing: NORTH, task: you },
         allies: [
+          beside(you, -75, 'No. 7 Coy, 1/40th'),
+          beside(you, 72, 'No. 4 Coy, 1/30th'),
           post(0, hold(870, 405, 'hold the great farm'), 22, 0.6, { name: 'Light Coy, 2nd Foot Guards', fifer: false }),
           post(0, hold(620, 440, 'hold the little farm'), 20, 0.6, { name: 'No. 1 Coy, 2nd Light KGL', fifer: false, colours: false }),
           post(0, hold(280, 545, 'hold the left'), 24, 0.5, { name: 'No. 2 Coy, 1/52nd', fifer: false }),
@@ -159,6 +178,7 @@ Object.assign(SCENARIOS, {
           post(0, reserve(500, 670, 'in reserve'), 26, 0.7, { name: 'Grenadier Coy, 1st Foot Guards', fifer: false }),
         ],
         enemies: [
+          post(1, wave(470, 40, 220 + rng() * 40, { x: 470, y: 530 }), sz, e.drill, { nerve: e.nerve, fifer: false, name: '2e Cie, 1/105e Ligne' }),
           post(1, attack(870, 400), sz, e.drill, { nerve: e.nerve, x: 860, y: 110 }),
           post(1, attack(860, 420), sz, e.drill, { nerve: e.nerve, x: 950, y: 120, fifer: false }),
           post(1, attack(620, 430), sz, e.drill, { nerve: e.nerve, x: 620, y: 90 }),
@@ -167,8 +187,15 @@ Object.assign(SCENARIOS, {
           post(1, wave(650, 40, 320 + rng() * 40, { x: 640, y: 530 }), sz, e.drill, { nerve: e.nerve, fifer: false }),
           post(1, wave(440, 30, 540 + rng() * 60, { x: 470, y: 540 }), sz + 4, Math.min(0.95, e.drill + 0.2), { nerve: e.nerve + 12, name: 'Grenadiers de la Garde' }),
           post(1, wave(520, 30, 560 + rng() * 60, { x: 500, y: 540 }), sz + 4, Math.min(0.95, e.drill + 0.2), { nerve: e.nerve + 12, name: 'Chasseurs de la Garde', fifer: false }),
+          // the grand battery: the reverse slope is what it is for
+          guns(400, 170, SOUTH, 2, 0.9, { name: 'Grande Batterie (left)' }),
+          guns(700, 170, SOUTH, 2, 0.9, { name: 'Grande Batterie (right)' }),
+          // Ney's cuirassiers come up the slope in the afternoon; lancers work round the flank first
+          horse(1060, 260, SOUTH, 0.9, rng, { cavType: 'lancers', name: '1er Esc., 6e Lanciers', delay: 200 + rng() * 60 }),
+          horse(300, 30, SOUTH, 0.9, rng, { cavType: 'cuirassiers', name: '1er Esc., 4e Cuirassiers', delay: 380 + rng() * 60 }),
+          horse(800, 30, SOUTH, 0.9, rng, { cavType: 'cuirassiers', name: '2e Esc., 9e Cuirassiers', delay: 410 + rng() * 60 }),
         ],
-        note: 'Five companies of ours beside you. Eight of theirs, the Guard last.',
+        note: 'Five companies of ours beside you. Eight of theirs, the Guard last — a grand battery, and Ney’s cuirassiers.',
       };
     },
   },

@@ -23,7 +23,8 @@ const UI = {
     $('btn-continue').onclick = () => App.continueCampaign();
     $('btn-builder').onclick = () => UI.builder();
     $('btn-quick').onclick = () => App.quickBattle($('quick-scenario').value, {
-      stage: +$('quick-stage').value, size: +$('quick-size').value, type: $('quick-type').value || null, horse: $('quick-horse').checked });
+      stage: +$('quick-stage').value, size: +$('quick-size').value, type: $('quick-type').value || null, horse: $('quick-horse').checked,
+      gun: !!($('quick-gun') && $('quick-gun').checked), troop: !!($('quick-troop') && $('quick-troop').checked) });
     // the small fields, then the big battles
     $('quick-scenario').innerHTML = `<optgroup label="Skirmishes">${BATTLE_POOL.map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('')}</optgroup>`
       + `<optgroup label="Battles">${SETPIECE_POOL.concat('finale').map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('')}</optgroup>`;
@@ -114,11 +115,14 @@ const UI = {
       : `<h3>Choose its character</h3><div class="cards">${Object.entries(T).map(([k, t]) => `<button class="card" data-type="${k}"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join('')}</div>`;
     const drills = Object.entries(LEARNED_DRILLS).map(([k, n]) => `<span class="chip ${co.drills.includes(k) ? '' : 'locked'}">${esc(n)}${co.drills.includes(k) ? '' : ' — learn at camp'}</span>`).join('');
     const order = { sgt: 0, cpl: 1, pte: 2 };
+    const carried = co.soldiers.filter(s => s.weapon === 'rifle').length, stored = co.riflesStored || 0;
     const sorted = co.soldiers.slice().sort((a, b) => order[a.rank] - order[b.rank] || b.kills - a.kills || b.xp - a.xp);
     const rows = sorted.map(s => {
       const p = Campaign.promotion(run, s);
       const promo = p ? `<button class="mini" data-promote="${s.id}" ${p.ok ? '' : 'disabled'} title="needs ${p.xp} xp">→ ${Campaign.RANK_NAMES[p.to]} (${p.cost})</button>` : '';
-      const rifle = s.weapon === 'rifle' ? '<b class="rifle">Baker rifle</b>' : co.rifles ? `<button class="mini" data-rifle="${s.id}">give rifle</button>` : 'musket';
+      // one tap: take his rifle into the store, or hand him one from it
+      const rifle = s.weapon === 'rifle' ? `<button class="mini rifle on" data-rifle="${s.id}" title="Take his rifle into the store">Rifle ✕</button>`
+        : stored ? `<button class="mini rifle" data-rifle="${s.id}" title="Give him a rifle from the store">+ Rifle</button>` : '<span class="musket">musket</span>';
       // a sergeant can be renamed and leads a party; anyone else can be put in a sergeant's party
       const sgts = co.soldiers.filter(x => x.rank === 'sgt');
       const party = s.rank === 'sgt' ? `<small>leads ${co.soldiers.filter(x => x.party === s.id).length}</small>`
@@ -129,7 +133,8 @@ const UI = {
     $('company').innerHTML = `<h1>${esc(co.name)}</h1>${typeBlock}
       <div class="facts"><span>Drill <b>${Math.round(co.drill * 100)}</b></span><span>Renown <b>${run.renown}</b></span>
         <span>Sergeants <b>${sl.sgtUsed}/${sl.sgt}</b></span><span>Corporals <b>${sl.cplUsed}/${sl.cpl}</b></span>
-        <span>Rifles <b>${co.soldiers.filter(s => s.weapon === 'rifle').length}/${co.rifles}</b> <small>(max ${Campaign.rifleCap(co)})</small></span>
+        <span>Rifles <b>${carried}</b> carried · <b>${stored}</b> in store${co.rifles ? ' <button class="mini" id="btn-issue">to the best shots</button>' : ''}</span>
+        ${co.battery ? `<span>Your guns <b>${co.battery.pieces}</b></span>` : ''}${co.troop ? `<span>${co.troop.type === 'heavy_dragoons' ? 'Dragoons' : 'Light dragoons'} <b>${co.troop.size}</b></span>` : ''}${co.soldiers.some(s => s.attached) ? `<span>Riflemen of the 95th <b>${co.soldiers.filter(s => s.attached).length}</b></span>` : ''}
         <span>Surgeon's mates <b>${co.surgeons || 0}/3</b></span><span>Recruiting party <b>${co.recruiters || 0}/3</b></span></div>
       <div class="chips">${drills}</div>
       <p class="hint"><b>Parties:</b> put men in a sergeant's party and in battle <kbd>Y</kbd> sends every party out under its sergeant, a unit you can command on its own (pick it on the strip at the top); <kbd>U</kbd> recalls them. Orders reach a party by your voice, your bugler (simple calls, if you have one) or a runner. Sergeants' names are yours to change.</p>
@@ -140,6 +145,7 @@ const UI = {
     $('company').querySelectorAll('[data-type]').forEach(b => b.onclick = () => { Campaign.chooseType(run, b.dataset.type); again(); });
     $('company').querySelectorAll('[data-promote]').forEach(b => b.onclick = () => { Campaign.promote(run, +b.dataset.promote); again(); });
     $('company').querySelectorAll('[data-rifle]').forEach(b => b.onclick = () => { Campaign.toggleRifle(run, +b.dataset.rifle); again(); });
+    if ($('btn-issue')) $('btn-issue').onclick = () => { Campaign.issueRifles(run); again(); };
     $('company').querySelectorAll('[data-party]').forEach(sl => sl.onchange = () => { Campaign.setParty(run, +sl.dataset.party, sl.value === '' ? null : +sl.value); again(); });
     $('company').querySelectorAll('[data-rename]').forEach(inp => inp.onchange = () => { Campaign.rename(run, +inp.dataset.rename, inp.value); again(); });
     $('btn-company-back').onclick = back;
@@ -256,12 +262,12 @@ const UI = {
   // Redrawn only when something on it changes
   strip(B, force) {
     const mine = Detach.mine(B), sel = Detach.commanded(B), parties = !mine.some(u => u.isDetachment) && Detach.parties(B).length;
-    const glyph = u => u.routed ? '⇣' : u.order === 'charge' ? '⚔' : u.form.kind === 'square' ? '■' : u.order === 'follow' ? '⋯' : '';
+    const glyph = u => u.routed ? '⇣' : u.order === 'charge' ? '⚔' : u.form.kind === 'square' ? '■' : u.order === 'follow' ? '⋯' : u.limber ? '⇢' : u.holdFire ? '✋' : '';
     const sent = u => B.pending.some(p => p.unit === u);
     const key = mine.map(u => u.id + Unit.moraleWord(u) + u.formed + glyph(u) + sent(u)).join() + sel.id + parties + (B.runnersOut || 0);
     if (!force && key === UI._stripKey) return;
     UI._stripKey = key;
-    const short = u => u === B.player ? 'Company' : u.name.replace(/’s party$/, '');
+    const short = u => Detach.tag(B, u);
     const runners = B.runners != null ? B.runners : CFG.RUNNERS;
     $('unit-strip').innerHTML = (mine.length > 1 ? mine.map(u => `<button data-unit="${u.id}" class="chip ${u === sel ? 'sel' : ''}"><i style="background:${UI.moraleCol(u)}"></i>${esc(short(u))} <small>${u.formed}</small>${glyph(u) ? ` <b>${glyph(u)}</b>` : ''}${sent(u) ? ' <span title="an order is on its way">🏃</span>' : ''}</button>`).join('') : '')
       + (parties ? '<button data-cmd="detach" class="act">＋ Detach parties <kbd>Y</kbd></button>' : '')
@@ -280,6 +286,8 @@ const UI = {
     const pres = u.men.filter(m => m.state === 'formed' && m.m === 'present').length;
     const word = Unit.moraleWord(u);
     const orderWord = { follow: 'In column, following you', hold: u.shelled && B.t - u.shelled < 4 ? (u.form.kind === 'square' ? 'In square — under the guns' : 'Under artillery fire') : u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'square' ? 'In square' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', retire: 'Retiring to the road', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
+    const gunWord = u.arm === 'gun' ? (u.limber ? { limber: 'Limbering up', move: 'On the move', unlimber: 'Unlimbering' }[u.limber.phase] : u.holdFire ? 'Holding fire' : `In action — ${Artillery.live(u).length} gun${Artillery.live(u).length === 1 ? '' : 's'}`) : null;
+    const horseWord = u.arm === 'cav' ? (u.order === 'charge' ? 'CHARGING' : u.order === 'ride' ? 'Riding' : u.routed ? 'ROUTING' : 'Waiting for your call') : null;
     const windWord = u.wind > 0.7 ? 'Fresh' : u.wind > 0.35 ? 'Puffing' : u.wind > 0.1 ? 'Winded' : 'Blown';
     const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will', byrank: 'Firing by rank' }[u.fire];
     const fireShort = u.fire === 'ready' ? (pres ? `<b class="gold">${pres} presented — FIRE!</b>` : 'making ready') : u.fire === 'atwill' ? 'at will' : u.fire === 'byrank' ? 'by rank' : '';
@@ -293,7 +301,7 @@ const UI = {
       <div class="name"><span>${esc(UI.cardName(u))}</span><span class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}</span></div>
       <div class="bar"><i style="width:${u.morale}%;background:${UI.moraleCol(u)}"></i><span>${word}</span></div>
       <div class="row"><b>${u.formed}<small>/${u.startSize}</small></b><span>loaded ${loaded}</span>${fireShort ? `<span>${fireShort}</span>` : ''}</div>
-      <div class="row wide"><span>${orderWord}${cover ? ` · ${cover}` : ''}</span></div>
+      <div class="row wide"><span>${gunWord || horseWord || orderWord}${cover && u.arm === 'foot' ? ` · ${cover}` : ''}</span></div>
       <div class="kit">${kit} <span>${reach}</span>${u.wind < 0.7 ? ` <span class="${u.wind < 0.35 ? 'warn' : ''}">· ${windWord.toLowerCase()}</span>` : ''}${c.rallyCd > B.t ? ` <span>· rally ${Math.ceil(c.rallyCd - B.t)}s</span>` : ''}${c.run || c.sprint ? ' <span>· sprinting</span>' : ''}</div>
       ${open ? `<div class="more">
         <div class="row wide"><span>${fireWord}</span></div>

@@ -197,7 +197,9 @@ const Combat = {
           if (m.foe) near = true;
         }
         if (near) u.lastFoe = B.t;
-        if (u.wind < CFG.CHARGE_BLOWN && !u.engaged) { Combat.endCharge(B, u); Battle.log(B, `${u.name}: the men are blown — the pursuit is called off.`, u.team === TEAM_PLAYER ? 'bad' : ''); }
+        // blown men give up a pursuit — but a charge this close goes home on whatever breath is left
+        const home = u.men.some(m => m.foe && m.state === 'formed' && dist2(m.x, m.y, m.foe.x, m.foe.y) < 35 * 35);
+        if (u.wind < CFG.CHARGE_BLOWN && !u.engaged && !home) { Combat.endCharge(B, u); Battle.log(B, `${u.name}: the men are blown — the pursuit is called off.`, u.team === TEAM_PLAYER ? 'bad' : ''); }
         else if (u.morale < CFG.WAVERING + 5) { Combat.endCharge(B, u); Battle.log(B, `${u.name}: the men's nerve goes — the charge stops.`, u.team === TEAM_PLAYER ? 'bad' : ''); }
         else if (B.t - (u.lastFoe || 0) > 3 || u.chargeT > CFG.CHARGE_MAX) Combat.endCharge(B, u);
       }
@@ -270,6 +272,7 @@ const Combat = {
   },
 
   endCharge(B, u) {
+    u.chargeEnd = B.t;
     u.order = 'hold';
     for (const m of u.men) m.foe = null;
     if (u.arm === 'cav') { u.ai.restUntil = B.t + 20; u.ai.charged = (u.ai.charged || 0) + 1; }

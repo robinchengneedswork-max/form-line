@@ -31,7 +31,7 @@ const Orders = {
     if (cmd === 'detach') return Detach.split(B);
     if (cmd === 'recall') { if (B.bugle) B.events.push({ type: 'bugle', x: c.x, y: c.y }); return Detach.recallAll(B); }
     // a party of yours: your voice, the bugle, or a runner
-    if (u.isDetachment) return Orders.toParty(B, u, cmd === 'follow' ? 'rejoin' : cmd, opts);
+    if (u.isDetachment || u.attached) return Orders.toParty(B, u, cmd === 'follow' ? 'rejoin' : cmd, opts);
     if (!u || u.routed && cmd !== 'rally') { Battle.log(B, 'They are running — get among them and rally them (R).', 'bad'); return false; }
     if (!knowsDrill(u, cmd)) { Battle.log(B, `Your company has never learned ${LEARNED_DRILLS[cmd].toLowerCase()} — drill it in camp.`, 'bad'); return false; }
     const d = dist(c.x, c.y, u.cx, u.cy);
@@ -111,6 +111,30 @@ const Orders = {
 
   apply(B, u, cmd, o) {
     const f = u.form;
+    // your own guns: they go where they are placed (limbering, moving, unlimbering) and choose their own targets;
+    // "cease fire" holds them, any fire order lets them loose again; "follow me" brings them up beside you
+    if (u.attached === 'guns') {
+      const placeCmd = cmd === 'line' || cmd === 'advance' || cmd === 'close' || cmd === 'skirmish' || cmd === 'attackcol';
+      if (placeCmd && o.x != null && o.placed) Artillery.moveTo(B, u, o.x, o.y, o.facing != null ? o.facing : f.facing);
+      else if (cmd === 'rejoin' || cmd === 'follow') Artillery.moveTo(B, u, B.cmd.x - Math.cos(B.cmd.facing) * 10, B.cmd.y - Math.sin(B.cmd.facing) * 10, B.cmd.facing);
+      else if (cmd === 'halt') Artillery.moveTo(B, u, u.cx, u.cy, f.facing);
+      else if (cmd === 'cease') u.holdFire = true;
+      else if (cmd === 'atwill' || cmd === 'fire' || cmd === 'ready' || cmd === 'byrank') u.holdFire = false;
+      return;
+    }
+    // your own horse: a placing order is "ride there and wait"; "follow me" brings them up behind you
+    if (u.attached === 'troop') {
+      const placeCmd = cmd === 'line' || cmd === 'close' || cmd === 'skirmish' || cmd === 'attackcol' || cmd === 'advance';
+      if ((placeCmd && o.x != null) || cmd === 'rejoin' || cmd === 'follow') {
+        const back = cmd === 'rejoin' || cmd === 'follow';
+        const x = back ? B.cmd.x - Math.cos(B.cmd.facing) * 25 : o.x, y = back ? B.cmd.y - Math.sin(B.cmd.facing) * 25 : o.y;
+        const face = back ? B.cmd.facing : (o.facing != null ? o.facing : f.facing);
+        u.post = { x, y, facing: face };
+        if (u.order === 'charge') Combat.endCharge(B, u);
+        return Orders.apply(B, u, 'ride', { x, y, pace: CFG.CAV_TROT, facing: face });
+      }
+      if (cmd === 'square' || cmd === 'ready' || cmd === 'fire' || cmd === 'atwill' || cmd === 'byrank' || cmd === 'cease') return;
+    }
     if (u.isDetachment && cmd !== 'rejoin') u.rejoining = false;
     const toLine = (x, y, facing) => Unit.setForm(u, 'line', x, y, facing);
     switch (cmd) {

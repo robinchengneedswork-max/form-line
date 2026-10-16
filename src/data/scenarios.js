@@ -45,6 +45,25 @@ function guns(x, y, facing, n, lv, extra = {}) {
 // from a third of the way into a campaign, the enemy sometimes brings horse
 const bringsHorse = (lv, rng, p) => lv >= 0.3 && rng() < p;
 
+// The later in the war, the more often the French bring their horse and their guns — from the Hundred Days on,
+// always (the user: "in act 3 we should be seeing those all the time"). Added only where a battle has none of
+// its own: the map's own placements come first. Called by Battle.create after deploy (not for builder armies).
+function escalate(dep, f, rng, lv, sc = {}) {
+  const has = arm => dep.enemies.some(e => e.arm === arm);
+  const pHorse = clamp((lv - 0.25) / 0.4, 0, 1), pGuns = clamp((lv - 0.4) / 0.26, 0, 1);
+  const add = [];
+  if (!has('cav') && !sc.noHorse && rng() < pHorse) {
+    const p = Builder.open(f, { x: f.w * (rng() < 0.5 ? 0.12 : 0.88), y: 60 });
+    add.push(horse(p.x, p.y, SOUTH, lv, rng, { delay: 30 + rng() * 90 }));
+  }
+  if (!has('gun') && rng() < pGuns) {
+    const p = Builder.open(f, { x: f.w * (0.5 + rng.range(-0.15, 0.15)), y: Math.max(55, f.h * 0.09) });
+    add.push(guns(p.x, p.y, SOUTH, lv > 0.8 ? 2 : 1, lv));
+  }
+  dep.enemies.push(...add);
+  if (add.length) dep.note = (dep.note ? dep.note + ' ' : '') + (add.length === 2 ? 'French horse and guns are with them.' : add[0].arm === 'cav' ? 'French horse is with them.' : 'French guns are with them.');
+}
+
 const enemyStrength = (level, rng) => ({
   size: Math.round(22 + level * 16 + rng.int(-2, 3)),
   drill: clamp(0.25 + level * 0.5 + rng.range(-0.08, 0.08), 0.1, 0.95),

@@ -107,7 +107,7 @@ const Move = {
             // trot in, then open out into the gallop for the last stretch
             const gallop = dist2(m.x, m.y, tx, ty) < CFG.CAV_GALLOP_AT * CFG.CAV_GALLOP_AT;
             if (gallop) u.rushing++;
-            max = gallop ? lerp(CFG.CAV_TROT, CFG.CAV_GALLOP, clamp((u.wind - 0.05) / 0.35, 0, 1)) : CFG.CAV_TROT;
+            max = gallop ? lerp(CFG.CAV_TROT, CFG.CAV_GALLOP, clamp((u.wind - 0.05) / 0.35, 0, 1)) : CFG.CAV_CANTER;
             u.mo += m.moving || 0; u.moN++;
           } else if (m.horse && m.foe.state === 'fleeing') {
             max = CFG.CAV_TROT * 1.4;

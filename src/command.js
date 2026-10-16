@@ -104,7 +104,7 @@ const Command = {
       if (!waiting && ((them < us * 0.55 && spent) || (avg < 38 && them < us) || stale)) {
         hq.phase = 'general';
         for (const u of mine) {
-          if (u.routed || !u.formed || u.arm === 'gun') continue;      // guns do not advance (they have no limbers)
+          if (u.routed || !u.formed || u.arm === 'gun' || u.attached) continue;   // guns have no limbers; your own guns and horse wait for you      // guns do not advance (they have no limbers)
           const c = Command.nearestCentroid(B, u, foe);
           if (c) Command.assign(B, u, { kind: 'attack', x: c.x, y: c.y, text: 'General advance! Drive them from the field!', short: 'joins the general advance' });
         }

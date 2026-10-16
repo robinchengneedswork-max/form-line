@@ -15,6 +15,7 @@ const Battle = {
     sc.build(field, makeRng(seed ^ 0x9e3779b9));
     // a battle from the builder brings its own armies; otherwise the scenario decides who is here
     const dep = opts.army ? Builder.deploy(opts.army, sc, field, rng) : sc.deploy(rng, opts.level || 0);
+    if (!opts.army) escalate(dep, field, rng, opts.level || 0, sc);
     const windA = rng() * Math.PI * 2, windS = rng.range(0.4, 1.6);
     const B = {
       seed, rng, t: 0, field, scenario: sc, scenarioId: opts.scenario, deploy: dep,
@@ -23,7 +24,7 @@ const Battle = {
       wind: { x: Math.cos(windA) * windS, y: Math.sin(windA) * windS, a: windA, s: windS },
       events: [], fx: [], pending: [], dropped: [], messages: [],
       seen: [new Set(), new Set()], heard: [new Set(), new Set()], visT: 0, endT: 0, checkT: 0,
-      over: false, result: null, autoPlayer: !!opts.autoPlayer,
+      over: false, result: null, autoPlayer: !!opts.autoPlayer, level: opts.level || 0,
       stats: { coloursTaken: 0, coloursLost: 0, gunsTaken: 0 },
     };
     B.smokeGrid = new Float32Array(B.smokeCols * B.smokeRows);
@@ -49,11 +50,28 @@ const Battle = {
     pu.leader = B.cmd;
     B.player = pu;
     B.units.push(pu);
+    // your own guns and horse (bought at the quartermaster): beside you, yours to place and to call on
+    if (co.battery && co.battery.pieces > 0) {
+      const q = Builder.open(field, { x: p.x - 42, y: p.y + 18 });   // within earshot, so your first orders go by voice
+      const gu = makeUnit({ team: TEAM_PLAYER, faction: 'british', arm: 'gun', guns: co.battery.pieces, x: q.x, y: q.y, facing: p.facing, drill: co.battery.drill || 0.55,
+        doctrine: 'battery', name: co.battery.name, drummer: false, fifer: false, colours: false }, rng);
+      Object.assign(gu, { attached: 'guns', commanded: true });
+      B.units.push(gu);
+    }
+    if (co.troop && co.troop.size >= 3) {
+      const q = Builder.open(field, { x: p.x + 95, y: p.y + 35 });
+      const tu = makeUnit({ team: TEAM_PLAYER, faction: 'british', arm: 'cav', cavType: co.troop.type, size: co.troop.size, x: q.x, y: q.y, facing: p.facing, drill: 0.55,
+        doctrine: 'cavalry', name: co.troop.name, drummer: true, fifer: false, colours: false }, rng);
+      Object.assign(tu, { attached: 'troop', commanded: true, post: { x: q.x, y: q.y, facing: p.facing } });
+      B.units.push(tu);
+    }
     // a company with `arrive` (seconds) is not on the field yet: it marches on from the edge when its time comes
     B.arrivals = [];
     for (const a of dep.allies) { const sp = Object.assign({ faction: 'british' }, a); if (a.arrive) B.arrivals.push(sp); else B.units.push(makeUnit(sp, rng)); }
     for (const e of dep.enemies) { const sp = Object.assign({ faction: 'french' }, e); if (e.arrive) B.arrivals.push(sp); else B.units.push(makeUnit(sp, rng)); }
     B.arrivals.sort((a, b) => a.arrive - b.arrive);
+    // (a great battle scripts its own waves; the reserve is the same size as anywhere else at that point in the war)
+    B.reserve = { left: opts.army ? 0 : Math.round(CFG.FR_RESERVE_BASE + (opts.level || 0) * CFG.FR_RESERVE_LV), done: new Set() };
     // weather: a storm shortens sight and wets the powder (flashes in the pan), then passes
     const W = sc.weather;
     B.weather = W ? { kind: W.kind || 'rain', sight: W.sight || CFG.SIGHT, misfire: W.misfire || 0, label: W.label || 'Rain',
@@ -94,7 +112,7 @@ const Battle = {
     B.visT -= dt;
     if (B.visT <= 0) { B.visT = 0.5; Battle.visibility(B); }
     B.checkT -= dt;
-    if (B.checkT <= 0) { B.checkT = 1; Battle.checkEnd(B); }
+    if (B.checkT <= 0) { B.checkT = 1; Battle.reinforce(B); Battle.checkEnd(B); }
     if (B.fx.length > 400) B.fx.splice(0, B.fx.length - 400);
   },
 
@@ -109,6 +127,24 @@ const Battle = {
     }
   },
   sight(B) { return B.weather ? B.weather.sight : CFG.SIGHT; },
+
+  // as French companies break, the reserve sends fresh ones up to retake the ground they lost
+  reinforce(B) {
+    const R = B.reserve;
+    if (!R || R.left <= 0) return;
+    for (const u of B.units) {
+      if (u.team !== TEAM_ENEMY || u.arm !== 'foot' || !u.everRouted || R.done.has(u.id)) continue;
+      R.done.add(u.id);
+      if (R.left <= 0) break;
+      R.left--;
+      const e = enemyStrength(B.level, B.rng), f = B.field;
+      const p = Builder.open(f, { x: clamp(u.cx + B.rng.range(-80, 80), 60, f.w - 60), y: 40 });
+      B.arrivals.push(Object.assign(coy(TEAM_ENEMY, p.x, p.y, SOUTH, Math.round(e.size * CFG.FR_RESERVE_SIZE), e.drill, 'attack',
+        { nerve: e.nerve, objective: [u.cx, u.cy], fifer: false }), { faction: 'french', arrive: B.t + CFG.FR_RESERVE_DELAY * B.rng.range(0.75, 1.25) }));
+      B.arrivals.sort((a, b) => a.arrive - b.arrive);
+      Battle.log(B, 'Drums beyond the rise — French reinforcements are coming up.', 'bad');
+    }
+  },
 
   // which enemy companies each side can see. Fog is per team, refreshed twice a second.
   visibility(B) {
@@ -207,10 +243,24 @@ const Battle = {
       coloursTaken: B.stats.coloursTaken, coloursLost: B.player.coloursLost, gunsTaken: B.stats.gunsTaken || 0,
       commanderHp: Math.max(0, B.cmd.hp), commanderKills: B.cmd.kills || 0, horseLost: B.cmd.horseLost,
       orders: B.hq ? Command.obeyed(B) : null,
+      attached: Battle.attachedResult(B),
       saved: B.player.men.filter(m => m.saved && m.role !== 'drummer' && m.role !== 'fifer').length, captured,
       player: B.player,
     };
     B.events.push({ type: 'end', how });
+  },
+
+  // what came back of your own guns and troop
+  attachedResult(B) {
+    const out = {};
+    const gu = B.units.find(u => u.attached === 'guns'), tu = B.units.find(u => u.attached === 'troop');
+    if (gu) out.guns = { pieces: gu.guns.length, lost: gu.guns.filter(g => g.taken && g.takenBy !== TEAM_PLAYER).length };
+    if (tu) {
+      const men = tu.men.filter(m => m.role === 'line'), down = men.filter(m => m.state === 'down').length;
+      const back = Math.round(down * 0.35);      // some of the fallen were only unhorsed or wounded
+      out.troop = { start: men.length, alive: men.length - down + back, lost: down - back };
+    }
+    return out;
   },
 
   // give up the field now. On the road with your men that is a retreat; anywhere else it is abandoning them

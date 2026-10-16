@@ -43,7 +43,9 @@ const Campaign = {
       drills: [],       // learned drills (see LEARNED_DRILLS in orders.js)
       rifles: 0,        // Baker rifles owned; the best shots carry them
       surgeons: 0,      // surgeon's mates, 0..3: more of the wounded live to march again
-      recruiters: 0 };  // a recruiting party, 0..3: raw men come up after every battle
+      recruiters: 0,    // a recruiting party, 0..3: raw men come up after every battle
+      battery: null,    // your own guns: { pieces, name, drill } — they stay with you until the French take them
+      troop: null };    // your own horse: { size, type, name } — the troopers who fall are gone
   },
 
   // a company for a quick battle: as big and as seasoned as the chosen point in a campaign would make it
@@ -62,6 +64,9 @@ const Campaign = {
     if (co.type === 'line') co.drill = clamp(co.drill + 0.05, 0, 0.95);
     co.rifles = co.type === 'light' ? 4 : stage >= 0.45 ? 2 : 0;
     Campaign.armRifles(co);
+    // try your own gun and horse without a campaign
+    if (q.gun) co.battery = { pieces: 1, name: 'Your gun, RA', drill: 0.55 };
+    if (q.troop) co.troop = { size: CFG.TROOP_SIZE, type: 'light_dragoons', name: 'A Troop, 16th Light Dragoons' };
     return co;
   },
 
@@ -81,7 +86,8 @@ const Campaign = {
   // saves from before the company sheet existed
   migrate(run) {
     const co = run.company;
-    co.drills = co.drills || []; co.rifles = co.rifles || 0; co.type = co.type || null;
+    co.drills = co.drills || []; co.rifles = co.rifles || 0; co.type = co.type || null; co.riflesStored = co.riflesStored || 0;
+    co.battery = co.battery || null; co.troop = co.troop || null;
     co.surgeons = co.surgeons || 0; co.recruiters = co.recruiters || 0;
     run.act = run.act || 0; run.winter = !!run.winter;
     for (const s of co.soldiers) { s.rank = s.rank || 'pte'; s.weapon = s.weapon || 'musket'; }
@@ -208,10 +214,21 @@ const Campaign = {
     // the regiment's depot sends a draft after every battle (a bigger one after a great battle),
     // and your own recruiting party adds to it
     const draft = (node.type === 'setpiece' || node.type === 'finale' ? 4 : 2) + (co.recruiters || 0);
-    const room = Campaign.capacity(run) - co.soldiers.length, n = Math.min(Math.max(0, room), draft);
+    const room = Campaign.capacity(run) - Campaign.mustered(co), n = Math.min(Math.max(0, room), draft);
     for (let i = 0; i < n; i++) co.soldiers.push(Campaign.newSoldier(rng));
     rep.recruits = n;
     if (R.coloursLost) co.colours = false;
+    const A = R.attached || {};
+    if (A.guns && co.battery) {
+      if (A.guns.lost) rep.lines.push([`${A.guns.lost} of your guns taken by the French`, 0]);
+      co.battery.pieces -= A.guns.lost;
+      if (co.battery.pieces <= 0) co.battery = null;
+    }
+    if (A.troop && co.troop) {
+      if (A.troop.lost) rep.lines.push([`${A.troop.lost} of your dragoons fell`, 0]);
+      co.troop.size = A.troop.alive;
+      if (co.troop.size < 3) { co.troop = null; rep.lines.push(['What is left of the troop is broken up', 0]); }
+    }
     const best = U.men.filter(m => m.src && m.state === 'formed').sort((a, b) => b.kills - a.kills)[0];
     if (best && best.kills >= 2) rep.promoted = { name: best.src.name, kills: best.kills };
 
@@ -239,7 +256,7 @@ const Campaign = {
     const co = run.company, rng = Campaign.rng(run), lines = [];
     run.commander.hp = run.commander.maxHp;
     lines.push('Your wounds have closed over the winter.');
-    const room = Campaign.capacity(run) - co.soldiers.length, n = Math.max(0, Math.ceil(room / 2));
+    const room = Campaign.capacity(run) - Campaign.mustered(co), n = Math.max(0, Math.ceil(room / 2));
     for (let i = 0; i < n; i++) co.soldiers.push(Campaign.newSoldier(rng));
     if (n) lines.push(`The depot sends ${n} recruit${n > 1 ? 's' : ''} to fill the ranks.`);
     co.drill = clamp(co.drill + 0.03, 0, 0.95);
@@ -253,6 +270,8 @@ const Campaign = {
 
   // ── between battles ──
   capacity(run) { return Campaign.rank(run).company; },
+  // the men who count against the company's numbers (attached riflemen of the 95th do not)
+  mustered(co) { return co.soldiers.filter(s => !s.attached).length; },
 
   // ── the company sheet ──
   RANK_NAMES: { pte: 'Private', cpl: 'Corporal', sgt: 'Sergeant' },
@@ -287,7 +306,9 @@ const Campaign = {
     run.renown -= p.cost; s.rank = p.to;
     return true;
   },
-  rifleCap(co) { return co.type === 'light' ? 6 : 4; },
+  // no cap on rifles: each costs more than the last (the user asked why they were gated; their rule is
+  // that price is the only limit). A Light company gets them cheaper
+  rifleCost(co) { return Math.round((20 + 5 * (co.rifles || 0)) * (co.type === 'light' ? 0.8 : 1)); },
   // the establishment: [cost of level 1, 2, 3]
   ESTAB: {
     surgeons: { name: 'Surgeon\u2019s mate', costs: [16, 26, 40],
@@ -296,24 +317,34 @@ const Campaign = {
       desc: l => `A sergeant and a drummer beating up for volunteers: ${l + 1} more raw recruit${l ? 's' : ''} on top of the depot's draft after every battle.` },
   },
   woundedLive(co) { return [0.65, 0.75, 0.84, 0.92][co.surgeons || 0]; },
-  // the rifles go to the best shots, unless you have handed them out yourself
+  // A rifle is carried, or in the STORE (put there by you, on the muster screen), or spare (just bought, or its
+  // man has fallen): spare ones go to the best shots who have not had theirs taken away
   armRifles(co) {
+    co.riflesStored = clamp(co.riflesStored || 0, 0, co.rifles);
     const armed = co.soldiers.filter(s => s.weapon === 'rifle');
-    while (armed.length > co.rifles) armed.pop().weapon = 'musket';
-    const spare = co.soldiers.filter(s => s.weapon !== 'rifle').sort((a, b) => b.aim - a.aim);
-    for (let i = armed.length; i < Math.min(co.rifles, co.soldiers.length); i++) spare[i - armed.length].weapon = 'rifle';
+    while (armed.length > co.rifles - co.riflesStored) armed.pop().weapon = 'musket';
+    const free = co.rifles - co.riflesStored - armed.length;
+    const cand = co.soldiers.filter(s => s.weapon !== 'rifle' && !s.noRifle).sort((a, b) => b.aim - a.aim);
+    for (let i = 0; i < Math.min(free, cand.length); i++) cand[i].weapon = 'rifle';
   },
+  // the muster: take this man's rifle into the store, or hand him one from it
   toggleRifle(run, id) {
     const co = run.company, s = co.soldiers.find(x => x.id === id);
     if (!s) return false;
-    if (s.weapon === 'rifle') return false;          // rifles are only ever handed on, never put away
-    const armed = co.soldiers.filter(x => x.weapon === 'rifle');
-    if (armed.length >= co.rifles) { if (!armed.length) return false; armed.sort((a, b) => a.aim - b.aim)[0].weapon = 'musket'; }
-    s.weapon = 'rifle';
+    if (s.weapon === 'rifle') { s.weapon = 'musket'; s.noRifle = true; co.riflesStored = (co.riflesStored || 0) + 1; return true; }
+    if (!(co.riflesStored > 0)) return false;
+    s.weapon = 'rifle'; s.noRifle = false; co.riflesStored--;
     return true;
   },
+  // every rifle to the best shots, the store emptied
+  issueRifles(run) {
+    const co = run.company;
+    co.riflesStored = 0;
+    for (const s of co.soldiers) { s.noRifle = false; s.weapon = 'musket'; }
+    Campaign.armRifles(co);
+  },
   TYPES: {
-    light: { name: 'Light Company', desc: 'Skirmishers. Skirmish order is learned at once and they are harder to hit in it; quicker on their feet; room for six rifles.' },
+    light: { name: 'Light Company', desc: 'Skirmishers. Skirmish order is learned at once and they are harder to hit in it; quicker on their feet; rifles come cheaper.' },
     grenadier: { name: 'Grenadier Company', desc: 'The biggest men in the battalion. Better with the bayonet, steadier under fire, and their charge hits harder.' },
     line: { name: 'Battalion (Line) Company', desc: 'The backbone. Faster loading and harder-hitting volleys, and the drill sergeant starts them ahead.' },
   },
@@ -338,7 +369,7 @@ const Campaign = {
       return `A week of drill on the parade ground. The company has learned ${LEARNED_DRILLS[k].toLowerCase()}.`;
     }
     if (choice === 'recruit') {
-      const room = Campaign.capacity(run) - co.soldiers.length;
+      const room = Campaign.capacity(run) - Campaign.mustered(co);
       const n = Math.min(5, Math.max(0, room));
       for (let i = 0; i < n; i++) co.soldiers.push(Campaign.newSoldier(rng));
       return n ? `${n} recruits from the depot join the company.` : 'The company is at full strength — the depot sends no one.';
@@ -347,12 +378,19 @@ const Campaign = {
   },
 
   shopItems(run) {
-    const co = run.company, room = Campaign.capacity(run) - co.soldiers.length;
+    const co = run.company, room = Campaign.capacity(run) - Campaign.mustered(co);
     return [
       { key: 'recruit', name: 'Recruit', desc: 'A raw volunteer.', cost: 5, ok: room > 0 },
       { key: 'veteran', name: 'Veteran from another regiment', desc: 'Steadier, a better shot.', cost: 12, ok: room > 0 },
       { key: 'drill', name: 'Drill sergeant', desc: `Faster loading (drill ${Math.round(co.drill * 100)} → ${Math.round(Math.min(0.95, co.drill + 0.06) * 100)}).`, cost: 22, ok: co.drill < 0.95 },
-      { key: 'rifle', name: 'Baker rifle', desc: `Twice the reach, half the rate of fire. Goes to your best shot (${co.rifles}/${Campaign.rifleCap(co)}).`, cost: 20, ok: co.rifles < Campaign.rifleCap(co) },
+      // your own guns, horse and riflemen (the user: "more stuff to spend money on — more troops for that second
+      // group, or my own cannon or cav"). No caps: the price is the limit
+      { key: 'gun', name: co.battery ? 'Another 6-pounder' : 'A 6-pounder and its crew', desc: `Your own gun${co.battery ? ` (you have ${co.battery.pieces})` : ''}. It picks its own targets; drag to send it where you want it — it limbers up, moves at a walk and unlimbers again. If the French take it, it is gone.`, cost: 70 + 35 * (co.battery ? co.battery.pieces : 0), ok: true },
+      co.troop ? { key: 'remounts', name: 'Remounts for the troop', desc: `Four more troopers and their horses (the troop is ${co.troop.size}).`, cost: 16 + co.troop.size, ok: true }
+        : { key: 'troop', name: 'A troop of light dragoons', desc: `${CFG.TROOP_SIZE} troopers who wait where you put them and charge when you call Charge! — by voice, bugle or runner. The men who fall are gone.`, cost: 60, ok: true },
+      { key: 'heavies', name: 'Heavy horses for the troop', desc: 'Re-horse your dragoons as heavies: they hit harder and stand firmer.', cost: 45, ok: !!co.troop && co.troop.type !== 'heavy_dragoons' },
+      { key: 'rifleman', name: 'A rifleman of the 95th', desc: 'A veteran with his own Baker rifle, attached on top of the company\u2019s numbers. He goes out with your sergeant\u2019s party.', cost: 18 + 2 * co.soldiers.filter(s => s.attached).length, ok: true },
+      { key: 'rifle', name: 'Baker rifle', desc: `Twice the reach, half the rate of fire. Goes to your best shot (you have ${co.rifles}; each costs more than the last).`, cost: Campaign.rifleCost(co), ok: true },
       { key: 'drummer', name: 'Drummer boy', desc: 'Carries your orders beyond shouting range. Steadies the men.', cost: 14, ok: !co.drummer },
       { key: 'bugler', name: 'Bugler', desc: 'Sounds the simple calls — advance, halt, skirmish, charge, square, the recall — to your sergeants\u2019 parties up to 350 m off. Without one, a runner must go.', cost: 12, ok: !co.bugler && co.type !== 'light' },
       { key: 'fifer', name: 'Fifer', desc: 'Music in the ranks. Morale recovers faster.', cost: 12, ok: !co.fifer },
@@ -374,6 +412,19 @@ const Campaign = {
     if (key === 'veteran') co.soldiers.push(Campaign.newSoldier(rng, 2));
     if (key === 'drill') co.drill = clamp(co.drill + 0.06, 0, 0.95);
     if (key === 'rifle') { co.rifles++; Campaign.armRifles(co); }
+    if (key === 'gun') { if (co.battery) co.battery.pieces++; else co.battery = { pieces: 1, name: `Lt. ${rng.pick(SURNAMES)}\u2019s guns, RA`, drill: 0.55 }; }
+    if (key === 'troop') co.troop = { size: CFG.TROOP_SIZE, type: 'light_dragoons', name: `${rng.pick(['A', 'B', 'C', 'D'])} Troop, ${rng.pick(['13th', '14th', '16th', '23rd'])} Light Dragoons` };
+    if (key === 'remounts') co.troop.size += 4;
+    if (key === 'heavies') { co.troop.type = 'heavy_dragoons'; co.troop.name = co.troop.name.replace('Light Dragoons', 'Dragoons'); }
+    if (key === 'rifleman') {
+      const s = Campaign.newSoldier(rng, 2);
+      s.attached = true; s.weapon = 'rifle'; co.rifles++;
+      s.name += ' (95th)';
+      // he goes out with the sergeant who has the fewest men
+      const sgts = co.soldiers.filter(x => x.rank === 'sgt').sort((a, b) => co.soldiers.filter(x => x.party === a.id).length - co.soldiers.filter(x => x.party === b.id).length);
+      if (sgts.length) s.party = sgts[0].id;
+      co.soldiers.push(s);
+    }
     if (key === 'drummer') co.drummer = true;
     if (key === 'bugler') co.bugler = true;
     if (key === 'fifer') co.fifer = true;

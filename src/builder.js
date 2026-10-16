@@ -42,7 +42,7 @@ const Builder = {
     const co = Campaign.quickCompany(seed, { stage: QUALITY[own.quality].stage, size: own.size, type: own.kind === 'battalion' ? null : own.kind });
     co.drill = QUALITY[own.quality].drill + (own.kind === 'line' ? 0.05 : 0);
     co.nerve = QUALITY[own.quality].nerve;
-    co.rifles = Math.min(Campaign.rifleCap(co), own.rifles || 0);
+    co.rifles = own.rifles || 0;
     for (const s of co.soldiers) s.weapon = 'musket';
     Campaign.armRifles(co);
     return co;

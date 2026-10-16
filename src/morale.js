@@ -60,6 +60,10 @@ const Morale = {
       if (u.routed) {
         // with an officer among them they start to steady even while the balls are still coming
         if (aura || B.t - u.lastHit > 8) u.morale += CFG.REGEN * 0.5 * dt * (aura ? 3 : 1);
+        // running into a steady, well-drilled company of their own side, they stop and fall in on it
+        // (AI companies; yours is rallied by you)
+        u.steadiedBy = !u.isPlayer && !u.isDetachment ? Morale.steadyFriend(B, u) : null;
+        if (u.steadiedBy) u.morale += CFG.RALLY_FRIEND_RATE * dt;
         u.morale = clamp(u.morale, 0, 100);
         continue;
       }
@@ -92,6 +96,17 @@ const Morale = {
         }
       }
     }
+  },
+
+  // a steady, drilled friend that this routed company's men are running past
+  steadyFriend(B, u) {
+    if (u.arm !== 'foot') return null;
+    for (const o of B.units) {
+      if (o === u || o.team !== u.team || o.routed || o.arm !== 'foot' || o.formed < 8 || o.morale < CFG.STEADY || o.drill < CFG.RALLY_FRIEND_DRILL) continue;
+      const r2 = CFG.RALLY_FRIEND_R * CFG.RALLY_FRIEND_R;
+      if (u.men.filter(m => m.state === 'fleeing' && dist2(m.x, m.y, o.cx, o.cy) < r2).length >= 3) return o;
+    }
+    return null;
   },
 
   rout(B, u) {

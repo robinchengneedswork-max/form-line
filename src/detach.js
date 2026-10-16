@@ -19,7 +19,9 @@ const BUGLE_CALLS = new Set(['advance', 'halt', 'charge', 'skirmish', 'close', '
 const Detach = {
   // the unit your orders go to
   commanded(B) { const s = B.selected; return s && B.units.includes(s) ? s : B.player; },
-  mine(B) { return B.units.filter(u => u === B.player || u.isDetachment); },
+  mine(B) { return B.units.filter(u => u === B.player || u.isDetachment || (u.attached && !u.routed)); },
+  // what to call a unit of yours on the rail and the map
+  tag(B, u) { return u === B.player ? 'Company' : u.attached === 'guns' ? 'Your guns' : u.attached === 'troop' ? (u.cav ? u.cav.short : 'Horse') : u.name.replace(/\u2019s party$/, ''); },
   // which of your units has a man within r metres of (x, y) — a tap on your own men selects them
   at(B, x, y, r) {
     let best = null, bd = r * r;
