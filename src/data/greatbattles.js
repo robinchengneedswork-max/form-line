@@ -259,7 +259,6 @@ Object.assign(SCENARIOS, {
           relief(340, 740, guards + 20, { x: 300, y: 430 }, { team: TEAM_PLAYER, size: 26, drill: 0.7, doctrine: 'hold', drummer: true, fifer: false, colours: true, name: 'No. 3 Coy, 3/1st Foot Guards' }),
         ],
         enemies: [
-          post(1, wave(760, 40, 300 + rng() * 60, { x: 760, y: 455 }), sz, e.drill, { nerve: e.nerve, fifer: false, name: '6e Cie, 1/2e Léger' }),
           post(1, attack(640, 470), sz, e.drill, { nerve: e.nerve, x: 650, y: 90 }),
           post(1, attack(880, 455), sz, e.drill, { nerve: e.nerve, x: 870, y: 100, fifer: false }),
           post(1, attack(200, 500), sz, e.drill, { nerve: e.nerve, x: 180, y: 70, name: 'Voltigeurs, 1er Léger', fifer: false }),
@@ -315,7 +314,6 @@ Object.assign(SCENARIOS, {
           guns(470, 690, NORTH, 1, 0.6, { team: TEAM_PLAYER, name: 'Bull’s Troop, RHA (howitzer)' }),
         ],
         enemies: [
-          post(1, wave(640, 30, 390 + rng() * 40, { x: 640, y: 375 }), sz + 2, e.drill, { nerve: e.nerve, fifer: false, name: '3e Cie, 1/1er Léger' }),
           post(1, attack(480, 390), sz, e.drill, { nerve: e.nerve, x: 430, y: 70 }),
           post(1, attack(640, 375), sz, e.drill, { nerve: e.nerve, x: 640, y: 70, fifer: false }),
           post(1, wave(380, 30, 220 + rng() * 40, { x: 470, y: 380 }), sz + 2, e.drill, { nerve: e.nerve, fifer: false }),

@@ -178,7 +178,6 @@ Object.assign(SCENARIOS, {
           post(0, reserve(500, 670, 'in reserve'), 26, 0.7, { name: 'Grenadier Coy, 1st Foot Guards', fifer: false }),
         ],
         enemies: [
-          post(1, wave(470, 40, 220 + rng() * 40, { x: 470, y: 530 }), sz, e.drill, { nerve: e.nerve, fifer: false, name: '2e Cie, 1/105e Ligne' }),
           post(1, attack(870, 400), sz, e.drill, { nerve: e.nerve, x: 860, y: 110 }),
           post(1, attack(860, 420), sz, e.drill, { nerve: e.nerve, x: 950, y: 120, fifer: false }),
           post(1, attack(620, 430), sz, e.drill, { nerve: e.nerve, x: 620, y: 90 }),

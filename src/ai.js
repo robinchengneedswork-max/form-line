@@ -238,6 +238,9 @@ const AI = {
     if (u.arm === 'cav' || u.order === 'retire') return null;
     // a company in a wood, a village or behind a wall is safe from horse where it stands
     if (AI.inCover(B, u) || Field.typeAt(B.field, u.cx, u.cy) === T.WOODS) return null;
+    // foot coming on with the bayonet this close is the danger that matters: forming square now is death
+    // (at Hougoumont a company left its wall to form square for lancers charging someone else, 27 m from a column)
+    if (B.units.some(e => e.team !== u.team && e.arm === 'foot' && !e.routed && e.formed && (e.order === 'charge' || e.order === 'advance') && dist(e.cx, e.cy, u.cx, u.cy) < CFG.CAV_FOOT_FIRST)) return null;
     let best = null, bd = CFG.CAV_WARN;
     for (const e of B.units) {
       if (e.team === u.team || e.arm !== 'cav' || e.routed || e.formed < 3 || !(B.seen[u.team].has(e.id) || B.heard[u.team].has(e.id))) continue;
@@ -245,7 +248,7 @@ const AI = {
       // a squadron hanging about out there is a worry, not a threat; one coming on, or close, is
       // only a charge actually coming on, or horse very close: forming square for every squadron that trotted
       // nearer meant the horse never had a chance (the user had "never seen a cav charge work")
-      const coming = e.order === 'charge' && dist(e.cx, e.cy, u.cx, u.cy) < CFG.CAV_LAUNCH + 40;
+      const coming = e.order === 'charge' && e.ai.target === u.id && dist(e.cx, e.cy, u.cx, u.cy) < CFG.CAV_LAUNCH + 40;
       if (d < bd && (coming || d < CFG.CAV_CLOSE)) { bd = d; best = e; }
     }
     if (best) u.ai.cavSeen = B.t;
@@ -428,6 +431,14 @@ const AI = {
     // a rearguard ordered back goes back, shot at or not, until it is there
     const t = u.task, falling = t && t.retire && !t.reached;
     if (falling && far <= 30) t.reached = true;
+    // a garrison that sallied out of its wall goes back to it — in line, facing the enemy — unless the enemy is
+    // already at the bayonet (at Hougoumont the company charged a breaking column and then stood in the orchard,
+    // 30 m in front of its garden wall, until the lancers came: the old rule waited for nobody within 140 m)
+    if (u.ai.postCover === undefined) u.ai.postCover = Field.coverFor(B.field, a.x, a.y, a.x + Math.cos(a.facing) * 60, a.y + Math.sin(a.facing) * 60) < 0.7;
+    if (u.ai.postCover && far > 12 && !AI.inCover(B, u) && u.order !== 'charge' && (!E || dist(u.cx, u.cy, E.cx, E.cy) > 45)) {
+      if (B.t > (u.ai.backT || 0)) { u.ai.backT = B.t + 6; Orders.give(B, u, 'line', { x: a.x, y: a.y, facing: a.facing }); }
+      return true;
+    }
     if (E && dist(u.cx, u.cy, E.cx, E.cy) < 140 && !falling) return false;
     if (far > 30) { AI.march(B, u, a.x, a.y); return true; }
     const L = u.leader || B.cmd;

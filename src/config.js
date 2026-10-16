@@ -103,7 +103,8 @@ const CFG = {
   CAV_GALLOP_AT: 80,       // they only open out into the gallop this close (the charge's rush); a canter before.
                            // At 120 m the horses were blown 20 m short and the charge called off every time
   CAV_CANTER: 5.2,         // closing on a mark: faster than the trot, slower than the gallop
-  CAV_CLOSE: 100,          // foot form square for horse this close even if it is not charging (yet)
+  CAV_CLOSE: 100,
+  CAV_FOOT_FIRST: 60,      // enemy foot charging or advancing this close: no square, whatever the horse are doing          // foot form square for horse this close even if it is not charging (yet)
   CAV_LAUNCH: 135,         // they close to this at the trot, quietly, then the trumpet: ~15 s to form square
   CAV_BUSY: 130,           // a company with enemy foot this close is busy in a firefight — a mark for horse
   CAV_WIND_GALLOP: 1 / 22, // ~20 s of gallop and the horses are blown
@@ -206,7 +207,7 @@ const CFG = {
   // the French have more behind the hill (the user: "lots of these maps we win if I do nothing"): as their
   // companies break, fresh ones come up — a pool per battle of BASE + LV × level (+1 in a great battle)
   FR_RESERVE_BASE: 1,
-  FR_RESERVE_LV: 2,
+  FR_RESERVE_LV: 1.2,      // (2 made Act III 0-for-N for the autoplayer on top of everything else)
   FR_RESERVE_DELAY: 70,    // seconds after a company breaks before its replacement marches on (±25%)
   FR_RESERVE_SIZE: 0.8,    // × a fresh company's usual strength
   // a routed AI company rallies on a steady, well-drilled company of its own side that its men run past

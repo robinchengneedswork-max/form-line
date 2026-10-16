@@ -1128,14 +1128,16 @@ console.log('§20 things to buy: your own guns, horse and riflemen');
   let charged = false;
   for (let i = 0; i < 120 / CFG.STEP && !T2.over; i++) { Battle.step(T2, CFG.STEP); T2.events.length = 0; if (tr.order === 'charge') charged = true; }
   chk('your troop waits for your call — it never charges of its own accord', !charged);
-  const E = T2.units.find(u => u.team === TEAM_ENEMY && u.arm === 'foot');
-  for (const m of tr.men) { m.x += E.cx - tr.cx; m.y += E.cy + 110 - tr.cy; }
-  Unit.survey(tr); tr.form.x = tr.cx; tr.form.y = tr.cy; tr.form.facing = -Math.PI / 2;
-  T2.cmd.x = tr.cx; T2.cmd.y = tr.cy + 20;
-  T2.selected = tr;
-  Orders.shout(T2, 'charge');
-  run(T2, 3);
-  chk('…and when you call Charge! it goes in', tr.order === 'charge' || tr.chargeEnd > 0);
+  // (a fresh field: in the one above, an idle captain may well have been shot by now)
+  const T3 = Battle.create({ scenario: 'heath', seed: 34, level: 0.5, company: r.company }), tr3 = T3.units.find(u => u.attached === 'troop');
+  const E = T3.units.find(u => u.team === TEAM_ENEMY && u.arm === 'foot');
+  for (const m of tr3.men) { m.x += E.cx - tr3.cx; m.y += E.cy + 110 - tr3.cy; }
+  Unit.survey(tr3); tr3.form.x = tr3.cx; tr3.form.y = tr3.cy; tr3.form.facing = -Math.PI / 2;
+  T3.cmd.x = tr3.cx; T3.cmd.y = tr3.cy + 20;
+  T3.selected = tr3;
+  const called = Orders.shout(T3, 'charge');
+  run(T3, 3);
+  chk('…and when you call Charge! it goes in', called && (tr3.order === 'charge' || tr3.chargeEnd > 0));
   // after the battle: what is lost stays lost
   const r2 = Campaign.newRun(809); r2.renown = 9999; Campaign.buy(r2, 'gun'); Campaign.buy(r2, 'troop');
   const B2 = fresh('plain', 33, { company: r2.company });
