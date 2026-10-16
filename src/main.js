@@ -95,6 +95,10 @@ const App = {
     const dt = Math.min(0.1, (ts - App.last) / 1000 || 0);
     App.last = ts;
     const B = App.B;
+    // rotating a phone: iOS fires 'resize' before the page has its new shape, so the canvas kept its portrait
+    // size and the picture came out stretched. Compare every frame (two numbers) and catch up whenever it changes
+    const cv = Render.cv;
+    if (cv && cv.clientWidth && (cv.clientWidth !== Render.W || cv.clientHeight !== Render.H || (window.devicePixelRatio || 1) !== Render.dpr)) Render.resize();
     if (App.mode === 'battle' && B) {
       if (!App.paused && !B.over) {
         App.acc += dt * App.speed;
@@ -118,5 +122,6 @@ window.addEventListener('load', () => {
   Touch.init($('field'));
   UI.init();
   window.addEventListener('resize', () => Render.resize());
+  window.addEventListener('orientationchange', () => setTimeout(() => Render.resize(), 250));
   requestAnimationFrame(App.frame);
 });
