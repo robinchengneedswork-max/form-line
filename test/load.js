@@ -4,7 +4,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const SRC = path.join(__dirname, '..', 'src');
 const SIM_FILES = [
-  'config.js', 'rng.js', 'data/factions.js', 'data/tunes.js', 'field.js', 'data/scenarios.js', 'data/setpieces.js',
+  'config.js', 'rng.js', 'data/factions.js', 'data/tunes.js', 'field.js', 'data/scenarios.js', 'data/setpieces.js', 'data/greatbattles.js',
   'unit.js', 'move.js', 'combat.js', 'artillery.js', 'morale.js', 'orders.js', 'place.js', 'ai.js', 'command.js', 'builder.js', 'battle.js', 'detach.js', 'campaign.js',
 ];
 const EXPORTS = ['CFG', 'T', 'TERRAIN', 'Field', 'Paint', 'makeField', 'makeRng', 'SCENARIOS', 'BATTLE_POOL',

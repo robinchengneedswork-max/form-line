@@ -22,7 +22,7 @@ const Battle = {
       smoke: [], smokeT: 0, smokeCols: Math.ceil(FW / CFG.SMOKE_CELL), smokeRows: Math.ceil(FH / CFG.SMOKE_CELL),
       wind: { x: Math.cos(windA) * windS, y: Math.sin(windA) * windS, a: windA, s: windS },
       events: [], fx: [], pending: [], dropped: [], messages: [],
-      seen: [new Set(), new Set()], visT: 0, endT: 0, checkT: 0,
+      seen: [new Set(), new Set()], heard: [new Set(), new Set()], visT: 0, endT: 0, checkT: 0,
       over: false, result: null, autoPlayer: !!opts.autoPlayer,
       stats: { coloursTaken: 0, coloursLost: 0, gunsTaken: 0 },
     };
@@ -49,8 +49,15 @@ const Battle = {
     pu.leader = B.cmd;
     B.player = pu;
     B.units.push(pu);
-    for (const a of dep.allies) B.units.push(makeUnit(Object.assign({ faction: 'british' }, a), rng));
-    for (const e of dep.enemies) B.units.push(makeUnit(Object.assign({ faction: 'french' }, e), rng));
+    // a company with `arrive` (seconds) is not on the field yet: it marches on from the edge when its time comes
+    B.arrivals = [];
+    for (const a of dep.allies) { const sp = Object.assign({ faction: 'british' }, a); if (a.arrive) B.arrivals.push(sp); else B.units.push(makeUnit(sp, rng)); }
+    for (const e of dep.enemies) { const sp = Object.assign({ faction: 'french' }, e); if (e.arrive) B.arrivals.push(sp); else B.units.push(makeUnit(sp, rng)); }
+    B.arrivals.sort((a, b) => a.arrive - b.arrive);
+    // weather: a storm shortens sight and wets the powder (flashes in the pan), then passes
+    const W = sc.weather;
+    B.weather = W ? { kind: W.kind || 'rain', sight: W.sight || CFG.SIGHT, misfire: W.misfire || 0, label: W.label || 'Rain',
+      until: W.until ? rng.range(W.until[0], W.until[1]) : Infinity, clears: W.clears || 'The rain passes over.' } : null;
     // nobody starts inside a wall or a house: step him out to the nearest open ground
     for (const u of B.units) for (const m of u.men) Battle.unstick(field, m);
     for (const u of B.units) Unit.survey(u);
@@ -68,6 +75,8 @@ const Battle = {
     AI.cmdRoute(B);
     Move.commander(B, B.cmd, dt);
     Command.step(B);
+    Battle.arrive(B);
+    if (B.weather && B.t >= B.weather.until) { Battle.log(B, B.weather.clears, 'order'); B.weather = null; }
     AI.step(B);
     for (const u of B.units) {
       if (u.reslot && B.t >= u.reslot) { u.reslot = 0; Unit.assignSlots(u); }
@@ -89,11 +98,23 @@ const Battle = {
     if (B.fx.length > 400) B.fx.splice(0, B.fx.length - 400);
   },
 
+  // reinforcements whose hour has come march on from the edge
+  arrive(B) {
+    while (B.arrivals.length && B.t >= B.arrivals[0].arrive) {
+      const u = makeUnit(B.arrivals.shift(), B.rng);
+      for (const m of u.men) Battle.unstick(B.field, m);
+      Unit.survey(u);
+      B.units.push(u);
+      Battle.log(B, u.team === TEAM_PLAYER ? `${u.name} comes up${u.arriveText ? ' — ' + u.arriveText : ''}!` : `More of them: ${u.name} is coming on.`, u.team === TEAM_PLAYER ? 'good' : 'bad');
+    }
+  },
+  sight(B) { return B.weather ? B.weather.sight : CFG.SIGHT; },
+
   // which enemy companies each side can see. Fog is per team, refreshed twice a second.
   visibility(B) {
     for (const team of [TEAM_PLAYER, TEAM_ENEMY]) {
-      const S = B.seen[team];
-      S.clear();
+      const S = B.seen[team], SG = Battle.sight(B), HD = B.heard[team];
+      S.clear(); HD.clear();
       const eyes = [];
       for (const u of B.units) {
         if (u.team !== team) continue;
@@ -105,12 +126,14 @@ const Battle = {
         if (e.team === team) continue;
         const marks = e.men.filter(m => m.state === 'formed' || m.state === 'fleeing');
         if (!marks.length) continue;
+        // horse on the move is heard before it is seen — through rye, hail or over a crest
+        if (e.arm === 'cav' && (e.order === 'charge' || e.order === 'ride') && eyes.some(s => dist2(s.x, s.y, e.cx, e.cy) < CFG.HEAR_HORSE * CFG.HEAR_HORSE)) HD.add(e.id);
         let ok = false;
         for (let k = 0; k < 4 && !ok; k++) {
           const t = marks[Math.floor(B.rng() * marks.length)];
           for (const s of eyes) {
             const d2v = dist2(s.x, s.y, t.x, t.y);
-            if (d2v < 50 * 50 || (d2v < CFG.SIGHT * CFG.SIGHT && Field.los(B.field, s.x, s.y, t.x, t.y))) { ok = true; break; }
+            if (d2v < 50 * 50 || (d2v < SG * SG && Field.los(B.field, s.x, s.y, t.x, t.y, !!s.horse))) { ok = true; break; }
           }
         }
         if (ok) { S.add(e.id); if (team === TEAM_PLAYER) e.lastSeen = { x: e.cx, y: e.cy, t: B.t, facing: e.form.facing }; }
@@ -133,7 +156,7 @@ const Battle = {
     if (P.saved && Battle.atRetreat(B, B.cmd.x, B.cmd.y) && !P.men.some(m => m.state === 'formed' && m.role !== 'officer')) return Battle.finish(B, 'withdrew');
     // a company that has marched off the field is not beaten
     const mineOut = B.units.filter(u => u.team === TEAM_PLAYER && !(u.isPlayer && u.saved && !u.routed)).every(u => Battle.out(u) && !Battle.rallyable(B, u));
-    const theirsOut = B.units.filter(u => u.team === TEAM_ENEMY).every(Battle.out);
+    const theirsOut = B.units.filter(u => u.team === TEAM_ENEMY).every(Battle.out) && !B.arrivals.some(a => a.team === TEAM_ENEMY);
     if (mineOut || theirsOut) { B.endT += 1; } else B.endT = 0;
     if (B.endT >= 6) return Battle.finish(B, theirsOut ? 'won' : 'lost');
     if (nightfall) Battle.finish(B, 'nightfall');

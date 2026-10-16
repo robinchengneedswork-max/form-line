@@ -67,6 +67,11 @@ const Command = {
   think(B, team, hq) {
     const mine = B.units.filter(u => u.team === team);
     const foe = 1 - team;
+    // 0. orders written in advance: at the hour a company's task becomes the next one (a rearguard falls back)
+    for (const u of mine) {
+      const nx = u.task && u.task.then;
+      if (nx && B.t >= nx.at && !u.routed) Command.assign(B, u, Object.assign({}, nx.task));
+    }
     // 1. waves: a reserve whose hour has come goes in
     for (const u of mine) {
       if (u.task && u.task.kind === 'reserve' && u.task.wave != null && B.t >= u.task.wave && !u.routed) {
@@ -83,19 +88,23 @@ const Command = {
       if (res) Command.assign(B, res, { kind: 'attack', x: u.task.x, y: u.task.y, text: `${u.name} has given way. Retake their ground — now!`, short: 'committed to retake a lost post' });
       else if (team === TEAM_PLAYER) Battle.log(B, `${u.name} has broken. There is no reserve left.`, 'bad');
     }
-    // 3. the other side is spent: general advance
+    // 3. the other side is spent: general advance. "Spent" is against what each side has had on the field,
+    // not a head count — a big army once called a small one spent before a shot was fired (Quatre Bras)
+    const usNow = Command.strength(B, team);
+    hq.peak = Math.max(hq.peak || 0, usNow);
     if (hq.phase !== 'general' && B.t > 150) {
-      const us = Command.strength(B, team), them = Command.strength(B, foe);
+      const us = usNow, them = Command.strength(B, foe);
+      const theirPeak = Math.max(1, B.hq[foe].peak || them), spent = them / theirPeak < 0.55 * (us / Math.max(1, hq.peak));
       const theirMorale = B.units.filter(u => u.team === foe && !u.routed && u.formed);
       const avg = theirMorale.length ? theirMorale.reduce((a, u) => a + u.morale, 0) / theirMorale.length : 0;
       const waiting = B.units.some(u => u.team === foe && u.task && u.task.kind === 'reserve' && u.task.wave != null && !u.routed);
       // or the day is wearing on and neither has given way: whoever is not outnumbered goes forward
       const lastWave = Math.max(0, ...mine.map(u => u.task && u.task.wave ? u.task.wave : 0));
       const stale = (B.t > 540 && us >= them * 0.85) || (lastWave && B.t > lastWave + 120 && mine.every(u => !u.task || u.task.kind !== 'reserve'));
-      if (!waiting && (them < us * 0.55 || (avg < 38 && them < us) || stale)) {
+      if (!waiting && ((them < us * 0.55 && spent) || (avg < 38 && them < us) || stale)) {
         hq.phase = 'general';
         for (const u of mine) {
-          if (u.routed || !u.formed) continue;
+          if (u.routed || !u.formed || u.arm === 'gun') continue;      // guns do not advance (they have no limbers)
           const c = Command.nearestCentroid(B, u, foe);
           if (c) Command.assign(B, u, { kind: 'attack', x: c.x, y: c.y, text: 'General advance! Drive them from the field!', short: 'joins the general advance' });
         }

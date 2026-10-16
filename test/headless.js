@@ -969,5 +969,56 @@ chk('every order has a drum call', ['follow', 'line', 'advance', 'halt', 'ready'
   chk('…and they take it up', u.form.kind === 'line' && !B.pending.length && Math.abs(angDiff(u.form.facing, toE)) < Math.PI / 2);
 }
 
+console.log('§18 the great battles: each act its own');
+{
+  const { ACTS, Path } = X;
+  chk('every act has its own pool of great battles, none of them its own boss', ACTS.every(a => a.setpieces.length >= 3 && a.setpieces.every(k => SCENARIOS[k] && SCENARIOS[k].setpiece && SETPIECE_POOL.includes(k)) && !a.setpieces.includes(a.boss)));
+  chk('an act’s route never meets the same great battle twice', [0, 1, 2].every(act => [1, 2, 3, 4, 5, 6].every(sd => {
+    const sp = Campaign.genMap(makeRng(sd * 31), act).flat().filter(n => n.type === 'setpiece').map(n => n.scenario);
+    return sp.length === new Set(sp).size && sp.every(k => ACTS[act].setpieces.includes(k));
+  })));
+  // the Côa: a written order turns the rearguard round, and the way back is over the bridge
+  const C = fresh('sp_coa', 501);
+  const back = C.player.task.then.at;
+  C.t = back - 1; C.hq[TEAM_PLAYER].next = 0;      // (a company that never fires is routed by then — jump to the hour)
+  run(C, 4);
+  chk('the Côa: at the hour, the colonel orders you back over the bridge', C.player.task.retire && /bridge/.test(C.dispatch.text));
+  const way = Path.find(C.field, 450, 350, 500, 600), ry = SCENARIOS.sp_coa.river;
+  chk('…and the only way over is the bridge', way && way.some(p => Math.abs(p.x - 560) < 14 && Math.abs(p.y - ry(560)) < 24), way && JSON.stringify(way.map(p => [p.x | 0, p.y | 0])));
+  const AU = fresh('sp_coa', 502, { autoPlayer: true }), rg = AU.units.find(u => /43rd/.test(u.name));
+  run(AU, rg.task.then.at + 150);
+  chk('…and an AI rearguard falls back toward the bridge even with the French close', rg.cy > 420 || rg.routed, `${rg.cx | 0},${rg.cy | 0}`);
+  // Albuera: hail
+  const A = fresh('sp_albuera', 503);
+  chk('Albuera: a hailstorm — sight is short', A.weather && Battle.sight(A) === 140 && Battle.sight(A) < CFG.SIGHT);
+  const u = A.player, m = u.men.find(x => x.role === 'line');
+  const save = A.weather.misfire; A.weather.misfire = 1; m.m = 'present';
+  const shots = u.stats.shots; Combat.fire(A, u, m, false);
+  chk('…wet powder flashes in the pan: no shot, and the man primes again', u.stats.shots === shots && m.m === 'reloading' && u.stats.misfires === 1);
+  A.weather.misfire = save;
+  run(A, A.weather.until + 2);
+  chk('…and the squall passes', !A.weather && Battle.sight(A) === CFG.SIGHT);
+  // Maya: the relief is not there, then it is
+  const M = fresh('sp_maya', 504);
+  const n0 = M.units.length, due = M.arrivals[0].arrive;
+  chk('Maya: the relief is not on the field at first', M.arrivals.length === 2 && !M.units.some(x => /82nd/.test(x.name)));
+  run(M, due + 1);
+  chk('…and marches on when its hour comes', M.units.length === n0 + 1 && M.units.some(x => /82nd/.test(x.name)) && M.messages.some(x => /Barnes/.test(x.text)));
+  // Quatre Bras: tall rye hides a man at 80 m that ordinary wheat would not
+  const Q = fresh('sp_quatrebras', 505), f = Q.field;
+  const rye = { w: 200, h: 40, cols: 50, rows: 10, type: new Uint8Array(500).fill(T.WHEAT), height: new Float32Array(500) };
+  chk('the Crossroads: rye taller than a man blocks sight at 120 m (wheat does not), not at 60', !Field.los(Object.assign({}, rye, { rye: true }), 10, 20, 130, 20) && Field.los(rye, 10, 20, 130, 20) && Field.los(Object.assign({}, rye, { rye: true }), 10, 20, 70, 20) && f.rye);
+  chk('…but a man on horseback sees over it', Field.los(Object.assign({}, rye, { rye: true }), 10, 20, 130, 20, true));
+  // and the enemy is not beaten while more of them are still coming
+  const S = fresh('sp_salamanca', 506);
+  for (const e of S.units) if (e.team === TEAM_ENEMY) { e.routed = true; for (const x of e.men) x.state = 'gone'; Unit.survey(e); }
+  run(S, 8);
+  chk('the Arapiles: the battle is not won while French reinforcements are still on the road', !S.over && S.arrivals.some(a => a.team === TEAM_ENEMY));
+  // Hougoumont: you hold the garden wall
+  const H = fresh('sp_hougoumont', 507);
+  const behind = H.player.men.filter(x => x.role === 'line').map(x => Field.coverFor(H.field, x.sx, x.sy, x.sx, x.sy - 200)).filter(c => c <= 0.4).length;
+  chk('Hougoumont: your line stands behind the garden wall', behind >= H.player.men.filter(x => x.role === 'line').length * 0.6, behind);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

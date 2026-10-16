@@ -107,6 +107,13 @@ const Combat = {
   },
 
   fire(B, u, m, volley) {
+    // wet powder: the pan flashes and nothing happens. He must clear the vent and prime again
+    if (B.weather && B.weather.misfire && B.rng() < B.weather.misfire) {
+      m.m = 'reloading'; m.mt = Combat.reloadTime(B, m, u) * CFG.MISFIRE_PRIME; m.aimAt = null; m.firedAt = B.t;
+      u.stats.misfires = (u.stats.misfires || 0) + 1;
+      B.fx.push({ kind: 'flash', x: m.x + Math.cos(m.facing) * 0.6, y: m.y + Math.sin(m.facing) * 0.6, a: m.facing, t: B.t, pan: true });
+      return;
+    }
     let t = Combat.pickTarget(B, m, Combat.range(m, volley));
     const face = t ? Math.atan2(t.y - m.y, t.x - m.x) : m.facing;
     m.facing = face;

@@ -74,7 +74,8 @@ const Field = {
   // Line of sight between two standing men. Blocked by a crest higher than the
   // sight line (this is what makes a reverse slope work), by buildings, and by
   // more than CFG.WOODS_BLOCK metres of woodland.
-  los(f, ax, ay, bx, by) {
+  // `mounted`: the eye is on horseback and sees over tall rye (not over woods)
+  los(f, ax, ay, bx, by, mounted) {
     const d = dist(ax, ay, bx, by);
     if (d < 6) return true;
     const ha = Field.heightAt(f, ax, ay) + CFG.EYE, hb = Field.heightAt(f, bx, by) + CFG.EYE;
@@ -88,6 +89,7 @@ const Field = {
       const ty = TERRAIN[f.type[i]];
       if (ty.blocks) return false;
       if (ty.woods) { woods += ty.thin ? 1.5 : 3; if (woods > CFG.WOODS_BLOCK) return false; }
+      else if (f.rye && !mounted && f.type[i] === T.WHEAT) { woods += CFG.RYE_BLOCK; if (woods > CFG.WOODS_BLOCK) return false; }
       if (f.height[i] > lerp(ha, hb, t) - 0.15) return false;
     }
     return true;

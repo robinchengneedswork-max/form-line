@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 200 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 214 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -40,7 +40,8 @@ export line). A headless check asserts that index.html's script order matches.
 | `ai.js` | every non-player captain (enemy AND allied): doctrines attack / hold / skirmish. Several ideas borrowed from DoDoCat's *Day of Slaughter* NW AI mod (spread targets, march until the centres can see each other, a firing distance kills push in and losses push out, sideways realignment with a deadzone, troop-ratio retreat/charge) |
 | `command.js` | brigade **headquarters** for set pieces: every company has a task (hold / reserve / attack); waves, reserves committed to retake a lost post, general advance; YOUR task arrives as a dispatch and obedience is scored |
 | `data/factions.js` CAV_TYPES | the three kinds of French horse |
-| `data/setpieces.js` | the big battles (bigger `size`, `setpiece: true`): The Long Ridge, The Village on the Stream, and the finale |
+| `data/setpieces.js` | the big battles (bigger `size`, `setpiece: true`): The Long Ridge, The Village on the Stream, and the finale; the task helpers |
+| `data/greatbattles.js` | six more from the real campaigns, two per act (`ACTS[k].setpieces`): the Côa, Albuera, the Arapiles, Maya, Quatre Bras, Hougoumont — see *Great battles* below |
 | `place.js` | **drag to place** (the user asked for it): a stroke gives centre (midpoint) + alignment; the company faces across it toward the nearest enemy you can see, else away from you; at most `PLACE_RANGE` from where it stands. Mouse = left-drag (keeps the current shape); touch = Form → Line/Skirmish/Column arms it, the next drag places, a tap forms on the spot, a hold re-opens the wheel. Pure `plan()` is in the headless sim |
 | `touch.js` | phone controls: tap = walk, hold = two-level order wheel (Fire up / Bayonet right / Form down / Move left), drag = look, pinch = zoom |
 | `builder.js` | the battle builder: unit costs in renown, budgets, auto-deployment of two built armies |
@@ -154,7 +155,32 @@ The user's reasoning: commanding more than ~2 units needs campaign power-scaling
 - `ACTS` (campaign.js): I The Peninsula 1810 → boss `sp_ridge` "Busaco"; II Spain 1812–13 → `sp_village` "Vitoria"; III The Hundred Days 1815 → `finale` "Waterloo". Each act is its own `MAP_ROWS` **9**-row route (`genMap(rng, act)`; the last row's node type stays `'finale'`, its scenario is the act's boss). `run.act`, `run.winter`.
 - `Campaign.level(row, act, rows)` = (act + row/(rows−1)) / 3 — the enemy gets better across the whole campaign, so horse (level ≥0.3) arrives in Act II and guns/cuirassiers in Act III. Act bosses +0.08.
 - Win an act's great battle → `run.winter` → `UI.winter` (= the camp screen with a winter header, no Rest): `Campaign.winterQuarters` heals you, sends recruits for half the gap to capacity, drill +0.03; then one camp choice → `Campaign.nextAct` (new map). Lose any act's great battle → the campaign is lost. Saves made during winter resume into winter quarters. Old saves migrate into Act I (the UI sizes the map from `run.map.length`, so an old 11-row map still draws).
-- ⚠ Only two set-piece maps exist for 3 acts × (3 set pieces + boss): they repeat a lot. More set-piece maps are the obvious content gap.
+- Each act draws its set pieces from its own pool (`ACTS[k].setpieces`: 3 maps, never the act's own boss) **without repeats** (`genMap` → `nextSetpiece`). See *Great battles*.
+
+## Great battles (round 10 — the user picked "more set-piece maps")
+
+`data/greatbattles.js`: six set pieces from the real campaigns, two per act. Each act's pool is the two plus one of the
+generic old maps (`ACTS[k].setpieces`: I = Côa, Albuera, Village; II = Arapiles, Maya, Long Ridge; III = Quatre Bras,
+Hougoumont, Village). Each battle brings one thing the others don't, built as a general engine hook:
+
+| map | the day | the hook |
+|---|---|---|
+| `sp_coa` The Bridge on the Côa (1810) | rearguard in walled vineyards; at ~4½–5 min the colonel orders you back over the one bridge, then three columns storm it | **`task.then = {at, task}`**: a timed follow-on order (Command.think step 0). `retire: true` on a hold task makes `AI.toPost` march even with the enemy inside 140 m, until `reached` |
+| `sp_albuera` The Hill at Albuera (1811) | attack uphill in a hailstorm; Vistula lancers out of the murk on the right | **`sc.weather = {kind, sight, misfire, until:[a,b], label, clears}`** → `B.weather`; `Battle.sight(B)` replaces `CFG.SIGHT` in fog of war; `Combat.fire` misfires (a flash in the pan costs `MISFIRE_PRIME` of a reload, no shot, no smoke — and that man is not "presented" for the horse nerve test). HUD line + `Render.rain` (mist = pale veil, no streaks) |
+| `sp_salamanca` The Arapiles (1812) | **you attack**: four French companies marching west along a road, hidden from you by a fold; Le Marchant's heavy dragoons behind you | allied horse (`horse(..., {team: TEAM_PLAYER, cavType: 'heavy_dragoons'})`); a French company with `arrive` |
+| `sp_maya` The Pass at Maya (1813) | mist, a stone breastwork across the col, six French columns; Barnes's brigade marches up at ~7–8 min | **`arrive: t`** on any spec: held in `B.arrivals`, `Battle.arrive` makes the unit at its hour (log names `arriveText`). The enemy is not beaten while French arrivals are still due (`checkEnd`) |
+| `sp_quatrebras` The Crossroads (1815) | rye taller than a man; the bank along the Namur road; lancers, then cuirassiers; the Guards arrive | **`f.rye`**: wheat cells add `RYE_BLOCK` to the woods tally in `Field.los` (~90 m hides a man; guns are blinded too. 1.2 / ~55 m made a blind 9-minute stand-off at the French firing distance). **Mounted eyes see over it** (`Field.los(..., mounted)`; visibility passes `!!eye.horse`): without that the French squadrons never found a mark and two battles in six ran to nightfall; it also makes your officer's horse worth having here. Horsemen are still hidden as *targets*. **Heard horses**: `B.heard[team]` = horse at the trot/charge within `HEAR_HORSE` 160 m of any eye, seen or not → `AI.cavThreat` + the player's warning ("Horses! You hear them…") |
+| `sp_hougoumont` Hougoumont (1815) | you are the garrison of the garden wall; a wood in front; brigade after brigade; a battery on the right | (wall placement, below) |
+
+Things the sweeps found:
+- ⚠ **A wall only covers a man 2.5–4.5 m behind it, on a 4 m grid.** A line's front rank stands ON its post and the rear rank 1.7 m behind, so a garrison post must be **4.5 m below the top of the wall's cell** (wall at y=360 → post 364.5). Posts 15 m back had no cover, so `AI.stepUp` walked them out of the garden into the orchard. Headless checks Hougoumont's line is behind its wall.
+- **General advance compared head counts** (`them < us·0.55`): at Quatre Bras the French (two squadrons of cuirassiers + lancers) called our side "spent" at 2½ min. Now it also needs `spent` = their share left of their own peak < 0.55 × ours (`hq.peak`).
+- Batteries no longer "join the general advance" (no limbers).
+- **Autoplayer captain** (`AI.cmdRoute`): he kept walking his route after the company halted/deployed and died alone in a French column (Albuera 3 of 6 "fell" at ~3 min). Now he stops and stands 6 m behind the centre. This changes tune.js numbers for every map.
+  Also: when his company has routed he walks back toward `B.retreat` with his men (he used to stand alone where the line had been and be bayoneted — the Village's "fell" results).
+- ⚠ **Holders face and fire at the NEAREST enemy foot (`AI.closestFoe`), not the spread-out target.** `nearestEnemy` adds +90 per friend already on a target (Day of Slaughter's spread — right for attackers choosing whom to go for), so at Quatre Bras a holding line wheeled off its bank toward a company 133 m off at the oblique and judged its volley by it, while a column walked straight up to 30 m outside its fire cone and broke it unfired on. That is general to every holding company on every map.
+- **Horse go round houses** (`AI.ride`): if the straight line to the ride target is not `Path.clear`, they ride to `Path.find`'s first waypoint. A squadron leaving the field once trotted on the spot under Gemioncourt's wall until its horses were blown and the battle ran to nightfall.
+- Maya's picquet must retire by ~1–1½ min or the columns come out of the mist onto it.
 
 ## Sergeants' parties, the bugle and runners (round 9 — the user: "name ncos of some of the vets… assign them some men to split my group… a skirmisher corp with the rifles that i can command seperately but also reabsorb"; "runners for anything complex and maybe a bugle… charge or follow me")
 

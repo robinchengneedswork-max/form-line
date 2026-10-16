@@ -46,6 +46,17 @@ const AI = {
     return best;
   },
 
+  // the nearest seen enemy foot or guns (horse are the square's business)
+  closestFoe(B, u) {
+    let best = null, bd = Infinity;
+    for (const e of B.units) {
+      if (e.team === u.team || e.routed || !e.formed || e.arm === 'cav' || !B.seen[u.team].has(e.id)) continue;
+      const d = dist(u.cx, u.cy, e.cx, e.cy);
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
+  },
+
   // the firefight distance is a tug of war: every man we drop pulls us in, every man we lose pushes us out
   idealRange(u) {
     return clamp(50 + (1 - u.drill) * 35 + (u.stats.down - u.stats.hits) * 3, 35, 130);
@@ -190,11 +201,18 @@ const AI = {
       if (u.form.kind === 'column') Orders.give(B, u, 'line', { x: u.cx, y: u.cy, facing: face });
       // behind a crest and the enemy is in range of it: step up to where we can shoot (Wellington's way)
       else if (u.order === 'hold' && d < CFG.CREST_STEP_RANGE && !AI.inCover(B, u) && AI.stepUp(B, u, E, face)) return;
-      // a holding company keeps its ground (and its wall) unless the threat is well off its front
-      else if (off > (AI.inCover(B, u) ? 0.9 : CFG.FIRE_CONE * 0.8) && d < 260) Orders.give(B, u, 'line', { x: u.form.x, y: u.form.y, facing: face });
-      // against a column, hold the volley until it is close — then it breaks them
-      // …but a march column crossing in front of us (a bridge, a ford) is the best target there is
-      else AI.shoot(B, u, d, E.form.kind === 'attack' ? 60 : E.form.kind === 'column' ? 120 : u.drill > 0.5 ? 70 : 90);
+      else {
+        // a holder faces and fires at the NEAREST enemy foot, not the spread-out target (that is for attackers
+        // choosing whom to go for): at Quatre Bras a line wheeled off its bank toward a company 133 m off at
+        // the oblique while a column walked straight up to 30 m outside its fire cone, unfired on
+        const N = AI.closestFoe(B, u) || E, dn = dist(u.cx, u.cy, N.cx, N.cy);
+        const fN = Math.atan2(N.cy - u.cy, N.cx - u.cx), offN = Math.abs(angDiff(u.form.facing, fN));
+        // keep its ground (and its wall) unless the threat is well off its front
+        if (offN > (AI.inCover(B, u) ? 0.9 : CFG.FIRE_CONE * 0.8) && dn < 260) Orders.give(B, u, 'line', { x: u.form.x, y: u.form.y, facing: fN });
+        // against a column, hold the volley until it is close — then it breaks them;
+        // a march column crossing in front of us (a bridge, a ford) is the best target there is
+        else AI.shoot(B, u, dn, N.form.kind === 'attack' ? 60 : N.form.kind === 'column' ? 120 : u.drill > 0.5 ? 70 : 90);
+      }
     } else if (u.doctrine === 'skirmish') {
       if (u.form.kind !== 'skirmish' || off > 0.7) Orders.give(B, u, 'skirmish', { x: u.cx, y: u.cy, facing: face });
       else if (d < 70) Orders.give(B, u, 'fallback');
@@ -211,7 +229,7 @@ const AI = {
     if (AI.inCover(B, u) || Field.typeAt(B.field, u.cx, u.cy) === T.WOODS) return null;
     let best = null, bd = CFG.CAV_WARN;
     for (const e of B.units) {
-      if (e.team === u.team || e.arm !== 'cav' || e.routed || e.formed < 3 || !B.seen[u.team].has(e.id)) continue;
+      if (e.team === u.team || e.arm !== 'cav' || e.routed || e.formed < 3 || !(B.seen[u.team].has(e.id) || B.heard[u.team].has(e.id))) continue;
       const d = dist(u.cx, u.cy, e.cx, e.cy);
       // a squadron hanging about out there is a worry, not a threat; one coming on, or close, is
       const coming = e.order === 'charge' || (e.order === 'ride' && e.ride && dist(e.ride.x, e.ride.y, u.cx, u.cy) < 130);
@@ -243,6 +261,9 @@ const AI = {
 
   // a squadron trots (or walks) somewhere as a block
   ride(B, u, x, y, pace, facing) {
+    // horse ride straight, so round a house rather than into it (a squadron leaving the field once trotted
+    // on the spot under the wall of Gemioncourt until nightfall). Path.find's first leg is clear by construction
+    if (!Path.clear(B.field, u.cx, u.cy, x, y)) { const w = Path.find(B.field, u.cx, u.cy, x, y)[0]; if (w) { x = w.x; y = w.y; } }
     if (u.order === 'ride' && u.ride && dist2(u.ride.x, u.ride.y, x, y) < 400) return;
     if (u.order === 'hold' && dist2(u.form.x, u.form.y, x, y) < 100) return;
     Orders.apply(B, u, 'ride', { x, y, pace, facing });
@@ -309,11 +330,12 @@ const AI = {
   // the trumpet, and a shout down the line — so the player has a few seconds to form square
   warn(B, u, target) {
     B.events.push({ type: 'trumpet', x: u.cx, y: u.cy, unit: u.id });
-    if (target.team === TEAM_PLAYER && B.seen[TEAM_PLAYER].has(u.id) && B.t > (B.cavWarnT || -99)) {
+    const seen = B.seen[TEAM_PLAYER].has(u.id), heard = B.heard[TEAM_PLAYER].has(u.id);
+    if (target.team === TEAM_PLAYER && (seen || heard) && B.t > (B.cavWarnT || -99)) {
       B.cavWarnT = B.t + 15;
       const side = Math.abs(angDiff(-Math.PI / 2, Math.atan2(u.cy - target.cy, u.cx - target.cx)));
       const where = side < 0.6 ? 'to the front' : side > 2.5 ? 'in the rear' : u.cx < target.cx ? 'on the left' : 'on the right';
-      Battle.log(B, target.isPlayer ? `Cavalry! ${u.cav.short} ${where} — form square (E)!` : `Cavalry ${where} of ${target.name}!`, 'bad');
+      Battle.log(B, target.isPlayer ? (seen ? `Cavalry! ${u.cav.short} ${where} — form square (E)!` : `Horses! You hear them ${where} — form square (E)!`) : `Cavalry ${where} of ${target.name}!`, 'bad');
       B.fx.push({ kind: 'say', x: target.cx, y: target.cy, text: 'Cavalry!', t: B.t, team: target.team, big: true });
     }
   },
@@ -385,7 +407,10 @@ const AI = {
   // march to the post, then form line on it facing the way headquarters said. true = busy getting there
   toPost(B, u, E) {
     const a = u.anchor, far = dist(u.cx, u.cy, a.x, a.y);
-    if (E && dist(u.cx, u.cy, E.cx, E.cy) < 140) return false;
+    // a rearguard ordered back goes back, shot at or not, until it is there
+    const t = u.task, falling = t && t.retire && !t.reached;
+    if (falling && far <= 30) t.reached = true;
+    if (E && dist(u.cx, u.cy, E.cx, E.cy) < 140 && !falling) return false;
     if (far > 30) { AI.march(B, u, a.x, a.y); return true; }
     const L = u.leader || B.cmd;
     if (u.order === 'follow' && L && dist(L.x, L.y, a.x, a.y) < 12) { Orders.give(B, u, 'line', { x: a.x, y: a.y, facing: a.facing }); return true; }
@@ -426,8 +451,19 @@ const AI = {
 
   // the headless autoplayer drives YOUR commander's legs too
   cmdRoute(B) {
-    const u = B.player;
-    if (!B.autoPlayer || !u || !u.ai.cmdRoute) return;
-    if (!B.cmd.dest && u.ai.route && u.ai.route.length) B.cmd.dest = u.ai.route.shift();
+    const u = B.player, c = B.cmd;
+    if (!B.autoPlayer || !u) return;
+    // the company has halted or deployed: stop leading (he once walked on alone into a French column)
+    // and take post a few paces behind the centre of the line
+    if (u.order !== 'follow' && !B.pending.some(p => p.cmd === 'follow')) {
+      if (u.ai.cmdRoute) { u.ai.cmdRoute = false; u.ai.route = null; c.dest = null; }
+      // his men have broken: go back with them (they run for the road) rather than stand alone where the line was
+      if (u.routed) { if (!c.dest) c.dest = { x: B.retreat.x, y: B.retreat.y }; return; }
+      const bx = u.cx - Math.cos(u.form.facing) * 6, by = u.cy - Math.sin(u.form.facing) * 6;
+      if (u.formed && !c.dest && dist(c.x, c.y, bx, by) > 14) c.dest = { x: bx, y: by };
+      return;
+    }
+    if (!u.ai.cmdRoute) return;
+    if (!c.dest && u.ai.route && u.ai.route.length) c.dest = u.ai.route.shift();
   },
 };

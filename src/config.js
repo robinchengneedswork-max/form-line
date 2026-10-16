@@ -190,7 +190,11 @@ const CFG = {
 
   // ── visibility ──
   SIGHT: 480,
-  WOODS_BLOCK: 22,         // metres of woodland a line of sight can cross
+  WOODS_BLOCK: 22,
+  HEAR_HORSE: 160,         // horse at the trot or gallop is heard this far off, seen or not (the rye at Quatre Bras)
+  RYE_BLOCK: 0.75,         // tall rye (a map sets f.rye): per 3 m of it, so ~90 m hides a man — and a squadron until it breaks into the gallop.
+                           // 1.2 (~55 m) was a 9-minute blind stand-off: the French halted at their firing distance and nobody could see to shoot
+  MISFIRE_PRIME: 0.35,     // a flash in the pan (wet powder) costs this share of a reload: clear the vent, prime again         // metres of woodland a line of sight can cross
   EYE: 1.8,
 
   // ── smoke ──

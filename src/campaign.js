@@ -15,11 +15,11 @@ const MAP_ROWS = 9;    // stages in one act's route, the last being the act's gr
 // The enemy gets better across the whole campaign (Campaign.level), so horse turns up in Act II and
 // guns and cuirassiers in earnest in Act III.
 const ACTS = [
-  { name: 'Act I — The Peninsula, 1810', short: 'The Peninsula', road: 'The Road to Busaco', boss: 'sp_ridge', bossName: 'Busaco',
+  { name: 'Act I — The Peninsula, 1810', short: 'The Peninsula', road: 'The Road to Busaco', boss: 'sp_ridge', bossName: 'Busaco', setpieces: ['sp_coa', 'sp_albuera', 'sp_village'],
     blurb: 'Masséna is coming into Portugal. Wellington means to stand on a ridge and let him come.' },
-  { name: 'Act II — Spain, 1812–13', short: 'Spain', road: 'The Road to Vitoria', boss: 'sp_village', bossName: 'Vitoria',
+  { name: 'Act II — Spain, 1812–13', short: 'Spain', road: 'The Road to Vitoria', boss: 'sp_village', bossName: 'Vitoria', setpieces: ['sp_salamanca', 'sp_maya', 'sp_ridge'],
     blurb: 'The army is going forward at last. The French have horse now, and they know how to use it.' },
-  { name: 'Act III — The Hundred Days, 1815', short: 'The Hundred Days', road: 'The Road to Brussels', boss: 'finale', bossName: 'Waterloo',
+  { name: 'Act III — The Hundred Days, 1815', short: 'The Hundred Days', road: 'The Road to Brussels', boss: 'finale', bossName: 'Waterloo', setpieces: ['sp_quatrebras', 'sp_hougoumont', 'sp_village'],
     blurb: 'He is back from Elba. One more battle, the biggest of them all.' },
 ];
 
@@ -98,6 +98,10 @@ const Campaign = {
   // ── the route ──
   genMap(rng, act = 0) {
     const rows = [];
+    // each act has its own great battles: drawn without repeats until the act's pool runs dry
+    const pool = ACTS[act].setpieces || SETPIECE_POOL;
+    let left = [];
+    const nextSetpiece = () => { if (!left.length) left = pool.slice(); return left.splice(Math.floor(rng() * left.length), 1)[0]; };
     for (let r = 0; r < MAP_ROWS; r++) {
       const n = r === 0 ? 2 : r === MAP_ROWS - 1 ? 1 : rng.int(2, 4);
       const row = [];
@@ -114,7 +118,7 @@ const Campaign = {
         }
         row.push({
           id: `${r}-${i}`, row: r, x: (i + 0.5) / n + (n > 1 ? rng.range(-0.08, 0.08) : 0), type,
-          scenario: type === 'finale' ? ACTS[act].boss : type === 'setpiece' ? rng.pick(SETPIECE_POOL) : (type === 'battle' || type === 'elite') ? rng.pick(BATTLE_POOL) : null,
+          scenario: type === 'finale' ? ACTS[act].boss : type === 'setpiece' ? nextSetpiece() : (type === 'battle' || type === 'elite') ? rng.pick(BATTLE_POOL) : null,
           seed: Math.floor(rng() * 1e9), edges: [], done: false,
         });
       }

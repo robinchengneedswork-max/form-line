@@ -51,7 +51,7 @@ const Render = {
       let shade = 1 + (-gx - gy) * 0.9;                       // light from the north-west
       shade = clamp(shade, 0.72, 1.25);
       let j = 1 + (rnd() - 0.5) * 0.06;
-      if (ty === T.WHEAT) j *= (Math.floor(wy * 1.2) % 2 ? 1.04 : 0.95);
+      if (ty === T.WHEAT) j *= (Math.floor(wy * 1.2) % 2 ? 1.04 : 0.95) * (f.rye ? 0.86 : 1);   // tall rye: deeper, darker
       if (ty === T.WALL) j *= 0.85 + rnd() * 0.3;
       if (ty === T.WATER) j *= 1 + Math.sin(wx * 0.9 + wy * 0.3) * 0.04;
       if (ty === T.BUILDING) {
@@ -120,6 +120,7 @@ const Render = {
     Render.flashes(g, B);
     Render.smoke(g, B);
     g.restore();
+    if (B.weather) Render.rain(B, g);
     Render.overlay(B, ui);
   },
 
@@ -395,7 +396,7 @@ const Render = {
       if (f.kind !== 'flash') continue;
       if (age > 0.12) continue;
       g.fillStyle = `rgba(255,${200 + Math.random() * 50 | 0},120,${1 - age / 0.12})`;
-      g.beginPath(); g.arc(f.x + Math.cos(f.a) * 0.4, f.y + Math.sin(f.a) * 0.4, 0.55 + Math.random() * 0.3, 0, 7); g.fill();
+      g.beginPath(); g.arc(f.x + Math.cos(f.a) * 0.4, f.y + Math.sin(f.a) * 0.4, (0.55 + Math.random() * 0.3) * (f.pan ? 0.45 : 1), 0, 7); g.fill();
     }
   },
 
@@ -429,6 +430,21 @@ const Render = {
       g.fillStyle = `rgba(${sh},${sh},${sh},${0.22 * a})`;
       g.beginPath(); g.arc(p.x - p.r * 0.25, p.y - p.r * 0.2, p.r * 0.7, 0, 7); g.fill();
     }
+  },
+
+  // a storm: grey veil and slanting streaks, blown the way the wind blows
+  rain(B, g) {
+    const W = Render.W, H = Render.H, wx = B.wind.x;
+    if (B.weather.kind === 'mist') { g.fillStyle = 'rgba(214,218,222,0.3)'; g.fillRect(0, 0, W, H); return; }
+    g.fillStyle = 'rgba(70,78,86,0.34)'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(215,225,235,0.42)'; g.lineWidth = 1.1;
+    const n = Math.round(W * H / 2400), t = performance.now() / 1000;
+    g.beginPath();
+    for (let k = 0; k < n; k++) {
+      const x = ((k * 97.3 + t * (60 + wx * 40)) % (W + 40)) - 20, y = ((k * 53.7 + t * 520 + (k % 7) * 31) % (H + 40)) - 20;
+      g.moveTo(x, y); g.lineTo(x + 3 + wx * 4, y + 13);
+    }
+    g.stroke();
   },
 
   // ── screen-space: speech, labels, edge markers, minimap ──

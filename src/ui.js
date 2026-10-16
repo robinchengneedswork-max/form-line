@@ -242,7 +242,8 @@ const UI = {
     const theirs = E ? E.men.filter(m => m.state === 'formed' && Field.coverFor(B.field, m.x, m.y, u.cx, u.cy) <= 0.8).length / Math.max(1, E.formed) : 0;
     const mine = wall >= men.length * 0.4 ? `Behind a wall — they hit you a third as often`
       : wood + wall >= men.length * 0.4 ? `In cover — they hit you about half as often` : 'In the open';
-    return `<div class="row wide"><span>${mine}${theirs > 0.4 ? ' · <b class="warn">they are in cover</b>' : ''}</span></div>`;
+    const wet = B.weather ? `<div class="row wide"><span>${esc(B.weather.label)} — you see ${B.weather.sight} m; ${Math.round(B.weather.misfire * 100)}% of muskets flash in the pan</span></div>` : '';
+    return `<div class="row wide"><span>${mine}${theirs > 0.4 ? ' · <b class="warn">they are in cover</b>' : ''}</span></div>${wet}`;
   },
 
   // your company and its parties, at the top of the screen; redrawn only when something on it changes

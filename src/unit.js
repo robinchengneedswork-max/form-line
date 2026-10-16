@@ -52,7 +52,7 @@ function makeUnit(spec, rng) {
     morale: CFG.MORALE_BASE + (spec.nerve || 0), startSize: 0,
     routed: false, everRouted: false,
     doctrine: spec.doctrine || 'hold', objective: spec.objective || null, delay: spec.delay || 0,
-    task: spec.task || null, taskApplied: null, anchor: null,
+    task: spec.task || null, taskApplied: null, anchor: null, arriveText: spec.arriveText || null,
     trail: [], slotOrder: [], reslot: 0,
     lossLog: [], lastHit: -99, flanked: 0, beingCharged: 0, chargeT: 0,
     colours: null, coloursLost: false, wind: 1, hasColours: spec.colours !== false && !cav && !gun,
