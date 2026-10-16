@@ -52,11 +52,11 @@
 
 <section id="screen-battle" class="screen">
   <canvas id="field"></canvas>
-  <div id="hud-company" class="hud"></div>
+  <!-- the left column: the card of the unit you command, and the rail of your units under it -->
+  <div id="hud-left"><div id="hud-company" class="hud"></div><div id="unit-strip"></div></div>
   <div id="hud-clock" class="hud"></div>
   <div id="hud-log"></div>
   <div id="hud-orders"></div>
-  <div id="unit-strip"></div>
   <div id="touch-bar"><button id="tb-run" title="Sprint">Run</button><button id="tb-speed">1×</button><button id="tb-centre" title="Back to you">⌖</button><button id="tb-pause" title="Pause">❚❚</button></div>
   <div id="pause" class="overlay"><div class="sheet small">
     <h1>Paused</h1>
@@ -70,7 +70,7 @@
     <div class="help-cols">
       <div>
         <h3 class="touch-only">On a phone</h3>
-        <p class="touch-only"><b>Tap</b> to walk there. <b>Touch and hold</b> to open the order wheel — slide onto an order and lift. After <b>Form → Line</b> (or Skirmish, Column), <b>drag</b> where they should stand — they face the enemy across your stroke; a tap forms them on the spot instead. Drag to look around, pinch to zoom, ⌖ brings you back. <b>Run</b> toggles your sprint.</p>
+        <p class="touch-only"><b>Tap</b> to walk there — or tap <b>your own men</b> (with a party out) to command them; the chips under your company card do the same. Tap the card for more about them. <b>📜</b> by the clock: your orders and everything that has happened. <b>Touch and hold</b> to open the order wheel — slide onto an order and lift. After <b>Form → Line</b> (or Skirmish, Column), <b>drag</b> where they should stand — they face the enemy across your stroke; a tap forms them on the spot instead. Drag to look around, pinch to zoom, ⌖ brings you back. <b>Run</b> toggles your sprint.</p>
         <h3>Yourself</h3>
         <p><kbd>Right-click</kbd> walk there · <kbd>WASD</kbd> walk · <kbd>Shift</kbd> (hold) or <kbd>Q</kbd> (toggle) sprint — faster than a charge, for about fifteen seconds; then you are blown until you stand and get your breath<br>Your <b>mouse</b> is where you look. A line forms in front of you, facing it. <kbd>Left-drag</kbd> draws where the company should stand instead.</p>
         <h3>Being heard</h3>
@@ -98,6 +98,7 @@
     <button id="btn-help-close" class="big">To your duty</button>
   </div></div>
   <div id="dispatch"></div>
+  <div id="orders-sheet" class="overlay"><div class="sheet"><div id="orders-body"></div><button id="btn-orders-close" class="big">Back to it</button></div></div>
   <button id="btn-leavefield" title="Leave the field (L)">Leave the field</button>
   <div id="end-banner"></div>
 </section>

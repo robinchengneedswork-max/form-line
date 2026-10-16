@@ -20,6 +20,16 @@ const Detach = {
   // the unit your orders go to
   commanded(B) { const s = B.selected; return s && B.units.includes(s) ? s : B.player; },
   mine(B) { return B.units.filter(u => u === B.player || u.isDetachment); },
+  // which of your units has a man within r metres of (x, y) — a tap on your own men selects them
+  at(B, x, y, r) {
+    let best = null, bd = r * r;
+    for (const u of Detach.mine(B)) for (const m of u.men) {
+      if (m.state !== 'formed' && m.state !== 'fleeing') continue;
+      const d = dist2(m.x, m.y, x, y);
+      if (d < bd) { bd = d; best = u; }
+    }
+    return best;
+  },
   cycle(B) {
     const m = Detach.mine(B); if (m.length < 2) return;
     B.selected = m[(m.indexOf(Detach.commanded(B)) + 1) % m.length];

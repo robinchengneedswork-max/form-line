@@ -125,7 +125,12 @@ const Touch = {
     const mr = Render.miniRect;
     let wx, wy;
     if (mr && sx >= mr.x0 && sy >= mr.y0 && sx <= mr.x0 + mr.w && sy <= mr.y0 + mr.h) { wx = (sx - mr.x0) / mr.sc; wy = (sy - mr.y0) / mr.sc; }
-    else [wx, wy] = Render.toWorld(sx, sy);
+    else {
+      [wx, wy] = Render.toWorld(sx, sy);
+      // a tap on your own men (when you have more than one unit) commands them instead of walking there
+      const U = Detach.mine(B).length > 1 && Detach.at(B, wx, wy, Math.max(4, 20 / Render.cam.zoom));
+      if (U) { B.selected = U; UI.strip(B, true); Touch.buzz(10); return; }
+    }
     B.cmd.dest = { x: clamp(wx, 1, B.field.w - 1), y: clamp(wy, 1, B.field.h - 1) };
   },
 

@@ -157,6 +157,25 @@ The user's reasoning: commanding more than ~2 units needs campaign power-scaling
 - Win an act's great battle → `run.winter` → `UI.winter` (= the camp screen with a winter header, no Rest): `Campaign.winterQuarters` heals you, sends recruits for half the gap to capacity, drill +0.03; then one camp choice → `Campaign.nextAct` (new map). Lose any act's great battle → the campaign is lost. Saves made during winter resume into winter quarters. Old saves migrate into Act I (the UI sizes the map from `run.map.length`, so an old 11-row map still draws).
 - Each act draws its set pieces from its own pool (`ACTS[k].setpieces`: 3 maps, never the act's own boss) **without repeats** (`genMap` → `nextSetpiece`). See *Great battles*.
 
+## The decluttered HUD (round 11, Phase A — built 2026-10-16)
+
+- `#hud-left` = the **card** of the unit you command (`UI.hud`: name + hearts, morale bar, men/loaded/presented, what they are doing + `UI.coverWord`, kit + earshot + breath only when not fresh). **Tap it** for the rest (`UI._cardOpen`: fire word, cover sentence, breath, your wind). Under it, the **rail** of unit chips (`UI.strip`: morale dot, men, ⇣ routing / ⚔ charging / ■ square / ⋯ following, 🏃 when an order is on its way; ＋ Detach / ↩ Recall; runners + bugle).
+- **Tap your own men** (or click them without a drag) to command that unit when you have more than one (`Detach.at`); tapping anything else still walks you.
+- The colonel's orders are no longer in the card or the log: the dispatch pops once, and **📜** in the clock (or `O`) opens `#orders-sheet` (`UI.toggleOrders`, pauses): the task, the weather, the whole log with times.
+- The on-screen log shows fresh reports only (`LOG_FRESH` 12 s): 2 lines on a phone, 4 on a desktop, never the `order` tone.
+- **Map labels** (`Render.overlay`): yours only with news (or a tag when you have several); the enemy as `Render.shortName` ("1/17e Léger", "Cuirassiers") + state only when not Steady; allies only in trouble or zoomed ≥4.5. Priority-sorted, never overlapping each other or the HUD (`Render.hudRects`, measured twice a second), clamped on screen. Edge arrows: yours + the 3 nearest enemies, stepped in out of the HUD, merged when they land on one spot.
+- **Minimap**: sized by the screen's short side with the field's real proportions (it was 180 px tall whatever its width — squashed); on a phone on its side it sits left of the touch buttons. Overlays sit above the HUD (`z-index: 20`).
+- **Rotation**: `App.frame` compares the canvas size every frame (iOS fires `resize` before the page has its new shape) — landscape used to stretch.
+- Verified by script in a 390×844 and an 844×390 iframe (`body.touch`), not on a phone.
+
+## Roadmap: the Major and a second company (decided 2026-10-16 — the user: "need to think and plan carefully… ui is getting quite cumbersome")
+
+The user's answers, in order of work:
+1. **Phase A — declutter the battle UI first**, pushed for a phone playtest before anything new. (From their iPhone screenshot: the colonel's orders shown three times — dispatch, inside the company card, the log; the unit strip on top of the card and clock; full name+state labels on every company overlapping; a six-line log; in landscape the touch bar sits on the minimap.)
+2. **Selecting a unit: the left rail of unit chips AND tapping your own men on the map.** Tapping empty ground still walks you.
+3. **Captains and NCOs have a temperament** (the user's idea, not a dial): *initiative* (gives more orders of his own — some good, some not), *commanding* (better morale), *obedient* (good at following orders like "watch my right flank" or "be the reserve — if the men break after a charge, form on them"). You can **sack an NCO after a battle**; a good one dying should hurt. Managed in **party management on the map screen**.
+4. **Major at the start of Act III** (winter quarters before the Hundred Days). **Before that, the power curve is skirmishers deployed ahead of the line, scaled by the seniority of your troops** (veterans/NCO grade decide how many and how good).
+
 ## Great battles (round 10 — the user picked "more set-piece maps")
 
 `data/greatbattles.js`: six set pieces from the real campaigns, two per act. Each act's pool is the two plus one of the

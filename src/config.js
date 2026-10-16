@@ -190,6 +190,7 @@ const CFG = {
 
   // ── visibility ──
   SIGHT: 480,
+  LOG_FRESH: 12,           // seconds a report stays in the battle log on screen (all of it is under 📜)
   WOODS_BLOCK: 22,
   HEAR_HORSE: 160,         // horse at the trot or gallop is heard this far off, seen or not (the rye at Quatre Bras)
   RYE_BLOCK: 0.75,         // tall rye (a map sets f.rye): per 3 m of it, so ~90 m hides a man — and a squadron until it breaks into the gallop.

@@ -79,7 +79,9 @@ const Render = {
     g.restore();
     Render.terrain = c; Render.terrainFor = B;
     // minimap thumbnail
-    const m = document.createElement('canvas'); m.width = (Render.W < 700 ? 112 : 180) * (f.w > 800 ? 1.15 : 1); m.height = Math.round(180 * f.h / f.w);
+    // sized by the SHORT side of the screen (a phone on its side is 390 px tall), the field's own proportions
+    // (it used to be 180 px tall whatever its width — squashed on phones)
+    const m = document.createElement('canvas'); m.width = Math.round((Math.min(Render.W, Render.H) < 600 ? 120 : 180) * (f.w > 800 ? 1.15 : 1)); m.height = Math.round(m.width * f.h / f.w);
     m.getContext('2d').drawImage(c, 0, 0, m.width, m.height);
     Render.mini = m;
   },
@@ -448,10 +450,19 @@ const Render = {
   },
 
   // ── screen-space: speech, labels, edge markers, minimap ──
+  // Labels are kept few and short (the user, on a phone: "the ui is getting quite cumbersome"):
+  //   yours      — only when there is news (not Steady), or the tag of a unit when you have several
+  //   the enemy  — a short name ("17e Léger", "Cuirassiers"), and the state only when it is not Steady
+  //   allies     — only when they waver or run, or when you are zoomed right in
+  // and never on top of the HUD or another label. At most three arrows round the edge.
   overlay(B, ui) {
     const g = Render.g, W = Render.W, H = Render.H;
     g.font = '600 13px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'bottom';
-    const seen = B.seen[TEAM_PLAYER];
+    const seen = B.seen[TEAM_PLAYER], mine = Detach.mine(B), sel = Detach.commanded(B), many = mine.length > 1;
+    const taken = Render.hudRects().slice(), edges = [];
+    const free = (x0, y0, x1, y1) => !taken.some(r => x0 < r[2] && x1 > r[0] && y0 < r[3] && y1 > r[1]);
+    // who gets a word, most important first
+    const cands = [];
     for (const u of B.units) {
       if (Touch.wheel) break;              // the order wheel needs a clean background
       const vis = u.team === TEAM_PLAYER || seen.has(u.id);
@@ -459,22 +470,47 @@ const Render = {
       if (!vis) {
         if (u.team === TEAM_ENEMY && u.lastSeen && B.t - u.lastSeen.t < 90) {
           [sx, sy] = Render.toScreen(u.lastSeen.x, u.lastSeen.y);
-          g.fillStyle = 'rgba(30,50,120,0.45)'; g.fillText('? last seen', sx, sy);
+          cands.push({ u, sx, sy, text: '? last seen', pri: 5, ghost: true });
         }
         continue;
       }
       if (!u.formed && !u.routed) continue;
+      const own = mine.includes(u), trouble = u.routed || u.morale < CFG.STEADY;
       const off = sx < 0 || sy < 0 || sx > W || sy > H;
-      if (off) { Render.edgeMark(g, sx, sy, u); continue; }
-      const word = Unit.moraleWord(u);
-      const col = u.routed ? '#f2c14e' : u.morale < CFG.SHAKEN ? '#f08a4b' : u.morale < CFG.STEADY ? '#f4e3b0' : '#ffffff';
-      sy -= 10 + u.ranks * CFG.RANK_GAP * Render.cam.zoom;
-      g.fillStyle = 'rgba(0,0,0,0.55)';
-      const label = `${u.isPlayer ? '' : u.name + ' · '}${word}`;
-      const tw = g.measureText(label).width;
-      g.fillRect(sx - tw / 2 - 6, sy - 17, tw + 12, 19);
+      if (off) { if (u.team === TEAM_ENEMY || own) edges.push(u); continue; }
+      let text = null, pri;
+      if (own) {
+        const tag = many ? (u === B.player ? 'Company' : u.name.replace(/’s party$/, '')) : '';
+        text = [tag, trouble ? Unit.moraleWord(u) : ''].filter(Boolean).join(' · ') || null;
+        pri = u === sel ? 0 : 1;
+      } else if (u.team === TEAM_ENEMY) {
+        text = Render.shortName(u) + (trouble ? ' · ' + Unit.moraleWord(u) : '');
+        pri = 2 + dist(B.cmd.x, B.cmd.y, u.cx, u.cy) / 1000;
+      } else if (trouble || Render.cam.zoom >= 4.5) {
+        text = Render.shortName(u) + (trouble ? ' · ' + Unit.moraleWord(u) : ''); pri = trouble ? 1.5 : 4;
+      }
+      if (text) cands.push({ u, sx, sy: sy - 10 - u.ranks * CFG.RANK_GAP * Render.cam.zoom, text, pri, own });
+    }
+    cands.sort((a, b) => a.pri - b.pri);
+    for (const c of cands) {
+      const tw = g.measureText(c.text).width;
+      c.sx = clamp(c.sx, tw / 2 + 8, W - tw / 2 - 8);       // never half off the edge
+      const x0 = c.sx - tw / 2 - 6, y0 = c.sy - 17, x1 = c.sx + tw / 2 + 6, y1 = c.sy + 2;
+      if (!free(x0, y0, x1, y1)) continue;
+      taken.push([x0, y0, x1, y1]);
+      if (c.ghost) { g.fillStyle = 'rgba(30,50,120,0.5)'; g.fillText(c.text, c.sx, c.sy); continue; }
+      const u = c.u, col = u.routed ? '#f2c14e' : u.morale < CFG.SHAKEN ? '#f08a4b' : u.morale < CFG.STEADY ? '#f4e3b0' : '#ffffff';
+      g.fillStyle = c.u === sel && c.own ? 'rgba(60,45,10,0.75)' : 'rgba(0,0,0,0.55)';
+      g.fillRect(x0, y0, x1 - x0, y1 - y0);
       g.fillStyle = u.team === TEAM_PLAYER ? col : (u.routed ? '#9fe08a' : '#b9c8ff');
-      g.fillText(label, sx, sy);
+      g.fillText(c.text, c.sx, c.sy);
+    }
+    // round the edge: your own units always, then the three nearest of the enemy
+    const en = edges.filter(u => u.team === TEAM_ENEMY).sort((a, b) => dist(B.cmd.x, B.cmd.y, a.cx, a.cy) - dist(B.cmd.x, B.cmd.y, b.cx, b.cy)).slice(0, 3);
+    Render._marks = [];
+    for (const u of Touch.wheel ? [] : edges.filter(u => u.team === TEAM_PLAYER).concat(en)) {
+      const [sx, sy] = Render.toScreen(u.cx, u.cy);
+      Render.edgeMark(g, sx, sy, u);
     }
     // what people are shouting
     g.font = '600 14px Georgia, serif';
@@ -504,14 +540,50 @@ const Render = {
     Place.draw(g, B);
     Touch.draw(g);
   },
+  // a company's name, short: "2e Cie, 1/17e Léger" → "1/17e Léger", "Voltigeurs, 2/64e" → "Voltigeurs", horse by kind
+  shortName(u) {
+    if (u.arm === 'cav') return u.cav.short;
+    if (u.arm === 'gun') return 'Guns';
+    const parts = u.name.replace(/ \(.*\)/, '').split(', ');
+    if (parts.length < 2) return parts[0];
+    return /^(Voltigeurs|Grenadiers|Carabiniers|Chasseurs|Light|Grenadier|Jäger)/.test(parts[0]) ? parts[0].replace(/ Coy$/, '') : parts[parts.length - 1];
+  },
+  // where the HUD sits over the canvas (labels keep out of it); measured twice a second
+  hudRects() {
+    const now = performance.now();
+    if (Render._hud && now - Render._hud.t < 500) return Render._hud.v;
+    const v = [];
+    if (Render.cv.getBoundingClientRect) {
+      const cv = Render.cv.getBoundingClientRect();
+      for (const id of ['hud-left', 'hud-clock', 'touch-bar', 'dispatch', 'hud-log', 'btn-leavefield']) {
+        const el = document.getElementById(id);
+        if (!el || !el.offsetParent || !el.getBoundingClientRect) continue;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        const q = [r.left - cv.left - 4, r.top - cv.top - 4, r.right - cv.left + 4, r.bottom - cv.top + 4];
+        if (id === 'touch-bar') Render._tbRect = q;
+        v.push(q);
+      }
+    }
+    if (!v.includes(Render._tbRect)) Render._tbRect = null;
+    Render._hud = { t: now, v };
+    return v;
+  },
+
   coarse() { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); },
   near(x, y) { const [sx, sy] = Render.toScreen(x, y); return sx > -50 && sy > -50 && sx < Render.W + 50 && sy < Render.H + 50; },
 
   edgeMark(g, sx, sy, u) {
     const W = Render.W, H = Render.H, cx = W / 2, cy = H / 2;
     const a = Math.atan2(sy - cy, sx - cx);
-    const k = Math.min((W / 2 - 30) / Math.abs(Math.cos(a) || 1e-6), (H / 2 - 30) / Math.abs(Math.sin(a) || 1e-6));
+    let k = Math.min((W / 2 - 30) / Math.abs(Math.cos(a) || 1e-6), (H / 2 - 30) / Math.abs(Math.sin(a) || 1e-6));
+    // step in toward the middle until the arrow and its distance are clear of the HUD
+    const hud = Render.hudRects(), hit = (x, y) => hud.some(r => x > r[0] - 22 && x < r[2] + 22 && y > r[1] - 14 && y < r[3] + 14);
+    while (k > 40 && hit(cx + Math.cos(a) * k, cy + Math.sin(a) * k)) k -= 12;
     const x = cx + Math.cos(a) * k, y = cy + Math.sin(a) * k;
+    // two arrows on the same spot say one thing: the nearer (drawn first) speaks for both
+    if ((Render._marks || []).some(p => p.team === u.team && Math.hypot(p.x - x, p.y - y) < 44)) return;
+    (Render._marks = Render._marks || []).push({ x, y, team: u.team });
     g.save(); g.translate(x, y); g.rotate(a);
     g.fillStyle = u.team === TEAM_PLAYER ? 'rgba(200,40,50,0.85)' : 'rgba(50,80,190,0.85)';
     g.beginPath(); g.moveTo(12, 0); g.lineTo(-6, -8); g.lineTo(-6, 8); g.closePath(); g.fill();
@@ -541,7 +613,11 @@ const Render = {
   minimap(B, g) {
     const m = Render.mini; if (!m) return;
     // sit above whatever bar is along the bottom on this screen (the log on a phone, the order keys on a desktop)
-    const x0 = Render.W - m.width - 10, y0 = Render.H - m.height - Render.bottomInset(x0) - 10, sc = m.width / B.field.w;
+    let x0 = Render.W - m.width - 10;
+    const y0 = Render.H - m.height - Render.bottomInset(x0) - 10, sc = m.width / B.field.w;
+    // a phone on its side: the column of touch buttons comes down past the top of the map — sit left of it
+    const tb = Render.hudRects().find(r => r === Render._tbRect);
+    if (tb && tb[3] > y0 && tb[0] < Render.W - 4) x0 = Math.min(x0, tb[0] - m.width - 2);
     g.globalAlpha = 0.92; g.drawImage(m, x0, y0); g.globalAlpha = 1;
     g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 2; g.strokeRect(x0, y0, m.width, m.height);
     const seen = B.seen[TEAM_PLAYER];

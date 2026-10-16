@@ -56,6 +56,7 @@ const Input = {
     if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Slash'].includes(e.code)) e.preventDefault();
     Input.held.add(e.code);
     if (e.repeat) return;
+    if (e.code === 'KeyO' || (e.code === 'Escape' && $('orders-sheet').classList.contains('show'))) return UI.toggleOrders();
     if (e.code === 'Escape' || e.code === 'KeyP') return UI.togglePause();
     if (e.code === 'KeyM') return UI.toggleMute();
     if (e.code === 'Tab') return UI.cycleSpeed();
@@ -100,7 +101,13 @@ const Input = {
     Input.dragging = false;
     const p = Place.cur, B = App.B;
     Place.cur = null;
-    if (p && B && App.mode === 'battle' && !App.paused && !B.over && Place.isStroke(p)) Place.commit(B, p);
+    if (!p || !B || App.mode !== 'battle' || App.paused || B.over) return;
+    if (Place.isStroke(p)) Place.commit(B, p);
+    else {
+      // a click (no stroke) on your own men commands them
+      const U = Detach.mine(B).length > 1 && Detach.at(B, p.ax, p.ay, Math.max(4, 16 / Render.cam.zoom));
+      if (U) { B.selected = U; UI.strip(B, true); }
+    }
   },
 
   // every frame: legs, eyes, camera

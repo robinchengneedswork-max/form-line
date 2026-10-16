@@ -40,6 +40,10 @@ const UI = {
       else if (el.dataset.cmd) Orders.shout(B, el.dataset.cmd);
       UI.strip(B, true);
     };
+    // the card: tap for more (or less); the 📜 button in the clock: orders and what has happened
+    $('hud-company').onclick = () => { UI._cardOpen = !UI._cardOpen; };
+    $('hud-clock').onclick = e => { if (e.target.closest('[data-act=orders]')) UI.toggleOrders(); };
+    $('btn-orders-close').onclick = () => UI.toggleOrders();
     $('hud-orders').querySelectorAll('button').forEach(b => b.onclick = () => {
       if (!App.B || App.B.over) return;
       let cmd = b.dataset.cmd;
@@ -246,20 +250,27 @@ const UI = {
     return `<div class="row wide"><span>${mine}${theirs > 0.4 ? ' · <b class="warn">they are in cover</b>' : ''}</span></div>${wet}`;
   },
 
-  // your company and its parties, at the top of the screen; redrawn only when something on it changes
+  // the rail of your units, down the left under the card: tap a chip to command that unit.
+  // Redrawn only when something on it changes
   strip(B, force) {
     const mine = Detach.mine(B), sel = Detach.commanded(B), parties = !mine.some(u => u.isDetachment) && Detach.parties(B).length;
-    const key = mine.map(u => u.id + Unit.moraleWord(u) + u.formed).join() + sel.id + parties + (B.runnersOut || 0);
+    const glyph = u => u.routed ? '⇣' : u.order === 'charge' ? '⚔' : u.form.kind === 'square' ? '■' : u.order === 'follow' ? '⋯' : '';
+    const sent = u => B.pending.some(p => p.unit === u);
+    const key = mine.map(u => u.id + Unit.moraleWord(u) + u.formed + glyph(u) + sent(u)).join() + sel.id + parties + (B.runnersOut || 0);
     if (!force && key === UI._stripKey) return;
     UI._stripKey = key;
-    const short = u => u === B.player ? 'Company' : u.name.replace(/\u2019s party$/, '');
+    const short = u => u === B.player ? 'Company' : u.name.replace(/’s party$/, '');
     const runners = B.runners != null ? B.runners : CFG.RUNNERS;
-    $('unit-strip').innerHTML = (mine.length > 1 ? mine.map(u => `<button data-unit="${u.id}" class="${u === sel ? 'sel' : ''} ${u.routed ? 'bad' : u.morale < CFG.SHAKEN ? 'warn' : ''}">${esc(short(u))} <small>${u.formed}</small></button>`).join('') : '')
-      + (parties ? '<button data-cmd="detach" class="act">Detach parties <kbd>Y</kbd></button>' : '')
-      + (mine.length > 1 ? `<button data-cmd="recall" class="act">Recall <kbd>U</kbd></button><span class="runners" title="runners free">${'🏃'.repeat(Math.max(0, runners - (B.runnersOut || 0)))}${B.bugle ? ' 📯' : ''}</span>` : '');
+    $('unit-strip').innerHTML = (mine.length > 1 ? mine.map(u => `<button data-unit="${u.id}" class="chip ${u === sel ? 'sel' : ''}"><i style="background:${UI.moraleCol(u)}"></i>${esc(short(u))} <small>${u.formed}</small>${glyph(u) ? ` <b>${glyph(u)}</b>` : ''}${sent(u) ? ' <span title="an order is on its way">🏃</span>' : ''}</button>`).join('') : '')
+      + (parties ? '<button data-cmd="detach" class="act">＋ Detach parties <kbd>Y</kbd></button>' : '')
+      + (mine.length > 1 ? `<button data-cmd="recall" class="act">↩ Recall <kbd>U</kbd></button><span class="runners" title="runners free · bugle">${'🏃'.repeat(Math.max(0, runners - (B.runnersOut || 0)))}${B.bugle ? ' 📯' : ''}</span>` : '');
     $('unit-strip').classList.toggle('show', !!(mine.length > 1 || parties));
   },
+  moraleCol(u) { return u.routed ? '#d9a03a' : u.morale < CFG.SHAKEN ? '#d2653b' : u.morale < CFG.STEADY ? '#d8c27a' : '#7fb069'; },
+  // "No. 4 Company, 1/52nd Foot" → "No. 4 Coy, 1/52nd"
+  cardName(u) { return u.name.replace(/Company/, 'Coy').replace(/ Foot$/, ''); },
 
+  // the card of the unit you command: what you need at a glance; tap it for the rest
   hud(B) {
     UI.strip(B);
     const u = Detach.commanded(B), c = B.cmd;
@@ -269,38 +280,76 @@ const UI = {
     const orderWord = { follow: 'In column, following you', hold: u.shelled && B.t - u.shelled < 4 ? (u.form.kind === 'square' ? 'In square — under the guns' : 'Under artillery fire') : u.form.kind === 'skirmish' ? 'Skirmishing' : u.form.kind === 'square' ? 'In square' : u.form.kind === 'column' ? 'Halted in column' : u.form.kind === 'attack' ? 'Halted in column of attack' : 'Halted in line', advance: u.form.kind === 'attack' ? 'Advancing in column of attack' : 'Advancing', fallback: 'Falling back', retire: 'Retiring to the road', charge: 'CHARGING', rout: 'ROUTING' }[u.order] || u.order;
     const windWord = u.wind > 0.7 ? 'Fresh' : u.wind > 0.35 ? 'Puffing' : u.wind > 0.1 ? 'Winded' : 'Blown';
     const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will', byrank: 'Firing by rank' }[u.fire];
+    const fireShort = u.fire === 'ready' ? (pres ? `<b class="gold">${pres} presented — FIRE!</b>` : 'making ready') : u.fire === 'atwill' ? 'at will' : u.fire === 'byrank' ? 'by rank' : '';
     const dist0 = Math.round(dist(c.x, c.y, u.cx, u.cy));
-    const task = u.task ? `<div class="row wide orders">Orders: ${esc(u.task.text)}</div>` : '';
+    const reach = dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? '<span class="warn">by drum</span>' : '<span class="bad">out of earshot</span>') : 'in earshot';
+    const cover = UI.coverWord(B, u);
+    const open = UI._cardOpen;
+    const kit = u.isDetachment ? '' : `${Unit.hasRole(u, 'ensign') ? '⚑' : '<s>⚑</s>'} ${Unit.hasRole(u, 'drummer') ? '◉' : '<s>◉</s>'} ${Unit.hasRole(u, 'fifer') ? '♪' : '<s>♪</s>'}`;
     $('hud-company').innerHTML = `
-      <div class="name">${esc(u.name)}</div>
-      <div class="bar"><i style="width:${u.morale}%;background:${u.routed ? '#d9a03a' : u.morale < CFG.SHAKEN ? '#d2653b' : u.morale < CFG.STEADY ? '#d8c27a' : '#7fb069'}"></i><span>${word}</span></div>
-      <div class="row"><span>Men</span><b>${u.formed}<small> / ${u.startSize}</small></b><span>Loaded</span><b>${loaded}</b></div>
-      <div class="row wide"><span>${orderWord}</span></div>
-      <div class="row wide"><span>${fireWord}</span></div>
-      ${UI.coverLine(B, u)}
-      <div class="row wide"><span>Breath</span><b class="${u.wind < 0.35 ? 'warn' : ''}">${windWord}</b>${u.saved ? `<span>Off the field</span><b>${u.saved}</b>` : ''}</div>
-      <div class="kit">${Unit.hasRole(u, 'ensign') ? '⚑' : u.coloursLost ? '<s>⚑</s>' : '<s>⚑</s>'} ${Unit.hasRole(u, 'drummer') ? '◉' : '<s>◉</s>'} ${Unit.hasRole(u, 'fifer') ? '♪' : '<s>♪</s>'} <span class="${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'warn' : 'bad') : ''}">${dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? 'by drum' : 'out of earshot') : 'in earshot'}</span></div>
-      ${task}
-      <div class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}${c.rallyCd > B.t ? ` <small>rally ${Math.ceil(c.rallyCd - B.t)}s</small>` : ''}
-        <span class="cwind" title="your breath"><i style="width:${Math.round(c.wind * 100)}%"></i></span>${c.run || c.sprint ? ' <small>sprinting</small>' : ''}</div>`;
+      <div class="name"><span>${esc(UI.cardName(u))}</span><span class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}</span></div>
+      <div class="bar"><i style="width:${u.morale}%;background:${UI.moraleCol(u)}"></i><span>${word}</span></div>
+      <div class="row"><b>${u.formed}<small>/${u.startSize}</small></b><span>loaded ${loaded}</span>${fireShort ? `<span>${fireShort}</span>` : ''}</div>
+      <div class="row wide"><span>${orderWord}${cover ? ` · ${cover}` : ''}</span></div>
+      <div class="kit">${kit} <span>${reach}</span>${u.wind < 0.7 ? ` <span class="${u.wind < 0.35 ? 'warn' : ''}">· ${windWord.toLowerCase()}</span>` : ''}${c.rallyCd > B.t ? ` <span>· rally ${Math.ceil(c.rallyCd - B.t)}s</span>` : ''}${c.run || c.sprint ? ' <span>· sprinting</span>' : ''}</div>
+      ${open ? `<div class="more">
+        <div class="row wide"><span>${fireWord}</span></div>
+        ${UI.coverLine(B, u)}
+        <div class="row wide"><span>Breath</span><b class="${u.wind < 0.35 ? 'warn' : ''}">${windWord}</b>${u.saved ? `<span>Off the field</span><b>${u.saved}</b>` : ''}</div>
+        <div class="row wide"><span>Your breath</span><span class="cwind"><i style="width:${Math.round(c.wind * 100)}%"></i></span></div>
+      </div>` : ''}
+      <div class="toggle">${open ? '▴ less' : '▾ more'}</div>`;
     const onRoad = Battle.atRetreat(B, c.x, c.y);
     $('btn-leavefield').classList.toggle('show', onRoad);
     $('tb-run').classList.toggle('on', !!c.sprint);
     const wa = B.wind.a * 180 / Math.PI;
-    $('hud-clock').innerHTML = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`;
+    $('hud-clock').innerHTML = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`
+      + `<button class="ob${B.weather ? ' wet' : ''}" data-act="orders" title="Orders and what has happened (O)">📜${B.weather ? ' ☂' : ''}</button>`;
     const dp = B.dispatch;
-    const showD = dp && B.t - dp.t < 9;
+    const showD = dp && (B.t - dp.t < 9 || performance.now() < (UI._dispatchUntil || 0));
     $('dispatch').classList.toggle('show', !!showD);
     if (showD && $('dispatch').dataset.t !== String(dp.t)) {
       $('dispatch').dataset.t = String(dp.t);
       $('dispatch').innerHTML = `<small>${dp.first ? 'Your orders' : 'A galloper from'} — ${esc(B.colonel)}</small><div>“${esc(dp.text)}”</div>`;
     }
-    const log = B.messages.slice(-5);
-    const sig = log.map(m => m.t).join(',');
+    // the log: only what is fresh, and not the colonel's words again (they are in the dispatch and under 📜)
+    const fresh = B.messages.filter(m => m.tone !== 'order' && B.t - m.t < CFG.LOG_FRESH).slice(-(Touch.active ? 2 : 4));
+    const sig = fresh.map(m => m.t).join(',');
     if (sig !== UI._logSig) {
       UI._logSig = sig;
-      $('hud-log').innerHTML = log.map(m => `<div class="${m.tone}">${esc(m.text)}</div>`).join('');
+      $('hud-log').innerHTML = fresh.map(m => `<div class="${m.tone}">${esc(m.text)}</div>`).join('');
     }
+  },
+  // one or two words for the card; the sentence is under "more"
+  coverWord(B, u) {
+    const men = u.men.filter(m => m.role === 'line' && m.state === 'formed');
+    if (!men.length) return '';
+    let E = null, bd = Infinity;
+    for (const e of B.units) {
+      if (e.team === u.team || !e.formed || e.routed || !B.seen[u.team].has(e.id)) continue;
+      const d = dist(u.cx, u.cy, e.cx, e.cy); if (d < bd) { bd = d; E = e; }
+    }
+    const sx = E ? E.cx : u.cx + Math.cos(u.form.facing) * 150, sy = E ? E.cy : u.cy + Math.sin(u.form.facing) * 150;
+    const cv = men.map(m => Field.coverFor(B.field, m.x, m.y, sx, sy));
+    if (cv.filter(c => c <= 0.4).length >= men.length * 0.4) return 'behind a wall';
+    if (cv.filter(c => c <= 0.8).length >= men.length * 0.4) return 'in cover';
+    return '';
+  },
+
+  // 📜 — the colonel's orders, the weather, and everything that has happened, with the clock
+  toggleOrders() {
+    const B = App.B;
+    if (App.mode !== 'battle' || !B || B.over) return;
+    const el = $('orders-sheet'), open = !el.classList.contains('show');
+    if (open) {
+      UI._ordersPaused = !App.paused; App.paused = true;
+      const t = B.player.task, when = s => { const m = CFG.START_HOUR * 60 + s / 60; return `${Math.floor(m / 60)}:${String(Math.floor(m % 60)).padStart(2, '0')}`; };
+      $('orders-body').innerHTML = `<h1>Orders</h1>`
+        + (t && B.colonel ? `<p class="kicker">${esc(B.colonel)}</p><p class="blurb">“${esc(t.text)}”</p>` : `<p class="blurb">No orders from above. It is your fight.</p>`)
+        + (B.weather ? `<p>${esc(B.weather.label)}: you see ${B.weather.sight} m, and ${Math.round(B.weather.misfire * 100)}% of muskets flash in the pan.</p>` : '')
+        + `<h3>What has happened</h3><div class="loglist">${B.messages.slice().reverse().map(m => `<div class="${m.tone}"><small>${when(m.t)}</small> ${esc(m.text)}</div>`).join('')}</div>`;
+    } else if (UI._ordersPaused) App.paused = false;
+    el.classList.toggle('show', open);
   },
 
   // you are on the road: go, and whoever is not with you takes his chances
