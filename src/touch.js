@@ -30,6 +30,9 @@ const WHEEL_GROUPS = [
     { cmd: 'advance', label: 'Advance', at: 1 }, { cmd: 'follow', label: 'Follow me', at: 0 }, { cmd: 'halt', label: 'Halt', at: -1 }, { cmd: 'fallback', label: 'Fall back', at: -2 }, { cmd: 'retire', label: 'Retire', at: 2 }] },
 ];
 const optAngle = (g, i) => g.angle + g.opts[i].at * OPT_SPAN;
+// only what the unit you command can actually do (no Fire ring for horse, no bayonet for guns)
+const wheelShows = o => !App.B || armAllows(Detach.commanded(App.B), o.cmd);
+const groupShows = g => g.opts.some(wheelShows);
 
 const Touch = {
   active: false, pts: new Map(), hold: null, wheel: null, pinch: null,
@@ -43,7 +46,7 @@ const Touch = {
     b('tb-pause').onclick = () => UI.togglePause();
     b('tb-run').onclick = () => { if (App.B) App.B.cmd.sprint = !App.B.cmd.sprint; };
     b('tb-centre').onclick = () => { Input.camOff.x = Input.camOff.y = 0; };
-    b('tb-speed').onclick = () => { UI.cycleSpeed(); b('tb-speed').textContent = App.speed + '×'; };
+    b('tb-speed').onclick = () => UI.cycleSpeed();
     b('btn-help').onclick = () => { UI.togglePause(); UI.toggleHelp(); };
   },
 
@@ -128,9 +131,9 @@ const Touch = {
     else {
       [wx, wy] = Render.toWorld(sx, sy);
       // a tap on your own men (when you have more than one unit) commands them instead of walking there
-      const U = Detach.mine(B).length > 1 && Detach.at(B, wx, wy, Math.max(4, 20 / Render.cam.zoom));
-      if (U) { B.selected = U; UI.strip(B, true); Touch.buzz(10); return; }
+      if (Input.tapMen(B, wx, wy, 20 / Render.cam.zoom)) { Touch.buzz(10); return; }
     }
+    B.cmd.attach = null;
     B.cmd.dest = { x: clamp(wx, 1, B.field.w - 1), y: clamp(wy, 1, B.field.h - 1) };
   },
 
@@ -155,12 +158,12 @@ const Touch = {
     if (r < RING_DEAD) { w.group = -1; w.opt = -1; }
     else if (r < RING_IN) {
       let best = -1, bd = Infinity;
-      WHEEL_GROUPS.forEach((g, i) => { const d = Math.abs(angDiff(g.angle, a)); if (d < bd) { bd = d; best = i; } });
+      WHEEL_GROUPS.forEach((g, i) => { if (!groupShows(g)) return; const d = Math.abs(angDiff(g.angle, a)); if (d < bd) { bd = d; best = i; } });
       w.group = best; w.opt = -1;
     } else if (w.group >= 0) {
       const g = WHEEL_GROUPS[w.group];
       let best = -1, bd = OPT_SPAN * 0.75;
-      g.opts.forEach((o, i) => { const d = Math.abs(angDiff(optAngle(g, i), a)); if (d < bd) { bd = d; best = i; } });
+      g.opts.forEach((o, i) => { if (!wheelShows(o)) return; const d = Math.abs(angDiff(optAngle(g, i), a)); if (d < bd) { bd = d; best = i; } });
       w.opt = best;
     }
     if (w.group !== g0 || w.opt !== o0) Touch.buzz(w.opt >= 0 ? 8 : 5);
@@ -176,6 +179,7 @@ const Touch = {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     // inner ring: four categories
     WHEEL_GROUPS.forEach((G, i) => {
+      if (!groupShows(G)) return;
       const on = i === w.group;
       wedge(RING_DEAD, RING_IN, G.angle - Q + 0.03, G.angle + Q - 0.03);
       g.fillStyle = on ? 'rgba(176,138,46,0.95)' : 'rgba(20,16,10,0.78)'; g.fill();
@@ -187,6 +191,7 @@ const Touch = {
     if (w.group >= 0) {
       const G = WHEEL_GROUPS[w.group];
       G.opts.forEach((o, i) => {
+        if (!wheelShows(o)) return;
         const a = optAngle(G, i), on = i === w.opt, locked = App.B && !knowsDrill(Detach.commanded(App.B), o.cmd);
         wedge(RING_OUT0, RING_OUT1, a - OPT_SPAN / 2 + 0.02, a + OPT_SPAN / 2 - 0.02);
         g.fillStyle = on ? (o.hot ? 'rgba(190,30,45,0.95)' : 'rgba(176,138,46,0.95)') : 'rgba(20,16,10,0.8)'; g.fill();

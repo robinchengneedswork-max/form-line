@@ -34,6 +34,7 @@
         <label class="quick-horse"><input type="checkbox" id="quick-horse"> Mounted</label>
         <label class="quick-horse"><input type="checkbox" id="quick-gun"> Your gun</label>
         <label class="quick-horse"><input type="checkbox" id="quick-troop"> Your horse</label>
+        <label class="quick-horse"><input type="checkbox" id="quick-ally"> The 95th with you</label>
         <button id="btn-quick">Quick battle</button>
       </div>
     </div>
@@ -64,6 +65,7 @@
     <h1>Paused</h1>
     <button id="btn-resume" class="big">Resume</button>
     <button id="btn-mute">Sound: on</button>
+    <button id="btn-tap" title="What a tap (or click) on your own men does">Tap your men: command them</button>
     <button id="btn-help">The drill book</button>
     <button id="btn-withdraw">Abandon the field</button>
   </div></div>
@@ -72,18 +74,18 @@
     <div class="help-cols">
       <div>
         <h3 class="touch-only">On a phone</h3>
-        <p class="touch-only"><b>Tap</b> to walk there — or tap <b>your own men</b> (with a party out) to command them; the chips under your company card do the same. Tap the card for more about them. <b>📜</b> by the clock: your orders and everything that has happened. <b>Touch and hold</b> to open the order wheel — slide onto an order and lift. After <b>Form → Line</b> (or Skirmish, Column), <b>drag</b> where they should stand — they face the enemy across your stroke; a tap forms them on the spot instead. Drag to look around, pinch to zoom, ⌖ brings you back. <b>Run</b> toggles your sprint.</p>
+        <p class="touch-only"><b>Tap</b> to walk there — or tap <b>your own men</b> (with a party out) to command them; the chips under your company card do the same. Tap the card for more about them. <b>📜</b> by the clock: your orders and everything that has happened. <b>Touch and hold</b> to open the order wheel — slide onto an order and lift. After <b>Form → Line</b> (or Skirmish, Column), <b>drag</b> where they should stand — they face the enemy across your stroke, and <b>the length of the stroke is the width of the line</b>: a short one makes it deeper; a tap forms them on the spot instead. What a tap on your own men does — command them, or command them and walk along with them — is in the pause menu. Drag to look around, pinch to zoom, ⌖ brings you back. <b>Run</b> toggles your sprint.</p>
         <h3>Yourself</h3>
         <p><kbd>Right-click</kbd> walk there · <kbd>WASD</kbd> walk · <kbd>Shift</kbd> (hold) or <kbd>Q</kbd> (toggle) sprint — faster than a charge, for about fifteen seconds; then you are blown until you stand and get your breath<br>Your <b>mouse</b> is where you look. A line forms in front of you, facing it. <kbd>Left-drag</kbd> draws where the company should stand instead.</p>
         <h3>Being heard</h3>
         <p>Your voice carries ~50 m. Further off, only the <b>drummer</b> can beat your order down the line, two seconds late. Lose him and you must walk to your men.</p>
         <h3>Firing</h3>
-        <p><kbd>B</kbd> Fire by rank — the front rank fires, then the next, so some muskets are always loaded.</p>
+        <p><kbd>B</kbd> Fire by rank — the front rank fires, then the rear rank five seconds later, and each reloads in turn: a steady ripple instead of one crash, so there are always loaded muskets in the line. It hurts less than a full volley, but a charge never catches them all empty.</p>
         <p><kbd>5</kbd> Make ready — the front two ranks present and <i>hold</i>. <kbd>F</kbd> / <kbd>Space</kbd> FIRE — everyone presented lets go at once. A volley close in breaks companies; at 150 m it wastes powder. Reloading takes about a minute. <kbd>6</kbd> lets each man fire when he has a mark. Men only fire when <b>halted</b>.</p>
       </div>
       <div>
         <h3>Moving</h3>
-        <p><kbd>1</kbd> Follow me — a column that walks in your footsteps. <kbd>2</kbd> Form line. <kbd>3</kbd> Advance (wheels to face your mouse). <kbd>4</kbd> Halt. <kbd>9</kbd> Fall back, facing the enemy. <kbd>8</kbd> Skirmish order — loose, hard to hit, easy to ride over. <kbd>0</kbd> Column of attack — narrow and deep: it barely fires and suffers more, but its charge hits far harder. Skirmish, column of attack and fire by rank are learned at camp.</p>
+        <p><kbd>1</kbd> Follow me — a column that walks in your footsteps. <kbd>2</kbd> Form line. <kbd>3</kbd> Advance — straight on, the way they face (drag them round first to go another way). <kbd>4</kbd> Halt. <kbd>9</kbd> Fall back, facing the enemy. <kbd>8</kbd> Skirmish order — loose, hard to hit, easy to ride over. <kbd>0</kbd> Column of attack — narrow and deep: only its front two ranks fire and every ball finds somebody, but it advances at quick time without losing its order, a man lost costs it less nerve, and its charge hits far harder. Use it to cross open ground to the bayonet, then charge — or deploy into line. Skirmish, column of attack and fire by rank are learned at camp.</p>
         <h3>Nerve</h3>
         <p>Men fall back when shot, faster when it comes all at once or from the flank. The <b>colours</b>, the <b>music</b> and <b>you</b> nearby steady them. <kbd>R</kbd> Rally — in person — can turn a rout: get among the runners (they slow down when you are with them) and shout. If it does not take the first time, stay with them and shout again; you have about half a minute before they are gone.</p>
         <h3>The bayonet</h3>
@@ -94,7 +96,7 @@
         <p>French batteries fire twice a minute and reach right across the field — but only at what they can see: <b>stand behind a crest</b> and they cannot touch you. A roundshot skips through whatever is in its path, so a line two deep loses a man or two, and a <b>square or a column loses a file</b> (horse and guns together are the nightmare: square for the one, slaughter from the other). Skirmishers hardly notice it. Inside 140 m they fire <b>canister</b>, and a company walking straight at the guns is swept away. To take them: get close under cover, come at them from the <b>flank</b> (a gun swings round slowly past its front), or go out in <b>skirmish order</b> just beyond canister range and shoot down the gunners. A gun with no gunners near it is yours if you walk onto it.</p>
         <h3>The road</h3>
         <p>Every field has a <b>line of retreat</b> (the green ring on your side). <kbd>X</kbd> Retire — about face and march for it; they cannot fire, and every hit hurts like one from the flank. Men who reach it are off the field and safe. Stand on it yourself and <b>Leave the field</b> (<kbd>L</kbd>). Anyone still out there within 150 m of the enemy is taken prisoner, colours too.</p>
-        <p class="hint"><kbd>Wheel</kbd> zoom · <kbd>Arrows</kbd> look · <kbd>V</kbd> re-centre · <kbd>Tab</kbd> 1×/2×/4× · <kbd>P</kbd> pause · <kbd>M</kbd> mute · click the map to walk there</p>
+        <p class="hint"><kbd>Wheel</kbd> zoom · <kbd>Arrows</kbd> look · <kbd>V</kbd> re-centre · <kbd>Tab</kbd> ½×/1×/2× · <kbd>P</kbd> pause · <kbd>M</kbd> mute · click the map to walk there</p>
       </div>
     </div>
     <button id="btn-help-close" class="big">To your duty</button>

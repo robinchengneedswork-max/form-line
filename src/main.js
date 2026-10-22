@@ -1,12 +1,18 @@
 'use strict';
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  MAIN — wiring, the campaign flow, and the loop.
-//  The sim runs at a fixed CFG.STEP; the 2×/4× clock runs more steps.
+//  The sim runs at a fixed CFG.STEP; the clock runs more or fewer steps a second.
+//  App.speed is sim-seconds per real second: 1, 2 or 4, shown as ½×, 1×, 2× (the user: "set the current 2×
+//  as 1 and the current 1 as ½ — that feels more right"). A battle starts at 2 (shown 1×).
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const SAVE_KEY = 'formline.run';
 
 const App = {
-  mode: 'menu', run: null, node: null, B: null, speed: 1, paused: false, acc: 0, last: 0, quick: false,
+  mode: 'menu', run: null, node: null, B: null, speed: 2, paused: false, acc: 0, last: 0, quick: false,
+  // tapping (or clicking) your own men: 'select' commands them, 'walk' also walks you along with them,
+  // 'off' ignores them (a tap on your men walks you there like anywhere else). Per viewer
+  tapMode: (() => { try { return localStorage.getItem('formline.tap') || 'select'; } catch (e) { return 'select'; } })(),
+  setTapMode(m) { App.tapMode = m; try { localStorage.setItem('formline.tap', m); } catch (e) { /* storage unavailable */ } },
 
   saveRun() { try { if (App.run && !App.run.over) localStorage.setItem(SAVE_KEY, JSON.stringify(App.run)); else localStorage.removeItem(SAVE_KEY); } catch (e) { /* storage unavailable */ } },
   loadRun() { try { const s = localStorage.getItem(SAVE_KEY); return s ? JSON.parse(s) : null; } catch (e) { return null; } },
@@ -22,14 +28,23 @@ const App = {
     App.quick = false; App.run = Campaign.migrate(r);
     // saved between an act's great battle and the spring
     if (App.run.winter) return UI.winter(App.run, () => { Campaign.nextAct(App.run); App.saveRun(); UI.map(App.run); });
+    // the game was closed in the middle of a stage (a battle, the shop…): go back into it. (It used to count
+    // as passed — the battle skipped with nothing to show for it)
+    const open = App.run.entered && Campaign.node(App.run, App.run.entered);
+    if (open && !open.done) return App.openNode(open);
     UI.map(App.run);
   },
 
   enterNode(id) {
     const run = App.run, n = Campaign.go(run, id);
-    App.node = n;
+    run.entered = n.id;
     App.saveRun();
-    const back = () => { n.done = true; App.saveRun(); UI.map(run); };
+    App.openNode(n);
+  },
+  openNode(n) {
+    const run = App.run;
+    App.node = n;
+    const back = () => { n.done = true; run.entered = null; App.saveRun(); UI.map(run); };
     if (n.type === 'camp') return UI.camp(run, back);
     if (n.type === 'quartermaster') return UI.shop(run, back);
     if (n.type === 'event') return UI.event(run, Campaign.pickEvent(run), back);
@@ -57,7 +72,8 @@ const App = {
     const B = Battle.create(opts);
     UI.brief(B.scenario, B.deploy, node, () => {
       Sound.resume();
-      App.B = B; App.mode = 'battle'; UI._stripKey = UI._card = UI._clock = null; App.paused = false; App.acc = 0; App.speed = 1;
+      App.B = B; App.mode = 'battle'; UI._stripKey = UI._card = UI._clock = null; App.paused = false; App.acc = 0; App.speed = 2;
+      if ($('tb-speed')) $('tb-speed').textContent = UI.speedLabel();
       Render.terrainFor = null;
       Render.cam.x = B.cmd.x; Render.cam.y = B.cmd.y - 30; Render.cam.zoom = 5.5;
       Input.camOff.x = Input.camOff.y = 0;
@@ -78,6 +94,7 @@ const App = {
     }
     const run = App.run;
     const rep = Campaign.afterBattle(run, App.node, B.result);
+    run.entered = null;
     App.saveRun();
     UI.report(rep, run, () => {
       if (run.over) {

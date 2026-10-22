@@ -95,6 +95,18 @@ const Sound = {
     for (const x of [o, o2, lfo]) { x.start(t); x.stop(t + dur + 0.02); }
   },
 
+  // ── the pipes: a reedy chanter (sawtooth through a nasal band-pass) ──
+  pipe(t, freq, dur, out, gain = 0.2) {
+    const ac = Sound.ac;
+    const o = ac.createOscillator(), bp = ac.createBiquadFilter(), g = ac.createGain();
+    o.type = 'sawtooth'; o.frequency.value = freq;
+    bp.type = 'bandpass'; bp.frequency.value = Math.min(4000, freq * 3); bp.Q.value = 1.4;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.015);
+    g.gain.setValueAtTime(gain, t + Math.max(0.02, dur - 0.02)); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(bp); bp.connect(g); g.connect(out);
+    o.start(t); o.stop(t + dur + 0.02);
+  },
+
   // ── crowd roar for a charge ──
   roar(x, y) {
     const ac = Sound.ctx(); if (!ac) return;
@@ -181,27 +193,41 @@ const Sound = {
 
   bandsTick(B, now) {
     for (const u of B.units) {
-      const bs = Sound.bands[u.id] || (Sound.bands[u.id] = { d: 0, di: 0, f: 0, fi: 0, playing: false });
+      const bs = Sound.bands[u.id] || (Sound.bands[u.id] = { d: 0, di: 0, f: 0, fi: 0, ti: 0, p: 0, pi: 0, dr: 0, playing: false });
       const marching = !u.routed && (u.order === 'advance' || u.order === 'follow' || u.order === 'fallback' || u.order === 'charge');
       const drum = marching && Unit.hasRole(u, 'drummer');
       const fife = marching && u.order !== 'charge' && Unit.hasRole(u, 'fifer');
-      if (!drum && !fife) { bs.playing = false; continue; }
-      if (!bs.playing) { bs.playing = true; bs.d = bs.f = now + 0.1; bs.di = bs.fi = 0; }
+      const pipes = marching && Unit.hasRole(u, 'piper');
+      if (!drum && !fife && !pipes) { bs.playing = false; continue; }
+      if (!bs.playing) { bs.playing = true; bs.d = bs.f = bs.p = bs.dr = now + 0.1; bs.di = bs.fi = bs.pi = 0; }
       const [gain, pan] = Sound.place(u.cx, u.cy, 55);
-      if (gain < 0.06) { bs.d = bs.f = now + 0.1; continue; }
+      if (gain < 0.06) { bs.d = bs.f = bs.p = bs.dr = now + 0.1; continue; }
       const out = bs.out && bs.outGain === Math.round(gain * 20) ? bs.out : (bs.out = Sound.chain(gain * 0.55, pan), bs.outGain = Math.round(gain * 20), bs.out);
       if (drum) {
         const cad = CADENCES[u.order === 'charge' ? 'longroll' : u.F.cadence], step = 60 / cad.bpm / 2;
         while (bs.d < now + 0.3) { Sound.stroke(cad.bar[bs.di % cad.bar.length], bs.d, out, step); bs.d += step; bs.di++; }
       } else bs.d = now + 0.1;
       if (fife) {
-        const tune = TUNES[u.F.tune], beat = 60 / tune.bpm;
+        // your fifer goes through every tune the company has bought, one after another
+        const list = u.tunes && u.tunes.length ? u.tunes : [u.F.tune];
         while (bs.f < now + 0.3) {
-          const [n, b] = tune.melody[bs.fi % tune.melody.length];
+          const tune = TUNES[list[bs.ti % list.length]], beat = 60 / tune.bpm;
+          const [n, b] = tune.melody[bs.fi];
           if (n !== 'R') Sound.fife(bs.f, noteFreq(n) * 2, b * beat * 0.95, out);
-          bs.f += b * beat; bs.fi++;
+          bs.f += b * beat;
+          if (++bs.fi >= tune.melody.length) { bs.fi = 0; bs.ti++; bs.f += beat; }
         }
       } else bs.f = now + 0.1;
+      if (pipes) {
+        const tune = TUNES.scotland, beat = 60 / tune.bpm;
+        while (bs.p < now + 0.3) {
+          const [n, b] = tune.melody[bs.pi % tune.melody.length];
+          if (n !== 'R') Sound.pipe(bs.p, noteFreq(n), b * beat * 0.97, out);
+          bs.p += b * beat; bs.pi++;
+        }
+        // the drones never stop while he plays
+        while (bs.dr < now + 0.3) { for (const n of tune.drone) Sound.pipe(bs.dr, noteFreq(n), 2.05, out, 0.07); bs.dr += 2; }
+      } else bs.p = bs.dr = now + 0.1;
     }
   },
 

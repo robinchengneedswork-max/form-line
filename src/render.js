@@ -223,6 +223,10 @@ const Render = {
       g.fillStyle = '#efe9d8'; g.beginPath(); g.arc(0.18, 0.3, 0.2, 0, 7); g.fill();
       g.strokeStyle = F.facings; g.lineWidth = 0.06; g.stroke();
     }
+    if (m.role === 'piper') {   // the bag under his arm and the drones over his shoulder
+      g.fillStyle = '#2f4a2a'; g.beginPath(); g.ellipse(0.05, 0.22, 0.14, 0.1, 0, 0, 7); g.fill();
+      g.strokeStyle = '#1b130b'; g.lineWidth = 0.04; for (const k of [-0.12, -0.02, 0.08]) { g.beginPath(); g.moveTo(0.02, 0.22); g.lineTo(-0.32, k - 0.2); g.stroke(); }
+    }
     if (m.role === 'fifer') { g.strokeStyle = '#2a1d10'; g.lineWidth = 0.05; g.beginPath(); g.moveTo(0.18, -0.1); g.lineTo(0.2, 0.42); g.stroke(); }
     if (m.carrying) { g.restore(); Render.flag(g, m.x, m.y, m.carrying, t, false, true); return; }
     g.restore();

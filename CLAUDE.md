@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 214 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 270 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -190,6 +190,48 @@ What was built (round 12):
 - **The big battles closed up, with more people** (the user: "close up and more people"): `beside(you, dx, …)` in setpieces.js puts a company of ours 60–85 m either side of you, sharing your task (a timed fall-back moves with them), on every set piece; Acts I–II also get one more French column at your stretch of the line (Act III's great battles — Quatre Bras, Hougoumont, Waterloo — do not: they were already the hardest and went 0-for-N). Posts are terrain-tied (farm, bridge, breastwork), so the maps were not rescaled.
 - **Rifles**: no cap — `Campaign.rifleCost` rises 5 a rifle (Light ×0.8). Muster screen: tap a man's **Rifle ✕** to put it in the **store** (`co.riflesStored`, `s.noRifle`), **+ Rifle** to hand one out of it, "to the best shots" (`issueRifles`) to redo them all. `armRifles` only issues *spare* rifles (new, or a fallen man's), never stored ones.
 - **Things to buy** (persistent, losable, any time — price the only limit): `co.battery {pieces,name,drill}` (gun 70 + 35/piece), `co.troop {size,type,name}` (60; remounts +4; heavy horses 45), **riflemen of the 95th** (`s.attached`, own rifle, not counted by `Campaign.mustered`, put in the emptiest sergeant's party). In battle they are units with `attached: 'guns' | 'troop'`, `commanded`, on the rail (`Detach.mine/tag`), ordered by voice/bugle/runner (`Orders.toParty`). **Mixed command** (the user's choice): guns choose their own targets; a drag sends them (`Artillery.moveTo`: limber `GUN_LIMBER` s, walk `GUN_MOVE`, unlimber); cease/at will hold or loose them. The troop waits at its `post`, rides where you drag it, charges only when you call (bugle works), and walks back to its post `TROOP_RETURN` s after a charge (`AI.troop`). After the battle (`Battle.attachedResult` → `Campaign.afterBattle`): captured guns are gone; fallen troopers are gone (35% come back unhorsed); a troop under 3 is broken up. Quick battle has "Your gun" / "Your horse".
+
+## Round 13 (2026-10-22, from the user's phone playtest — "it's really shaping up")
+
+- **Company character → the shop.** `co.type` (one choice at Captain) is now `co.traits` {light, grenadier, line}, bought as
+  `trait:<k>` under "The company's character" (`Campaign.TRAITS`); any or all. In battle `u.traits` (an AI company's
+  `ctype` becomes its one trait); every old `ctype === 'x'` check reads `u.traits.x`. `migrate` turns an old `co.type` into a trait.
+- **Promotion by experience, not renown** (the user's words): `CFG.PROMOTE_CPL/SGT` = [renown, xp] = [2,3] / [4,6].
+  XP: 1 a fight (2 a win), +1 per two kills, +2 mentioned in despatches (`s.mentions`), +3 per colour taken (`m.colours`
+  → `s.colours`); `s.wounds` counted. `Campaign.demote` frees a place.
+- **Muster roll** (`UI.company`) rebuilt for the phone: one line a man (rank badge, name, ⚔ kills ✠ mentions ⚑ colours
+  ✚ wounds, XP; ★ = ready for a stripe), tap for his record and actions. The map sidebar's duplicate roll is gone
+  (button "Muster roll ★").
+- **Names:** 96 surnames; `Campaign.enlist` gives each new man a surname nobody in the company has; `Campaign.callName`
+  says "J. Harris" where two do share one (old saves).
+- **Map spread:** a row's kinds are dealt out in random order (the set piece was always left-most and the shop
+  right-most); StS rule: no shop→shop / camp→camp / event→event on one road (a rolled node, else its rolled parent, becomes a fight).
+- **Closing the game mid-stage**: `run.entered` = the node you went into; `App.continueCampaign` re-opens it if it is not
+  done (it used to be skipped with nothing to show). Cleared by `openNode`'s back and `App.afterBattle`.
+- **Clock**: `App.speed` 1/2/4 sim-s per s is shown ½×/1×/2× (`UI.speedLabel`); battles start at 2 ("1×").
+- **Follow me to a party / another company** = it follows YOU (`u.followCmd`; `Detach.step` walks its leader 5 m behind
+  you); Recall still merges parties. Only a player-given follow sets it (`o.you`, from `pending.you`) — AI.march also
+  gives 'follow'. Your troop on Follow me keeps riding 25 m behind you (`AI.troop`).
+- **Tap your men** (pause menu, `App.tapMode` in localStorage `formline.tap`): command them / command them and **walk with
+  them** (`B.cmd.attach`: you keep 6 m behind its centre, `Move.commander`; a tap on the ground or WASD lets go) / off.
+  `Input.tapMen` is shared by touch and mouse.
+- **Advance goes straight on** in the company's own facing (it used to wheel to the way you faced).
+- **The stroke's length is the frontage**: `Place.files` → `opts.files` → `u.frontage[kind]`; `Unit.grid` fits it: a line
+  between its drill depth and `LINE_DEEP` (2) more ranks; skirmish 1–2 ranks (file pairs, the rear man staggered back);
+  column of attack 4–12 files. A tap or keyboard order keeps the last width.
+- **Horse and guns see only their orders** (`ARM_ORDERS` / `armAllows` in orders.js): the wheel drops options and whole
+  rings (`wheelShows`/`groupShows`), the desktop bar hides them, `Orders.shout` refuses.
+- **Column of attack** advances at `ATTACK_PACE` 1.75 (line 1.3) and keeps cohesion ≥0.6 — the reason to use it.
+- **The 95th rifleman item is gone** (over the company's numbers + a free rifle + cheap = broken, said the user). Instead,
+  from Act II (`ALLY_ACT`), **companies to follow you** (`co.allies`, `Campaign.ALLY_KINDS` rifles/highland/line, price +40
+  each): own name, officer and temper (dashing = charges sooner, steady = +6 nerve, obedient = obeys 90 s not 40). In battle
+  `attached: 'coy'`, AI-run: `AI.escort` keeps station off your company (riflemen 70 m ahead in skirmish order) and fights
+  within `ALLY_LEASH`; your orders (voice/bugle/runner) hold them for `ALLY_OBEY` s. Losses persist (half the fallen
+  return); under `ALLY_MIN` it is sent back. Quick battle: "The 95th with you". Old saves keep their attached riflemen.
+- **Music**: `TUNES[k].fife` tunes are bought (`tune:<k>`; The Girl I Left Behind Me, Yankee Doodle) and the fifer plays
+  every one the company knows in turn (`u.tunes`); a **piper** (`co.piper`, role 'piper', `isMusician`) plays
+  "Scotland the Brave" (anachronistic, flagged) over drones and marches out with the first sergeant's party. Melodies
+  are by ear.
 
 ## Great battles (round 10 — the user picked "more set-piece maps")
 

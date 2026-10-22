@@ -6,8 +6,9 @@
 //    touch   Form → Line / Skirmish / Column on the wheel, then drag the
 //            stroke; a tap instead forms on the spot, facing where you held
 //
-//  The stroke gives the CENTRE (its midpoint) and the ALIGNMENT; the length
-//  is only a gesture — frontage is what the men make it. The company faces
+//  The stroke gives the CENTRE (its midpoint), the ALIGNMENT and the FRONTAGE:
+//  a long stroke makes a wide line, a short one a deep line (the user: long
+//  skirmish lines from a short drag looked silly). The company faces
 //  across the stroke toward the nearest enemy you can see, or, with none in
 //  sight, away from you (an officer stands behind his line).
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -38,17 +39,25 @@ const Place = {
     if (tx != null) sign = (tx - x) * nx + (ty - y) * ny >= 0 ? 1 : -1;
     else { const k = (x - c.x) * nx + (y - c.y) * ny; sign = Math.abs(k) < 1 ? 1 : k > 0 ? 1 : -1; }
     const facing = sign > 0 ? s - Math.PI / 2 : s + Math.PI / 2;
-    return { cmd, kind: PLACE_KINDS[cmd], x, y, facing, clamped, slots: Place.slots(u, PLACE_KINDS[cmd], x, y, facing) };
+    const kind = PLACE_KINDS[cmd], files = Place.files(kind, dist(ax, ay, bx, by));
+    return { cmd, kind, x, y, facing, clamped, files, slots: Place.slots(u, kind, x, y, facing, files) };
+  },
+  // files a stroke this long asks for (null: too short to mean a width — keep what they had)
+  files(kind, len) {
+    if (len < CFG.PLACE_WIDE) return null;
+    return Math.max(1, Math.round(len / (kind === 'skirmish' ? CFG.SKIRMISH_GAP : CFG.FILE_GAP)) + 1);
   },
 
   // where the men would stand (no skirmish jitter — it is a sketch)
-  slots(u, kind, x, y, facing) {
+  slots(u, kind, x, y, facing, want) {
     const n = Unit.lineMen(u).filter(m => m.state === 'formed').length;
-    const { ranks, files, gap } = Unit.grid({ form: { kind }, ranks: u.ranks }, n);
+    const frontage = Object.assign({}, u.frontage, want ? { [kind]: want } : {});
+    const { files, gap } = Unit.grid({ form: { kind }, ranks: u.ranks, arm: u.arm, frontage }, n);
+    const rg = kind === 'skirmish' ? CFG.SKIRMISH_GAP * 0.8 : CFG.RANK_GAP;
     const fx = Math.cos(facing), fy = Math.sin(facing), rx = -fy, ry = fx, out = [];
     for (let i = 0; i < n; i++) {
-      const rank = Math.floor(i / files), off = (i % files - (files - 1) / 2) * gap;
-      out.push([x + rx * off - fx * rank * CFG.RANK_GAP, y + ry * off - fy * rank * CFG.RANK_GAP]);
+      const rank = Math.floor(i / files), off = (i % files - (files - 1) / 2 + (kind === 'skirmish' && rank % 2 ? 0.5 : 0)) * gap;
+      out.push([x + rx * off - fx * rank * rg, y + ry * off - fy * rank * rg]);
     }
     return out;
   },
@@ -58,7 +67,7 @@ const Place = {
 
   commit(B, p) {
     const pl = Place.plan(B, p.cmd, p.ax, p.ay, p.bx, p.by);
-    return Orders.shout(B, p.cmd, { x: pl.x, y: pl.y, facing: pl.facing });
+    return Orders.shout(B, p.cmd, { x: pl.x, y: pl.y, facing: pl.facing, files: pl.files });
   },
 
   // the order a left-drag gives: keep the shape the company is in

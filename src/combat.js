@@ -17,7 +17,7 @@ const Combat = {
   reloadTime(B, m, u) {
     const base = CFG.RELOAD_BASE - CFG.RELOAD_DRILL * u.drill - Math.min(m.xp, 6);
     // a rifle must be rammed down a tight, greased patch; Line companies drill hardest at the musket
-    return base * B.rng.range(0.85, 1.15) * (m.weapon === 'rifle' ? 1.7 : 1) * (u.ctype === 'line' ? 0.92 : 1);
+    return base * B.rng.range(0.85, 1.15) * (m.weapon === 'rifle' ? 1.7 : 1) * (u.traits.line ? 0.92 : 1);
   },
   // a man's reach with his weapon, at will / in a volley
   range(m, volley) { return m.weapon === 'rifle' ? (volley ? 300 : 280) : volley ? CFG.RANGE_MAX : CFG.RANGE_ATWILL; },
@@ -137,9 +137,9 @@ const Combat = {
     p *= m.aim * (1 + Math.min(m.xp, 8) * 0.025) * Combat.moraleMul(u);
     p *= Field.coverFor(B.field, t.x, t.y, m.x, m.y);
     p *= Math.exp(-CFG.SMOKE_K * Smoke.along(B, m.x, m.y, t.x, t.y));
-    if (volley) p *= u.ctype === 'line' ? CFG.VOLLEY_BONUS + 0.1 : CFG.VOLLEY_BONUS;
+    if (volley) p *= u.traits.line ? CFG.VOLLEY_BONUS + 0.1 : CFG.VOLLEY_BONUS;
     if (!m.fired) { p *= CFG.FIRST_FIRE; m.fired = true; }
-    if (tu.form.kind === 'skirmish') p *= tu.ctype === 'light' ? 0.42 : 0.55;
+    if (tu.form.kind === 'skirmish') p *= tu.traits.light ? 0.42 : 0.55;
     else if (tu.form.kind === 'attack') p *= CFG.ATTACK_EXPOSED;
     else if (tu.form.kind === 'column') p *= 1.3;   // a deep target: a ball that misses one man finds the next
     else if (tu.form.kind === 'square') p *= CFG.SQUARE_EXPOSED;
@@ -222,7 +222,7 @@ const Combat = {
     // every man within reach of an enemy fights him, charging or not
     for (const u of B.units) {
       for (const m of u.men) {
-        if (m.state !== 'formed' || m.role === 'drummer' || m.role === 'fifer') continue;
+        if (m.state !== 'formed' || isMusician(m)) continue;
         const reach = m.horse ? CFG.CAV_REACH : CFG.MELEE_REACH;
         // a horseman riding down a man who is running: he cannot fight back
         if (m.horse && m.foe && m.foe.state === 'fleeing' && m.foe !== c0) {
@@ -344,7 +344,7 @@ const Combat = {
     const horse = c.arm === 'cav' && d.arm !== 'cav' ? CFG.CAV_MASS * c.cav.mass : c.arm === 'cav' ? c.cav.mass : 1;
     return clamp(c.formed / d.formed, 0.4, 2.5) * c.melee * horse
       * (0.35 + 0.65 * clamp(c.impetus || 0, 0, 1.2)) * (1 + dh * CFG.SLOPE_PUSH)
-      * (c.chargeFrom === 'attack' ? CFG.ATTACK_SHOCK : 1) * (c.ctype === 'grenadier' ? 1.25 : 1);
+      * (c.chargeFrom === 'attack' ? CFG.ATTACK_SHOCK : 1) * (c.traits.grenadier ? 1.25 : 1);
   },
 
   // the moment of the charge: does it go home, or falter in front of them?

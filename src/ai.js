@@ -25,6 +25,8 @@ const AI = {
     for (const u of B.units) {
       if (u.attached === 'troop' && !B.autoPlayer) { AI.troop(B, u); continue; }
       if ((u.isPlayer || u.commanded) && !B.autoPlayer) continue;
+      // another regiment's company you have just given an order to: it carries it out before thinking for itself
+      if (u.attached === 'coy' && B.t < (u.obeyUntil || 0) && !B.autoPlayer) continue;
       if (B.t < u.ai.next) continue;
       u.ai.next = B.t + 1 + B.rng() * 0.3;
       AI.think(B, u);
@@ -96,6 +98,7 @@ const AI = {
     if (u.arm === 'cav') return AI.cavalry(B, u);
     if (u.arm === 'gun') return AI.battery(B, u);
     Command.apply(u);
+    if (u.attached === 'coy' && AI.escort(B, u)) return;
 
     // horse coming on and no wall or wood to stand in: form square, and stay in it while they are about
     const H = AI.cavThreat(B, u);
@@ -163,7 +166,7 @@ const AI = {
 
     // the bayonet
     const inRange = u.ai.inRangeT ? B.t - u.ai.inRangeT : 0;
-    const keen = u.melee > 1 ? 1.25 : 1;
+    const keen = u.melee > 1 || u.temper === 'dashing' ? 1.25 : 1;
     // a garrison behind its wall does not leave it for the bayonet unless the enemy in front is already breaking
     const sallyOk = !(u.doctrine === 'hold' && AI.inCover(B, u)) || (E.morale < CFG.SHAKEN && d < 45);
     // no captain sends blown men in again: let them get their breath first
@@ -482,8 +485,37 @@ const AI = {
   // they come back to their post, at a walk, to get their wind
   troop(B, u) {
     if (u.routed || !u.formed || u.order === 'charge' || !u.post) return;
+    // told to follow you: they keep coming after you, at a trot, a little way behind
+    if (u.followCmd) {
+      const c = B.cmd, x = c.x - Math.cos(c.facing) * 25, y = c.y - Math.sin(c.facing) * 25;
+      u.post = { x, y, facing: c.facing };
+      if (dist(u.cx, u.cy, x, y) > 22 && (u.order !== 'ride' || !u.ride || dist2(u.ride.x, u.ride.y, x, y) > 225)) Orders.apply(B, u, 'ride', { x, y, pace: CFG.CAV_TROT, facing: c.facing });
+      u.followCmd = true;
+      return;
+    }
     if (u.order === 'ride') return;
     if (B.t - (u.chargeEnd || -99) > CFG.TROOP_RETURN && dist(u.cx, u.cy, u.post.x, u.post.y) > 25) Orders.apply(B, u, 'ride', { x: u.post.x, y: u.post.y, pace: CFG.CAV_WALK, facing: u.post.facing });
+  },
+
+  // another regiment's company that follows you (bought). With nothing in front of it, it keeps station on
+  // your company — off your flank, or out ahead in skirmish order for riflemen — and marches when you march;
+  // with the enemy close it fights its own fight (the usual doctrines below), but never far from that station.
+  // true = busy getting there
+  escort(B, u) {
+    const P = B.player.routed || !B.player.formed ? null : B.player;
+    const fx = P ? Math.cos(P.form.facing) : Math.cos(B.cmd.facing), fy = P ? Math.sin(P.form.facing) : Math.sin(B.cmd.facing);
+    const ox = P ? P.cx : B.cmd.x, oy = P ? P.cy : B.cmd.y, face = Math.atan2(fy, fx);
+    const ahead = u.doctrine === 'skirmish' ? 70 : 0, side = u.side * (u.doctrine === 'skirmish' ? 25 : CFG.ALLY_STATION);
+    const st = Builder.open(B.field, { x: clamp(ox + fx * ahead - fy * side, 10, B.field.w - 10), y: clamp(oy + fy * ahead + fx * side, 10, B.field.h - 10) });
+    const E = AI.nearestEnemy(B, u), far = dist(u.cx, u.cy, st.x, st.y);
+    const fight = E && dist(u.cx, u.cy, E.cx, E.cy) < 240;
+    if (fight && far < CFG.ALLY_LEASH) return false;
+    if (far > 45) { AI.march(B, u, st.x, st.y); return true; }
+    if (fight) return false;
+    // there: form up facing the way your company faces (and keep up with it when it moves)
+    const kind = u.doctrine === 'skirmish' ? 'skirmish' : 'line';
+    if (u.form.kind !== kind || Math.abs(angDiff(u.form.facing, face)) > 0.4 || dist(u.form.x, u.form.y, st.x, st.y) > 18) Orders.give(B, u, kind, { x: st.x, y: st.y, facing: face });
+    return true;
   },
 
   // the headless autoplayer drives YOUR commander's legs too

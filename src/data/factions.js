@@ -38,7 +38,13 @@ const FIRST_NAMES = ['John', 'William', 'Thomas', 'James', 'George', 'Joseph', '
 const SURNAMES = ['Harris', 'Costello', 'Hopkins', 'Plunket', 'Green', 'Tanner', 'Cooper', 'Morris', 'Shaw',
   'Lawrence', 'Wheeler', 'Kincaid', 'Simmons', 'Surtees', 'Donaldson', 'Lamb', 'Anton', 'Pearce', 'Bell',
   'Gunn', 'Hale', 'Moyle', 'Brennan', 'Doyle', "O'Neil", 'Walsh', 'Ellis', 'Hughes', 'Price', 'Rowe', 'Fenn',
-  'Keating', 'Mudge', 'Pritchard', 'Sweeney', 'Varley', 'Webb', 'Yates', 'Dunn', 'Bligh'];
+  'Keating', 'Mudge', 'Pritchard', 'Sweeney', 'Varley', 'Webb', 'Yates', 'Dunn', 'Bligh',
+  // more of them, so that two men in one company rarely share a surname (the user: "need a way to tell them apart")
+  'Abbott', 'Ashby', 'Bates', 'Birch', 'Boyle', 'Brady', 'Briggs', 'Burke', 'Cairns', 'Carter', 'Clancy', 'Coates',
+  'Cullen', 'Dawes', 'Dixon', 'Farrell', 'Finch', 'Fletcher', 'Foley', 'Gallagher', 'Garvey', 'Gibbs', 'Gough',
+  'Haggerty', 'Harper', 'Hawkins', 'Hogan', 'Jarvis', 'Kemp', 'Kerr', 'Lyons', 'McBride', 'McCall', 'McKay',
+  'Meade', 'Nash', 'Noakes', 'Nolan', 'Oakley', 'Parr', 'Platt', 'Quinn', 'Reilly', 'Riddle', 'Sawyer', 'Slade',
+  'Sparrow', 'Stokes', 'Thorne', 'Tobin', 'Tully', 'Vickers', 'Wade', 'Whitlock', 'Wilde', 'Wren'];
 
 // HORSE — French squadrons (a company's worth of troopers). The campaign brings the heavier ones in later.
 //   melee: with the sabre/lance · mass: weight at the gallop · armour: × chance a ball hits home

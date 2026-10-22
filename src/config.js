@@ -20,6 +20,8 @@ const CFG = {
   ATTACK_NERVE: 0.7,       // morale cost per man lost while in column of attack (it takes ATTACK_EXPOSED more hits)
   ATTACK_SHOCK: 1.25,      // charge shock from a column of attack
   ATTACK_EXPOSED: 1.4,     // hits on a column of attack (a ball that misses the front rank finds the next)
+  ATTACK_PACE: 1.75,       // …but it advances at quick time and keeps its order over broken ground (a line walks, 1.3,
+                           //    and waits for its stragglers): it is how you cross ground under fire to get to the bayonet
   BYRANK_GAP: 5,           // fire by rank: seconds between one rank's volley and the next
   SLOT_FORMED: 2.2,        // within this of his slot a man counts as "in the ranks"
 
@@ -195,6 +197,19 @@ const CFG = {
   RUNNER_LOSS: 0.3,        // …this likely, per company he passes
   PLACE_RANGE: 90,         // a dragged line may stand at most this far from where the company is
   PLACE_MIN: 4,            // a stroke shorter than this (metres) is a tap, not a placement
+  PLACE_WIDE: 8,           // a stroke at least this long also sets the frontage (and so the depth) of the line
+  LINE_DEEP: 2,            // a dragged line may be up to this many ranks deeper than its drill (only two ranks fire)
+  // the other companies that follow you (bought from Act II): they fight by their own lights and do what
+  // you tell them for this long before their own judgement takes over again
+  ALLY_ACT: 1,
+  ALLY_MIN: 6,             // fewer men than this and the company is sent back to its regiment
+  ALLY_OBEY: 40,           // s
+  ALLY_OBEY_OBEDIENT: 90,
+  ALLY_STATION: 60,        // m off your company's flank (riflemen: ahead of it) when nothing is in sight
+  ALLY_LEASH: 160,         // they will not fight further than this from that station
+  // promotion: [renown, experience]. The man earns it; the stripe is nearly free
+  PROMOTE_CPL: [2, 3],
+  PROMOTE_SGT: [4, 6],
 
   // ── visibility ──
   SIGHT: 480,

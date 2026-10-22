@@ -32,7 +32,7 @@ const Battle = {
     // a quick battle's company knows every drill; a campaign company only what it has learned
     const co = opts.company || Object.assign(Campaign.defaultCompany(rng), { drills: Object.keys(LEARNED_DRILLS) });
     const cm = opts.commander || { name: 'You', hp: 3, maxHp: 3 };
-    B.bugle = !!(co.bugler || co.type === 'light');   // light companies always had a bugle
+    B.bugle = !!(co.bugler || (co.traits && co.traits.light));   // light companies always had a bugle
     const p = dep.player;
     B.cmd = { id: NEXT_ID++, team: TEAM_PLAYER, isCommander: true, x: p.x, y: p.y + 7, facing: p.facing, aim: p.facing,
       hp: cm.hp, maxHp: cm.maxHp, state: 'formed', dest: null, mvx: 0, mvy: 0, run: false, sprint: false, wind: 1, moving: 0, rallyCd: 0,
@@ -44,10 +44,11 @@ const Battle = {
       team: TEAM_PLAYER, faction: 'british', isPlayer: true, name: co.name,
       x: p.x, y: p.y, facing: p.facing, drill: co.drill, nerve: co.nerve || 0,
       roster: co.soldiers.map(s => ({ name: s.name, aim: s.aim, nerve: s.nerve, xp: s.xp, rank: s.rank, weapon: s.weapon, src: s })),
-      ctype: co.type || null, drills: co.drills || [],
-      drummer: co.drummer, fifer: co.fifer, colours: co.colours, doctrine: opts.playerDoctrine || 'hold', task: p.task,
+      traits: co.traits || {}, drills: co.drills || [],
+      drummer: co.drummer, fifer: co.fifer, piper: co.piper, colours: co.colours, doctrine: opts.playerDoctrine || 'hold', task: p.task,
     }, rng);
     pu.leader = B.cmd;
+    pu.tunes = (co.tunes || ['grenadiers']).filter(k => TUNES[k]);   // the fifer goes through these in turn
     B.player = pu;
     B.units.push(pu);
     // your own guns and horse (bought at the quartermaster): beside you, yours to place and to call on
@@ -58,6 +59,20 @@ const Battle = {
       Object.assign(gu, { attached: 'guns', commanded: true });
       B.units.push(gu);
     }
+    // the other companies that follow you, each under its own officer (bought from Act II): left, right, left…
+    (co.allies || []).forEach((al, i) => {
+      const side = i % 2 ? 1 : -1, k = Math.floor(i / 2) + 1;
+      const q = Builder.open(field, { x: p.x + side * (CFG.ALLY_STATION + 12) * k, y: p.y + 12 });
+      const rifles = al.kind === 'rifles';
+      const au = makeUnit({ team: TEAM_PLAYER, faction: 'british', name: al.name, x: q.x, y: q.y, facing: p.facing, size: al.size, drill: al.drill,
+        roster: rifles ? Array.from({ length: al.size }, () => ({ weapon: 'rifle' })) : null, ctype: rifles ? 'light' : null,
+        nerve: al.temper === 'steady' ? 6 : 0, doctrine: rifles ? 'skirmish' : 'hold', drummer: true, fifer: al.kind === 'line', piper: al.kind === 'highland', colours: false,
+        drills: null }, rng);
+      if (au.leader) au.leader.name = al.officer;
+      Object.assign(au, { attached: 'coy', allyId: al.id, temper: al.temper, side, officer: al.officer,
+        tag: `${al.officer.split(' ').slice(-1)[0]} · ${(al.name.match(/\d\w*(?=(?: Rifles| Highlanders| Foot)$)/) || [''])[0] || al.name.split(' ').slice(-1)[0]}` });
+      B.units.push(au);
+    });
     if (co.troop && co.troop.size >= 3) {
       const q = Builder.open(field, { x: p.x + 95, y: p.y + 35 });
       const tu = makeUnit({ team: TEAM_PLAYER, faction: 'british', arm: 'cav', cavType: co.troop.type, size: co.troop.size, x: q.x, y: q.y, facing: p.facing, drill: 0.55,
@@ -232,7 +247,7 @@ const Battle = {
     }
     const enemies = B.units.filter(u => u.team === TEAM_ENEMY);
     const tally = us => us.reduce((a, u) => {
-      for (const m of u.men) if (m.role !== 'drummer' && m.role !== 'fifer') { if (m.state === 'down') a.down++; if (m.state === 'gone' || m.state === 'fleeing') a.fled++; }
+      for (const m of u.men) if (!isMusician(m)) { if (m.state === 'down') a.down++; if (m.state === 'gone' || m.state === 'fleeing') a.fled++; }
       return a;
     }, { down: 0, fled: 0 });
     const et = tally(enemies);
@@ -244,7 +259,7 @@ const Battle = {
       commanderHp: Math.max(0, B.cmd.hp), commanderKills: B.cmd.kills || 0, horseLost: B.cmd.horseLost,
       orders: B.hq ? Command.obeyed(B) : null,
       attached: Battle.attachedResult(B),
-      saved: B.player.men.filter(m => m.saved && m.role !== 'drummer' && m.role !== 'fifer').length, captured,
+      saved: B.player.men.filter(m => m.saved && !isMusician(m)).length, captured,
       player: B.player,
     };
     B.events.push({ type: 'end', how });
@@ -260,6 +275,11 @@ const Battle = {
       const back = Math.round(down * 0.35);      // some of the fallen were only unhorsed or wounded
       out.troop = { start: men.length, alive: men.length - down + back, lost: down - back };
     }
+    // the companies that follow you: half their fallen were wounded and come back; their officer may be mentioned
+    out.allies = B.units.filter(u => u.attached === 'coy').map(u => {
+      const men = u.men.filter(m => m.role === 'line'), down = men.filter(m => m.state === 'down' || m.captured).length, back = Math.round(down * 0.5);
+      return { id: u.allyId, alive: men.length - down + back, lost: down - back, mentioned: u.stats.hits >= 6 && !u.everRouted };
+    });
     return out;
   },
 

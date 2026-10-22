@@ -40,8 +40,10 @@ const Move = {
       const sign = u.order === 'advance' ? 1 : -1;
       const fx = Math.cos(f.facing) * sign, fy = Math.sin(f.facing) * sign;
       // cohesion: a line waits for its stragglers rather than leaving them behind
-      const coh = clamp(u.inSlot * 1.4 - 0.25, 0.2, 1);
-      const pace = CFG.WALK * (sign < 0 ? 0.8 : 1) * Field.speedAt(B.field, f.x, f.y, fx, fy) * coh;
+      // (a column of attack goes at quick time and, being deep and narrow, keeps its order far better)
+      const col = f.kind === 'attack' && sign > 0;
+      const coh = clamp(u.inSlot * 1.4 - 0.25, col ? 0.6 : 0.2, 1);
+      const pace = (col ? CFG.ATTACK_PACE : CFG.WALK) * (sign < 0 ? 0.8 : 1) * Field.speedAt(B.field, f.x, f.y, fx, fy) * coh;
       const nx = f.x + fx * pace * dt, ny = f.y + fy * pace * dt;
       const ahead = 8;
       if (!Field.passable(B.field, f.x + fx * ahead, f.y + fy * ahead) || !Field.inside(B.field, nx, ny)) {
@@ -55,6 +57,14 @@ const Move = {
   // the player's commander: right-click destination or WASD
   commander(B, c, dt) {
     if (c.state !== 'formed') return;
+    // walking with a company of yours: keep a few paces behind its centre as it goes (not while it is following YOU)
+    const A = c.attach;
+    if (A && (!B.units.includes(A) || A.routed || !A.formed)) c.attach = null;
+    else if (A && !(A.order === 'follow' && A.leader === c)) {
+      const bx = A.cx - Math.cos(A.form.facing) * 6, by = A.cy - Math.sin(A.form.facing) * 6;
+      c.dest = dist2(c.x, c.y, bx, by) > 2.5 * 2.5 ? { x: bx, y: by } : null;
+      if (!c.dest && A.form.kind !== 'column') c.aim = A.form.facing;
+    }
     let vx = c.mvx || 0, vy = c.mvy || 0;
     if (!vx && !vy && c.dest) {
       const d = dist(c.x, c.y, c.dest.x, c.dest.y);
@@ -139,7 +149,7 @@ const Move = {
             m.state = 'gone'; m.saved = true; u.saved = (u.saved || 0) + 1; continue;
           }
         }
-        if (u.ctype === 'light') max *= 1.1;
+        if (u.traits.light) max *= 1.1;
         if (u.cav) max *= u.cav.speed;
         const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy);
         if (d > 0.15 && max > 0) {

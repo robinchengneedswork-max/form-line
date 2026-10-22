@@ -92,6 +92,7 @@ const Input = {
       }
       return;
     }
+    B.cmd.attach = null;
     B.cmd.dest = { x: clamp(wx, 1, B.field.w - 1), y: clamp(wy, 1, B.field.h - 1) };
     B.fx.push({ kind: 'mark', x: wx, y: wy, t: B.t });
   },
@@ -105,9 +106,23 @@ const Input = {
     if (Place.isStroke(p)) Place.commit(B, p);
     else {
       // a click (no stroke) on your own men commands them
-      const U = Detach.mine(B).length > 1 && Detach.at(B, p.ax, p.ay, Math.max(4, 16 / Render.cam.zoom));
-      if (U) { B.selected = U; UI.strip(B, true); }
+      Input.tapMen(B, p.ax, p.ay, 16 / Render.cam.zoom);
     }
+  },
+
+  // a tap or click on your own men (the pause menu sets what it does — App.tapMode): command them; or command them
+  // and walk along behind them (the user: "attach myself to them so I can just walk with the company"); or nothing.
+  // true = it was taken
+  tapMen(B, x, y, r) {
+    if (App.tapMode === 'off') return false;
+    const walk = App.tapMode === 'walk';
+    if (!walk && Detach.mine(B).length < 2) return false;
+    const U = Detach.at(B, x, y, Math.max(4, r));
+    if (!U) return false;
+    B.selected = U;
+    if (walk && U.arm === 'foot') { B.cmd.attach = U; B.cmd.dest = null; Battle.log(B, `You walk with ${U === B.player ? 'the company' : Detach.tag(B, U)} — tap the ground to go your own way.`); }
+    UI.strip(B, true);
+    return true;
   },
 
   // every frame: legs, eyes, camera
@@ -115,7 +130,7 @@ const Input = {
     const h = Input.held, c = B.cmd;
     c.mvx = (h.has('KeyD') ? 1 : 0) - (h.has('KeyA') ? 1 : 0);
     c.mvy = (h.has('KeyS') ? 1 : 0) - (h.has('KeyW') ? 1 : 0);
-    if (c.mvx || c.mvy) c.dest = null;
+    if (c.mvx || c.mvy) { c.dest = null; c.attach = null; }
     c.run = h.has('ShiftLeft') || h.has('ShiftRight') || c.sprint;
     const cam = Render.cam, k = Math.min(1, dt * 3);
     if (Touch.active) {

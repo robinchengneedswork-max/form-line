@@ -20,6 +20,14 @@ const LEARNED_DRILLS = {
 };
 const knowsDrill = (u, cmd) => !LEARNED_DRILLS[cmd] || !u.drills || u.drills.includes(cmd);
 
+// what makes sense to say to horse and to guns (the wheel and the order bar hide the rest — the user:
+// "remove the extra options which don't work when commanding cav")
+const ARM_ORDERS = {
+  cav: new Set(['follow', 'line', 'close', 'halt', 'charge', 'reform', 'retire', 'rally']),
+  gun: new Set(['follow', 'line', 'close', 'halt', 'ready', 'fire', 'atwill', 'cease', 'retire']),
+};
+const armAllows = (u, cmd) => !u || !ARM_ORDERS[u.arm] || ARM_ORDERS[u.arm].has(cmd) || cmd === 'detach' || cmd === 'recall';
+
 const Orders = {
   // the player shouts. Returns false if nobody could hear.
   shout(B, cmd, opts = {}) {
@@ -31,7 +39,8 @@ const Orders = {
     if (cmd === 'detach') return Detach.split(B);
     if (cmd === 'recall') { if (B.bugle) B.events.push({ type: 'bugle', x: c.x, y: c.y }); return Detach.recallAll(B); }
     // a party of yours: your voice, the bugle, or a runner
-    if (u.isDetachment || u.attached) return Orders.toParty(B, u, cmd === 'follow' ? 'rejoin' : cmd, opts);
+    if (!armAllows(u, cmd)) return false;
+    if (u.isDetachment || u.attached) return Orders.toParty(B, u, cmd, opts);
     if (!u || u.routed && cmd !== 'rally') { Battle.log(B, 'They are running — get among them and rally them (R).', 'bad'); return false; }
     if (!knowsDrill(u, cmd)) { Battle.log(B, `Your company has never learned ${LEARNED_DRILLS[cmd].toLowerCase()} — drill it in camp.`, 'bad'); return false; }
     const d = dist(c.x, c.y, u.cx, u.cy);
@@ -41,8 +50,9 @@ const Orders = {
     if (d <= CFG.VOICE_RANGE + (c.horse ? CFG.HORSE_VOICE : 0)) delay = CFG.VOICE_DELAY;
     else if (drum) delay = CFG.DRUM_DELAY;
     else { Battle.log(B, 'They cannot hear you — your drummer is down. Get closer.', 'bad'); return false; }
-    // geometry is decided NOW, where you are standing, not when the drum finishes
-    if (cmd === 'line' || cmd === 'advance' || cmd === 'skirmish' || cmd === 'close' || cmd === 'attackcol') {
+    // geometry is decided NOW, where you are standing, not when the drum finishes. (Advance is not: it goes
+    // straight on, the way the company faces — it used to wheel them to whichever way you happened to face)
+    if (cmd === 'line' || cmd === 'skirmish' || cmd === 'close' || cmd === 'attackcol') {
       const a = c.aim != null ? c.aim : c.facing;
       if (opts.x == null) { opts.x = c.x + Math.cos(a) * 5; opts.y = c.y + Math.sin(a) * 5; }
       if (opts.facing == null) opts.facing = a;
@@ -57,16 +67,16 @@ const Orders = {
     if (!knowsDrill(u, cmd)) { Battle.log(B, `They have never learned ${LEARNED_DRILLS[cmd].toLowerCase()}.`, 'bad'); return false; }
     const d = dist(c.x, c.y, u.cx, u.cy), near = d <= CFG.VOICE_RANGE + (c.horse ? CFG.HORSE_VOICE : 0);
     // geometry: in earshot, where you point; otherwise where they stand, facing the way you face
-    if (cmd === 'line' || cmd === 'advance' || cmd === 'skirmish' || cmd === 'close' || cmd === 'attackcol') {
+    if (cmd === 'line' || cmd === 'skirmish' || cmd === 'close' || cmd === 'attackcol') {
       const placed = opts.x != null, a = c.aim != null ? c.aim : c.facing;
       if (!placed) { if (near) { opts.x = c.x + Math.cos(a) * 5; opts.y = c.y + Math.sin(a) * 5; } else { opts.x = u.cx; opts.y = u.cy; } }
       if (opts.facing == null) opts.facing = a;
       opts.placed = placed;
     }
-    if (near) { B.pending.push({ at: B.t + CFG.VOICE_DELAY, unit: u, cmd, opts }); return true; }
+    if (near) { B.pending.push({ at: B.t + CFG.VOICE_DELAY, unit: u, cmd, opts, you: true }); return true; }
     if (B.bugle && d <= CFG.BUGLE_RANGE && BUGLE_CALLS.has(cmd) && !opts.placed) {
       B.events.push({ type: 'bugle', x: c.x, y: c.y });
-      B.pending.push({ at: B.t + CFG.BUGLE_DELAY, unit: u, cmd, opts });
+      B.pending.push({ at: B.t + CFG.BUGLE_DELAY, unit: u, cmd, opts, you: true });
       return true;
     }
     return Detach.runner(B, u, cmd, opts);
@@ -105,7 +115,10 @@ const Orders = {
       const p = B.pending[i];
       if (B.t < p.at) continue;
       B.pending.splice(i, 1);
-      if (!p.unit.routed) Orders.apply(B, p.unit, p.cmd, p.opts);
+      if (p.unit.routed) continue;
+      // another regiment's company does what you say, for a while; then its officer's judgement takes over again
+      if (p.you && p.unit.attached === 'coy') p.unit.obeyUntil = B.t + (p.unit.temper === 'obedient' ? CFG.ALLY_OBEY_OBEDIENT : CFG.ALLY_OBEY);
+      Orders.apply(B, p.unit, p.cmd, p.you ? Object.assign({}, p.opts, { you: true }) : p.opts);
     }
   },
 
@@ -127,6 +140,7 @@ const Orders = {
       const placeCmd = cmd === 'line' || cmd === 'close' || cmd === 'skirmish' || cmd === 'attackcol' || cmd === 'advance';
       if ((placeCmd && o.x != null) || cmd === 'rejoin' || cmd === 'follow') {
         const back = cmd === 'rejoin' || cmd === 'follow';
+        u.followCmd = back;
         const x = back ? B.cmd.x - Math.cos(B.cmd.facing) * 25 : o.x, y = back ? B.cmd.y - Math.sin(B.cmd.facing) * 25 : o.y;
         const face = back ? B.cmd.facing : (o.facing != null ? o.facing : f.facing);
         u.post = { x, y, facing: face };
@@ -136,10 +150,15 @@ const Orders = {
       if (cmd === 'square' || cmd === 'ready' || cmd === 'fire' || cmd === 'atwill' || cmd === 'byrank' || cmd === 'cease') return;
     }
     if (u.isDetachment && cmd !== 'rejoin') u.rejoining = false;
+    // a dragged stroke said how wide (unit.js grid turns that into a depth)
+    if (o && o.files && PLACE_KINDS[cmd]) u.frontage[PLACE_KINDS[cmd]] = o.files;
+    if (u.followCmd && cmd !== 'follow') u.followCmd = false;
     const toLine = (x, y, facing) => Unit.setForm(u, 'line', x, y, facing);
     switch (cmd) {
       case 'follow':
         if (!u.leader) return;
+        // a party or another company: its own officer leads, after YOU (Detach.step walks him behind you)
+        if (o.you && u.leader !== B.cmd && (u.isDetachment || u.attached)) { u.followCmd = true; u.rejoining = false; u.ai.dest = null; u.ai.route = []; }
         u.order = 'follow';
         u.trail = [{ x: u.leader.x, y: u.leader.y }, { x: u.cx, y: u.cy }];
         Unit.setForm(u, 'column', u.leader.x, u.leader.y, u.leader.facing);

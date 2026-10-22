@@ -219,7 +219,7 @@ console.log('§9 drill & the company');
   const s = r.company.soldiers[0]; s.xp = 2;
   chk('a private needs experience to be made corporal', !Campaign.promote(r, s.id));
   s.xp = 7;
-  chk('…and with it, he is', Campaign.promote(r, s.id) && s.rank === 'cpl' && r.renown === 95);
+  chk('…and with it, he is — experience earns it, renown hardly comes into it', Campaign.promote(r, s.id) && s.rank === 'cpl' && r.renown === 100 - CFG.PROMOTE_CPL[0]);
   chk('…and then sergeant', Campaign.promote(r, s.id) && s.rank === 'sgt');
   const B = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
   chk('sergeants steady the company (baseline morale)', Morale.ncos(B.player) >= 2);
@@ -242,10 +242,13 @@ console.log('§9 drill & the company');
   chk('…tap another man: he gets it from the store', plain.weapon === 'rifle' && rc.riflesStored === 0);
   Campaign.issueRifles(rr);
   chk('…and "to the best shots" hands every rifle to the best shots again', rc.riflesStored === 0 && rc.soldiers.filter(x => x.weapon === 'rifle').every(x => rc.soldiers.filter(y => y.weapon !== 'rifle').every(y => y.aim <= x.aim)));
-  chk('a Lieutenant cannot choose the company type yet', !Campaign.chooseType(Object.assign(Campaign.newRun(5), { total: 0 }), 'light'));
-  chk('a Captain can; Light companies learn skirmish order at once', Campaign.chooseType(r, 'light') && r.company.drills.includes('skirmish'));
+  r.renown = 200;
+  chk('the company’s character is bought at the quartermaster: light training teaches skirmish order at once', Campaign.buy(r, 'trait:light') && r.company.drills.includes('skirmish') && r.company.traits.light);
+  chk('…and you can have more than one', Campaign.buy(r, 'trait:grenadier') && r.company.traits.grenadier && !Campaign.buy(r, 'trait:light'));
   const B4 = Battle.create(Object.assign(Campaign.battleOpts(r, r.map[0][0]), { scenario: 'plain' }));
-  chk('…and fight as light infantry', B4.player.ctype === 'light');
+  chk('…and fight as light infantry and grenadiers both', B4.player.traits.light && B4.player.traits.grenadier && B4.player.melee > X.FACTIONS.british.meleeSkill);
+  const oldT = JSON.parse(JSON.stringify(Campaign.newRun(11))); oldT.company.type = 'grenadier'; delete oldT.company.traits;
+  chk('an old save’s chosen character becomes a trait', Campaign.migrate(oldT).company.traits.grenadier && !oldT.company.type);
   const old = JSON.parse(JSON.stringify(Campaign.newRun(9))); delete old.company.drills; delete old.company.rifles; old.company.soldiers.forEach(x => { delete x.rank; delete x.weapon; });
   chk('a save from before the company sheet still loads', Campaign.migrate(old).company.drills.length === 0 && old.company.soldiers[0].rank === 'pte');
 }
@@ -437,7 +440,20 @@ console.log('§11 the charge, wind & the road');
   {
     const r = Campaign.newRun(95);
     chk("a big battle every other stage (three an act, then the act's own)", r.map.filter(row => row.some(n => n.type === 'setpiece')).length >= 3);
-    chk('…and a quartermaster on every other stage', r.map.filter(row => row.some(n => n.type === 'quartermaster')).length >= 5);
+    chk('…and a quartermaster on every other stage', [1, 3, 5].every(k => r.map[k].some(n => n.type === 'quartermaster')));
+    // the user: "all the big battles end up on the left and shops right". Dealt out across the row now
+    let leftSp = 0, sp = 0, rightQm = 0, qm = 0, twice = 0;
+    for (let sd = 1; sd <= 30; sd++) {
+      const m = Campaign.genMap(makeRng(sd * 977), sd % 3);
+      for (const row of m) {
+        if (row.length < 2) continue;
+        const xs = row.slice().sort((a, b) => a.x - b.x);
+        row.forEach(n => { if (n.type === 'setpiece') { sp++; if (n === xs[0]) leftSp++; } if (n.type === 'quartermaster') { qm++; if (n === xs[xs.length - 1]) rightQm++; } });
+      }
+      for (let r = 1; r < m.length; r++) for (const n of m[r]) if (['quartermaster', 'camp'].includes(n.type) && m[r - 1].some(a => a.type === n.type && a.edges.includes(n.id))) twice++;
+    }
+    chk(`great battles and shops are spread across the map (left-most battle ${leftSp}/${sp}, right-most shop ${rightQm}/${qm})`, leftSp < sp * 0.75 && rightQm < qm * 0.75);
+    chk(`no shop straight after a shop, nor camp after camp, on one road (${twice})`, twice === 0);
   }
 
   // you: sprint, and get blown
@@ -981,6 +997,39 @@ chk('every order has a drum call', ['follow', 'line', 'advance', 'halt', 'ready'
   chk('mouse: a left-drag places the company too', B.pending.length === 1 && B.pending[0].cmd === 'line' && B.pending[0].opts.facing != null);
   run(B, 2);
   chk('…and they take it up', u.form.kind === 'line' && !B.pending.length && Math.abs(angDiff(u.form.facing, toE)) < Math.PI / 2);
+
+  // round 13 (the user's phone playtest), the page side
+  const Q = vm.runInContext(`({ App, UI, Campaign, Battle, Detach, Touch, Input })`, ctx);
+  {
+    // the clock: what was 2× is now called 1×, and a battle starts there
+    Q.App.speed = 2;
+    const l1 = Q.UI.speedLabel(); Q.UI.cycleSpeed(); const l2 = Q.UI.speedLabel(); Q.UI.cycleSpeed(); const l3 = Q.UI.speedLabel();
+    chk('the clock reads ½×, 1×, 2× — and 1× is the old 2×', l1 === '1×' && l2 === '2×' && l3 === '½×' && Q.App.speed === 1, [l1, l2, l3].join(' '));
+    // closing the game in the middle of a battle: the battle is still there when you come back
+    const run0 = Q.Campaign.newRun(4242); Q.App.run = run0;
+    const n0 = run0.map[0][0];
+    Q.App.enterNode(n0.id);
+    const saved = JSON.parse(JSON.stringify(run0));
+    Q.App.node = null; Q.App.loadRun = () => saved;
+    Q.App.continueCampaign();
+    chk('closing the game mid-battle no longer skips it: Continue goes back into that battle', Q.App.node && Q.App.node.id === n0.id && !Q.App.node.done && saved.entered === n0.id);
+    // the wheel shows horse only what horse can do
+    const Bq = Q.Battle.create({ scenario: 'plain', seed: 8, company: Q.Campaign.quickCompany(8, { troop: true }) });
+    Q.App.B = Bq; Q.App.mode = 'battle'; Q.App.paused = false;
+    Bq.selected = Bq.units.find(x => x.attached === 'troop');
+    const shown = vm.runInContext('WHEEL_GROUPS.filter(groupShows).map(g => g.name + ":" + g.opts.filter(wheelShows).map(o => o.cmd).join("/")).join(" ")', ctx);
+    chk('commanding your horse, the wheel has no Fire ring and no square, skirmish or column', !/Fire:|square|skirmish|attackcol|ready|byrank/.test(shown) && /charge/.test(shown) && /follow/.test(shown), shown);
+    chk('…and an order horse cannot obey is not given', Q.App.B && !vm.runInContext("Orders.shout(App.B, 'fire')", ctx));
+    // a tap on your own men: command them, or walk with them, or nothing — your choice in the pause menu
+    const Bw = Q.Battle.create({ scenario: 'plain', seed: 9 }); Q.App.B = Bw;
+    const man = Bw.player.men.find(m => m.role === 'line');
+    Q.App.tapMode = 'walk';
+    const took = Q.Input.tapMen(Bw, man.x, man.y, 4);
+    chk('tap mode "walk with them": tapping your company attaches you to it', took && Bw.cmd.attach === Bw.player && Bw.selected === Bw.player);
+    Q.App.tapMode = 'off'; Bw.cmd.attach = null;
+    chk('tap mode "off": a tap on your men is just a tap on the ground', !Q.Input.tapMen(Bw, man.x, man.y, 4) && !Bw.cmd.attach);
+    Q.App.tapMode = 'select';
+  }
 }
 
 console.log('§18 the great battles: each act its own');
@@ -1108,10 +1157,11 @@ console.log('§20 things to buy: your own guns, horse and riflemen');
   const { Detach } = X;
   const r = Campaign.newRun(808); r.renown = 9999;
   const before = Campaign.mustered(r.company);
-  chk('the quartermaster sells a gun, a troop of horse, remounts and riflemen of the 95th — no caps, rising prices',
-    Campaign.buy(r, 'gun') && Campaign.buy(r, 'gun') && Campaign.buy(r, 'troop') && Campaign.buy(r, 'remounts') && Campaign.buy(r, 'rifleman') && Campaign.buy(r, 'rifleman')
+  chk('the quartermaster sells a gun, a troop of horse and remounts — no caps, rising prices',
+    Campaign.buy(r, 'gun') && Campaign.buy(r, 'gun') && Campaign.buy(r, 'troop') && Campaign.buy(r, 'remounts')
     && r.company.battery.pieces === 2 && r.company.troop.size === CFG.TROOP_SIZE + 4 && Campaign.shopItems(r).find(i => i.key === 'gun').cost > 70);
-  chk('…the riflemen come with their own rifles and do not count against the company’s numbers', Campaign.mustered(r.company) === before && r.company.soldiers.filter(s => s.attached && s.weapon === 'rifle').length === 2);
+  chk('the old "rifleman of the 95th" (over your numbers, cheap, a free rifle) is gone; companies to follow you come from Act II',
+    !Campaign.buy(r, 'rifleman') && !Campaign.buy(r, 'ally:rifles') && Campaign.mustered(r.company) === before);
   const B = Battle.create({ scenario: 'plain', seed: 31, level: 0.5, company: r.company });
   const G = B.units.find(u => u.attached === 'guns'), Tr = B.units.find(u => u.attached === 'troop');
   chk('in battle your guns and your troop stand beside you, on the rail', G && Tr && G.guns.length === 2 && Tr.formed === CFG.TROOP_SIZE + 4 && Detach.mine(B).includes(G) && Detach.mine(B).includes(Tr));
@@ -1147,6 +1197,105 @@ console.log('§20 things to buy: your own guns, horse and riflemen');
   B2.over = false; Battle.finish(B2, 'lost');
   Campaign.afterBattle(r2, { type: 'battle', scenario: 'plain', row: 0, id: 'x' }, B2.result);
   chk('a gun the French took is gone; troopers who fell are gone (some come back unhorsed)', !r2.company.battery && r2.company.troop && r2.company.troop.size < CFG.TROOP_SIZE && r2.company.troop.size > CFG.TROOP_SIZE - 6);
+}
+
+console.log('§21 round 13: names, valour, the drag, follow me, the other regiments');
+{
+  const { Detach, Place, armAllows } = X;
+  // names: no two men in a company share a surname while the list lasts
+  const co = Campaign.quickCompany(77, { size: 48 });
+  const surs = co.soldiers.map(Campaign.surname);
+  chk('48 men, 48 surnames (the user could not tell two Harrises apart)', new Set(surs).size === surs.length);
+  const twin = { soldiers: [{ name: 'John Harris' }, { name: 'Will Harris' }, { name: 'Tom Bell' }] };
+  chk('…and where two do share one, the roll says "J. Harris"', Campaign.callName(twin, twin.soldiers[0]) === 'J. Harris' && Campaign.callName(twin, twin.soldiers[2]) === 'Bell');
+  // valour: the men who drop the enemy earn their stripes
+  const r = Campaign.newRun(5150); r.renown = 3;
+  const B = fresh('plain', 41, { company: r.company });
+  const hero = B.player.men.find(m => m.role === 'line' && m.src), plain = B.player.men.find(m => m.role === 'line' && m.src && m !== hero);
+  hero.kills = 6;
+  B.over = false; Battle.finish(B, 'won');
+  Campaign.afterBattle(r, { type: 'battle', scenario: 'plain', row: 0, id: 'z' }, B.result);
+  const h = hero.src, q = plain.src;
+  chk('a man who drops the enemy earns experience for it, and is mentioned in despatches', h.xp >= q.xp + 4 && h.mentions === 1, h.xp + ' vs ' + q.xp);
+  chk('…and his stripe is his own doing: with only 3 renown you can still make him corporal', Campaign.promote(r, h.id) && h.rank === 'cpl');
+  chk('…a man can be stood down to make room', Campaign.demote(r, h.id) && h.rank === 'pte');
+  // the drag: its length is the width of the line
+  const D = fresh('plain', 42), u = D.player, n = u.formed;
+  const wide = Place.plan(D, 'line', u.cx - 20, u.cy - 20, u.cx + 20, u.cy - 20), narrow = Place.plan(D, 'line', u.cx - 5, u.cy - 20, u.cx + 5, u.cy - 20);
+  chk('a long stroke asks for more files than a short one', wide.files > narrow.files, wide.files + ' / ' + narrow.files);
+  Orders.apply(D, u, 'line', { x: u.cx, y: u.cy - 20, facing: -Math.PI / 2, files: 1 });
+  const deep = Unit.grid(u, n);
+  Orders.apply(D, u, 'line', { x: u.cx, y: u.cy - 20, facing: -Math.PI / 2, files: 999 });
+  const thin = Unit.grid(u, n);
+  chk('…a short one makes the line deeper (to two more ranks than the drill), a long one never thinner than the drill', deep.ranks === u.ranks + CFG.LINE_DEEP && thin.ranks === u.ranks, deep.ranks + ' / ' + thin.ranks);
+  Orders.apply(D, u, 'skirmish', { x: u.cx, y: u.cy - 20, facing: -Math.PI / 2, files: Place.files('skirmish', 30) });
+  const sk = Unit.grid(u, n);
+  chk('…and a short skirmish stroke makes a chain in file pairs, not a 120 m string', sk.ranks === 2 && sk.files * CFG.SKIRMISH_GAP < 90, sk.files + 'x' + sk.ranks);
+  // Advance goes straight on, whichever way you are facing
+  const A = fresh('plain', 43), au = A.player;
+  A.cmd.aim = A.cmd.facing = au.form.facing + 1.2;
+  A.cmd.x = au.cx; A.cmd.y = au.cy + 6;
+  const f0 = au.form.facing;
+  Orders.shout(A, 'line'); run(A, 2); const f1 = au.form.facing;
+  Orders.shout(A, 'advance'); run(A, 2);
+  chk('Advance goes the way the company faces, not the way you face', au.order === 'advance' && Math.abs(angDiff(au.form.facing, f1)) < 0.01, f0.toFixed(2) + ' ' + f1.toFixed(2) + ' ' + au.form.facing.toFixed(2));
+  // the column of attack covers ground faster than a line
+  const L1 = fresh('plain', 44), L2 = fresh('plain', 44);
+  Orders.apply(L1, L1.player, 'line', { x: L1.player.cx, y: L1.player.cy, facing: -Math.PI / 2 });
+  Orders.apply(L2, L2.player, 'attackcol', { x: L2.player.cx, y: L2.player.cy, facing: -Math.PI / 2 });
+  run(L1, 8); run(L2, 8);
+  const y1 = L1.player.form.y, y2 = L2.player.form.y;
+  Orders.apply(L1, L1.player, 'advance', {}); Orders.apply(L2, L2.player, 'advance', {});
+  run(L1, 20); run(L2, 20);
+  chk('a column of attack advances faster than a line', (y2 - L2.player.form.y) > (y1 - L1.player.form.y) * 1.2, (y1 - L1.player.form.y).toFixed(1) + ' m vs ' + (y2 - L2.player.form.y).toFixed(1) + ' m');
+  // follow me: a party comes after you instead of marching back into the company
+  const F = fresh('plain', 45, { company: Campaign.quickCompany(45, { size: 40, type: 'light' }) });
+  Orders.shout(F, 'detach'); run(F, 2);
+  const party = F.units.find(x => x.isDetachment);
+  F.selected = party; F.cmd.x = party.cx; F.cmd.y = party.cy + 4;
+  Orders.shout(F, 'follow'); run(F, 1);
+  F.cmd.dest = { x: F.cmd.x + 50, y: F.cmd.y + 20 };
+  run(F, 50);
+  chk('Follow me: the party marches after you (and is not merged back into the company)', F.units.includes(party) && party.order === 'follow' && dist(party.leader.x, party.leader.y, F.cmd.x, F.cmd.y) < 14, party.leader && dist(party.leader.x, party.leader.y, F.cmd.x, F.cmd.y).toFixed(1));
+  chk('…and Recall still brings it home', (Orders.shout(F, 'recall'), run(F, 60), !F.units.includes(party)));
+  // walking with your company
+  const W = fresh('plain', 46), wu = W.player;
+  Orders.apply(W, wu, 'line', { x: wu.cx, y: wu.cy, facing: -Math.PI / 2 }); run(W, 6);
+  W.cmd.attach = wu; Orders.apply(W, wu, 'advance', {}); run(W, 25);
+  chk('walking with the company: you keep a few paces behind it as it advances', dist(W.cmd.x, W.cmd.y, wu.cx, wu.cy + 6) < 5, dist(W.cmd.x, W.cmd.y, wu.cx, wu.cy + 6).toFixed(1));
+  // horse and guns are offered only the orders they can obey
+  chk('horse: no firing, no square; guns: no bayonet', !armAllows({ arm: 'cav' }, 'fire') && !armAllows({ arm: 'cav' }, 'square') && armAllows({ arm: 'cav' }, 'charge') && !armAllows({ arm: 'gun' }, 'charge') && armAllows({ arm: 'foot' }, 'square'));
+  // the other regiments: bought from Act II, each under an officer of its own
+  const ra = Campaign.newRun(6060); ra.renown = 999; ra.act = 1;
+  chk('from Act II the quartermaster offers whole companies to follow you', Campaign.buy(ra, 'ally:rifles') && Campaign.buy(ra, 'ally:line') && ra.company.allies.length === 2 && Campaign.allyCost(ra.company, 'line') > Campaign.ALLY_KINDS.line.cost);
+  const al = ra.company.allies[0];
+  chk('…each with a name, an officer and a temper', /95th Rifles/.test(al.name) && /^(Capt\.|Lt\.) /.test(al.officer) && Campaign.TEMPERS[al.temper]);
+  const E1 = Battle.create({ scenario: 'plain', seed: 47, level: 0.4, company: ra.company });
+  const rif = E1.units.find(x => x.attached === 'coy' && x.allyId === al.id), lin = E1.units.find(x => x.attached === 'coy' && x !== rif);
+  chk('in battle they stand beside you, on your rail, with their own officer', rif && lin && Detach.mine(E1).includes(rif) && rif.leader && rif.leader.name === al.officer && rif.men.filter(m => m.role === 'line').every(m => m.weapon === 'rifle'));
+  run(E1, 40);
+  chk('…the riflemen go out ahead of your company in skirmish order by themselves', rif.form.kind === 'skirmish' && rif.formed > 0, rif.form.kind);
+  // they do as you say, for a while
+  E1.selected = lin; E1.cmd.x = lin.cx; E1.cmd.y = lin.cy + 5;
+  Orders.shout(E1, 'halt'); run(E1, 1);
+  chk('…and do as you say for a while before their own judgement takes over', lin.obeyUntil > E1.t + 20);
+  // after the battle the fallen are gone
+  const before = al.size;
+  rif.men.filter(m => m.role === 'line').slice(0, 6).forEach(m => { m.state = 'down'; });
+  E1.over = false; Battle.finish(E1, 'won');
+  Campaign.afterBattle(ra, { type: 'battle', scenario: 'plain', row: 1, id: 'q' }, E1.result);
+  chk('…and their fallen are gone after the battle (half the wounded come back)', al.size === before - 3, before + ' → ' + al.size);
+  // music: tunes to buy, and the pipes
+  const rm = Campaign.newRun(7070); rm.renown = 999;
+  chk('the fifer can learn new tunes; the quartermaster has a piper', Campaign.buy(rm, 'tune:girl') && Campaign.buy(rm, 'piper') && rm.company.tunes.includes('girl') && rm.company.piper);
+  const M = fresh('plain', 48, { company: Object.assign(rm.company, { soldiers: Campaign.quickCompany(48, { size: 36 }).soldiers }) });
+  chk('…the piper is in the ranks, and the company knows its tunes', M.player.men.some(m => m.role === 'piper') && M.player.tunes.includes('girl'));
+  M.player.men.filter(m => m.role === 'line').slice(0, 2).forEach(m => { m.grade = 'sgt'; });
+  const sgt = M.player.men.find(m => m.grade === 'sgt'); sgt.src.rank = 'sgt';
+  M.player.men.filter(m => m.role === 'line' && m !== sgt && m.grade !== 'sgt').slice(0, 5).forEach(m => { m.src.party = sgt.src.id; });
+  Orders.shout(M, 'detach'); run(M, 1);
+  const pp = M.units.find(x => x.isDetachment);
+  chk('…and he marches out with the first sergeant\u2019s party', pp && pp.men.some(m => m.role === 'piper') && !M.player.men.some(m => m.role === 'piper'));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

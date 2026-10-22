@@ -194,7 +194,7 @@ const Colours = {
       if (B.t - d.t < 1.5) continue;
       let friend = null, foe = null;
       Move.near(B, d.x, d.y, 6, a => {
-        if (a.state !== 'formed' || a.role === 'drummer' || a.role === 'fifer') return;
+        if (a.state !== 'formed' || isMusician(a)) return;
         if (a.team === d.unit.team) { if (a.unit === d.unit && (!friend || (a.grade === 'sgt' && friend.grade !== 'sgt'))) friend = a; }
         else if (!foe && dist2(a.x, a.y, d.x, d.y) < 6.25) foe = a;
       });
@@ -208,7 +208,7 @@ const Colours = {
         d.unit.coloursLost = true;
         d.unit.morale -= CFG.COLOURS_LOST;
         if (foe === B.cmd) B.cmd.trophies = (B.cmd.trophies || 0) + 1;
-        else { foe.carrying = d.unit; }
+        else { foe.carrying = d.unit; foe.colours = (foe.colours || 0) + 1; }   // (his to boast of on the muster roll)
         if (foe.team === TEAM_PLAYER) B.stats.coloursTaken++; else B.stats.coloursLost++;
         B.events.push({ type: 'colours', team: foe.team });
         Battle.log(B, foe.team === TEAM_PLAYER ? `The ${d.unit.F.adj} colours are taken!` : `Our colours are lost — ${d.unit.name}!`, foe.team === TEAM_PLAYER ? 'good' : 'bad');

@@ -24,7 +24,7 @@ const UI = {
     $('btn-builder').onclick = () => UI.builder();
     $('btn-quick').onclick = () => App.quickBattle($('quick-scenario').value, {
       stage: +$('quick-stage').value, size: +$('quick-size').value, type: $('quick-type').value || null, horse: $('quick-horse').checked,
-      gun: !!($('quick-gun') && $('quick-gun').checked), troop: !!($('quick-troop') && $('quick-troop').checked) });
+      gun: !!($('quick-gun') && $('quick-gun').checked), troop: !!($('quick-troop') && $('quick-troop').checked), ally: $('quick-ally') && $('quick-ally').checked ? 'rifles' : null });
     // the small fields, then the big battles
     $('quick-scenario').innerHTML = `<optgroup label="Skirmishes">${BATTLE_POOL.map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('')}</optgroup>`
       + `<optgroup label="Battles">${SETPIECE_POOL.concat('finale').map(k => `<option value="${k}">${esc(SCENARIOS[k].name)}</option>`).join('')}</optgroup>`;
@@ -32,6 +32,12 @@ const UI = {
     $('btn-withdraw').onclick = () => { UI.togglePause(); Battle.withdraw(App.B); };
     $('btn-leavefield').onclick = () => UI.leaveField();
     $('btn-mute').onclick = () => UI.toggleMute();
+    const tapWords = { select: 'Tap your men: command them', walk: 'Tap your men: command them and walk with them', off: 'Tap your men: just walk there' };
+    const tapBtn = $('btn-tap');
+    if (tapBtn) {
+      tapBtn.textContent = tapWords[App.tapMode] || tapWords.select;
+      tapBtn.onclick = () => { App.setTapMode({ select: 'walk', walk: 'off', off: 'select' }[App.tapMode] || 'select'); tapBtn.textContent = tapWords[App.tapMode]; };
+    }
     $('btn-help-close').onclick = () => UI.toggleHelp();
     $('hud-orders').innerHTML = ORDER_KEYS.map(o => `<button class="order" data-cmd="${o.cmd}"><kbd>${o.key}</kbd>${esc(o.label)}</button>`).join('');
     // the strip of your units: tap one to command it; detach / recall
@@ -91,7 +97,6 @@ const UI = {
   sidebar(run) {
     const co = run.company, rk = Campaign.rank(run), nx = Campaign.nextRank(run);
     const hp = '♥'.repeat(run.commander.hp) + '♡'.repeat(run.commander.maxHp - run.commander.hp);
-    const sold = co.soldiers.slice().sort((a, b) => b.kills - a.kills || b.xp - a.xp);
     $('side').innerHTML = `
       <p class="kicker">${esc(Campaign.act(run).name)}</p>
       <h2>${esc(rk.title)}</h2>
@@ -102,59 +107,80 @@ const UI = {
       <div class="stat"><span>Rank and file</span><b>${co.soldiers.length} <small>/ ${rk.company}</small></b></div>
       <div class="stat"><span>Drill</span><b>${Math.round(co.drill * 100)} <small>(~${Math.round(CFG.RELOAD_BASE - CFG.RELOAD_DRILL * co.drill)} s reload)</small></b></div>
       <div class="kit">${co.colours ? '<span>⚑ Colours</span>' : '<span class="lost">⚑ Colours lost</span>'}${co.drummer ? '<span>◉ Drummer</span>' : '<span class="lost">◉ No drummer</span>'}${co.fifer ? '<span>♪ Fifer</span>' : '<span class="lost">♪ No fifer</span>'}</div>
-      <button id="btn-company" class="big" style="width:100%">Company sheet${!co.type && rk.title !== 'Lieutenant' ? ' — choose its character!' : ''}</button>
-      <details><summary>Muster roll</summary><ol class="roll">${sold.map(s => `<li>${esc(s.name)} <small>${s.battles ? s.battles + ' fights' : 'recruit'}${s.kills ? ' · ' + s.kills + ' down' : ''}</small></li>`).join('')}</ol></details>
+      <button id="btn-company" class="big" style="width:100%">Muster roll${co.soldiers.some(s => { const p = Campaign.promotion(run, s); return p && p.ok; }) ? ' ★' : ''}</button>
       ${run.fallen.length ? `<details><summary>The fallen (${run.fallen.length})</summary><ol class="roll">${run.fallen.map(s => `<li>${esc(s.name)}</li>`).join('')}</ol></details>` : ''}`;
   },
 
-  // ── the company sheet: character, drills, NCOs, rifles ──
+  // ── the company sheet: the muster roll, one man to a line with what he has done; tap him for the rest ──
+  // (the user: "can we still have the stats on what each soldier has done? I'd like to promote the ones that are
+  // more valorous" and "clean up the muster roll even more — busy on the phone". The old nine-column table
+  // hid the record on a phone)
   company(run, back) {
-    const co = run.company, rk = Campaign.rank(run), sl = Campaign.slots(run), T = Campaign.TYPES;
-    const typeBlock = co.type ? `<p class="kicker">${esc(T[co.type].name)}</p><p class="note">${esc(T[co.type].desc)}</p>`
-      : rk.title === 'Lieutenant' ? '<p class="note">At Captain you will choose what kind of company this is.</p>'
-      : `<h3>Choose its character</h3><div class="cards">${Object.entries(T).map(([k, t]) => `<button class="card" data-type="${k}"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></button>`).join('')}</div>`;
+    const co = run.company, sl = Campaign.slots(run);
+    UI._open = UI._open || new Set();
+    const traits = Campaign.traitNames(co);
     const drills = Object.entries(LEARNED_DRILLS).map(([k, n]) => `<span class="chip ${co.drills.includes(k) ? '' : 'locked'}">${esc(n)}${co.drills.includes(k) ? '' : ' — learn at camp'}</span>`).join('');
     const order = { sgt: 0, cpl: 1, pte: 2 };
     const carried = co.soldiers.filter(s => s.weapon === 'rifle').length, stored = co.riflesStored || 0;
-    const sorted = co.soldiers.slice().sort((a, b) => order[a.rank] - order[b.rank] || b.kills - a.kills || b.xp - a.xp);
+    const sgts = co.soldiers.filter(x => x.rank === 'sgt');
+    const sorted = co.soldiers.slice().sort((a, b) => order[a.rank] - order[b.rank] || b.xp - a.xp || b.kills - a.kills);
+    const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
     const rows = sorted.map(s => {
-      const p = Campaign.promotion(run, s);
-      const promo = p ? `<button class="mini" data-promote="${s.id}" ${p.ok ? '' : 'disabled'} title="needs ${p.xp} xp">→ ${Campaign.RANK_NAMES[p.to]} (${p.cost})</button>` : '';
-      // one tap: take his rifle into the store, or hand him one from it
-      const rifle = s.weapon === 'rifle' ? `<button class="mini rifle on" data-rifle="${s.id}" title="Take his rifle into the store">Rifle ✕</button>`
-        : stored ? `<button class="mini rifle" data-rifle="${s.id}" title="Give him a rifle from the store">+ Rifle</button>` : '<span class="musket">musket</span>';
-      // a sergeant can be renamed and leads a party; anyone else can be put in a sergeant's party
-      const sgts = co.soldiers.filter(x => x.rank === 'sgt');
-      const party = s.rank === 'sgt' ? `<small>leads ${co.soldiers.filter(x => x.party === s.id).length}</small>`
-        : sgts.length ? `<select class="mini" data-party="${s.id}"><option value="">—</option>${sgts.map(g => `<option value="${g.id}"${s.party === g.id ? ' selected' : ''}>${esc(g.name.split(' ').slice(-1)[0])}</option>`).join('')}</select>` : '';
-      const name = s.rank === 'sgt' ? `<input class="rename" data-rename="${s.id}" value="${esc(s.name)}" maxlength="28" title="Rename your sergeant">` : esc(s.name);
-      return `<tr class="${s.rank}"><td>${name}</td><td>${party}</td><td>${Campaign.RANK_NAMES[s.rank]}</td><td>${rifle}</td><td>${s.battles}</td><td>${s.kills}</td><td>${s.xp}</td><td>${Math.round(s.aim * 100)}</td><td>${promo}</td></tr>`;
+      const p = Campaign.promotion(run, s), open = UI._open.has(s.id);
+      const ready = p && p.ok;
+      const badge = { sgt: 'Sgt', cpl: 'Cpl', pte: '' }[s.rank];
+      const party = s.party && sgts.find(g => g.id === s.party);
+      // the one line: name, then his record in a few marks
+      const rec = [s.kills ? `⚔ ${s.kills}` : '', s.mentions ? `✠ ${s.mentions}` : '', s.colours ? `⚑ ${s.colours}` : '', s.wounds ? `✚ ${s.wounds}` : ''].filter(Boolean).join(' ');
+      const head = `<button class="man ${s.rank}${open ? ' open' : ''}${ready ? ' ready' : ''}" data-man="${s.id}">
+        <span class="badge">${badge}</span><span class="who">${esc(s.name)}${s.weapon === 'rifle' ? ' <i class="rifle" title="carries a rifle">●</i>' : ''}${ready ? ' <i class="star" title="ready for promotion">★</i>' : ''}</span>
+        <span class="rec">${rec}</span><span class="xp" title="experience">${s.xp}</span></button>`;
+      if (!open) return head;
+      const deeds = [s.battles ? plural(s.battles, 'fight') : 'a recruit', s.kills ? `${s.kills} of the enemy down` : '', s.mentions ? `mentioned in despatches ${s.mentions === 1 ? 'once' : s.mentions + ' times'}` : '',
+        s.colours ? `took ${s.colours === 1 ? 'a' : s.colours} French colour${s.colours === 1 ? '' : 's'}` : '', s.wounds ? `wounded ${s.wounds === 1 ? 'once' : s.wounds + ' times'}` : '', `aim ${Math.round(s.aim * 100)}`].filter(Boolean).join(' · ');
+      const promo = p ? `<button class="mini" data-promote="${s.id}" ${p.ok ? '' : 'disabled'}>Make him ${Campaign.RANK_NAMES[p.to].toLowerCase()}${p.cost ? ` (${p.cost})` : ''}</button>
+        ${p.ok ? '' : `<small>${s.xp < p.xp ? `needs ${p.xp} experience (has ${s.xp})` : !p.room ? `no ${Campaign.RANK_NAMES[p.to].toLowerCase()}'s place free — stand one down or rise in rank` : `needs ${p.cost} renown`}</small>`}` : '';
+      const demote = s.rank !== 'pte' ? `<button class="mini" data-demote="${s.id}">Stand him down</button>` : '';
+      const rifle = s.weapon === 'rifle' ? `<button class="mini rifle on" data-rifle="${s.id}">Take his rifle</button>` : stored ? `<button class="mini rifle" data-rifle="${s.id}">Give him a rifle</button>` : '';
+      const partySel = s.rank !== 'sgt' && sgts.length ? `<label class="mini">Party <select class="mini" data-party="${s.id}"><option value="">—</option>${sgts.map(g => `<option value="${g.id}"${s.party === g.id ? ' selected' : ''}>Sgt ${esc(Campaign.callName(co, g))}</option>`).join('')}</select></label>` : '';
+      const lead = s.rank === 'sgt' ? `<small>leads ${co.soldiers.filter(x => x.party === s.id).length} in his party</small>` : party ? `<small>in Sgt ${esc(Campaign.callName(co, party))}'s party</small>` : '';
+      const rename = s.rank === 'sgt' ? `<input class="rename" data-rename="${s.id}" value="${esc(s.name)}" maxlength="28" title="Rename your sergeant">` : '';
+      return head + `<div class="man-more"><p>${deeds}</p>${rename}<div class="acts">${promo}${demote}${rifle}${partySel}${lead}</div></div>`;
     }).join('');
-    $('company').innerHTML = `<h1>${esc(co.name)}</h1>${typeBlock}
+    const al = (co.allies || []).map(a => `<span>${esc(a.name)} <b>${a.size}</b> <small>${esc(a.officer)}, ${esc(a.temper)}</small></span>`).join('');
+    $('company').innerHTML = `<h1>${esc(co.name)}</h1>
+      ${traits.length ? `<div class="chips">${traits.map(t => `<span class="chip">${esc(t)}</span>`).join('')}</div>` : ''}
       <div class="facts"><span>Drill <b>${Math.round(co.drill * 100)}</b></span><span>Renown <b>${run.renown}</b></span>
         <span>Sergeants <b>${sl.sgtUsed}/${sl.sgt}</b></span><span>Corporals <b>${sl.cplUsed}/${sl.cpl}</b></span>
-        <span>Rifles <b>${carried}</b> carried · <b>${stored}</b> in store${co.rifles ? ' <button class="mini" id="btn-issue">to the best shots</button>' : ''}</span>
-        ${co.battery ? `<span>Your guns <b>${co.battery.pieces}</b></span>` : ''}${co.troop ? `<span>${co.troop.type === 'heavy_dragoons' ? 'Dragoons' : 'Light dragoons'} <b>${co.troop.size}</b></span>` : ''}${co.soldiers.some(s => s.attached) ? `<span>Riflemen of the 95th <b>${co.soldiers.filter(s => s.attached).length}</b></span>` : ''}
-        <span>Surgeon's mates <b>${co.surgeons || 0}/3</b></span><span>Recruiting party <b>${co.recruiters || 0}/3</b></span></div>
+        <span>Rifles <b>${carried}</b>${stored ? ` (+${stored} in store)` : ''}${co.rifles ? ' <button class="mini" id="btn-issue">to the best shots</button>' : ''}</span>
+        ${co.battery ? `<span>Guns <b>${co.battery.pieces}</b></span>` : ''}${co.troop ? `<span>${co.troop.type === 'heavy_dragoons' ? 'Dragoons' : 'Light dragoons'} <b>${co.troop.size}</b></span>` : ''}${al}</div>
       <div class="chips">${drills}</div>
-      <p class="hint"><b>Parties:</b> put men in a sergeant's party and in battle <kbd>Y</kbd> sends every party out under its sergeant, a unit you can command on its own (pick it on the strip at the top); <kbd>U</kbd> recalls them. Orders reach a party by your voice, your bugler (simple calls, if you have one) or a runner. Sergeants' names are yours to change.</p>
-      <p class="hint">Sergeants steady the men round them, close the ranks quicker, call back stragglers and take up fallen colours. Corporals help a little. Promotion needs experience: 3 for corporal, 6 for sergeant.</p>
-      <div class="tablewrap"><table class="roster"><tr><th>Name</th><th>Party</th><th>Rank</th><th>Arms</th><th>Fights</th><th>Down</th><th>XP</th><th>Aim</th><th></th></tr>${rows}</table></div>
+      <h3>Muster roll <small class="legend">⚔ enemy down · ✠ in despatches · ⚑ colours taken · ✚ wounds · ★ ready for a stripe · last: experience</small></h3>
+      <div class="muster">${rows}</div>
+      <details class="how"><summary>How promotion and parties work</summary>
+        <p class="hint">A man earns experience by being there (1 a fight, 2 a victory), by every two of the enemy he drops, by being mentioned in despatches (+2) and by taking colours (+3). <b>Corporal at ${CFG.PROMOTE_CPL[1]}, sergeant at ${CFG.PROMOTE_SGT[1]}</b>; the places grow with your rank, and you can stand a man down to make room for a better one. Sergeants steady the men round them, close the ranks quicker, call back stragglers and take up fallen colours; corporals help a little.</p>
+        <p class="hint"><b>Parties:</b> put men in a sergeant's party and in battle <kbd>Y</kbd> sends every party out under its sergeant, a unit you command on its own (tap it on the rail); <kbd>U</kbd> recalls them; <b>Follow me</b> brings them after you. Orders reach a party by your voice, your bugler (simple calls) or a runner.</p></details>
       <button id="btn-company-back" class="big">Back to the road</button>`;
     const again = () => { App.saveRun(); UI.company(run, back); };
-    $('company').querySelectorAll('[data-type]').forEach(b => b.onclick = () => { Campaign.chooseType(run, b.dataset.type); again(); });
-    $('company').querySelectorAll('[data-promote]').forEach(b => b.onclick = () => { Campaign.promote(run, +b.dataset.promote); again(); });
-    $('company').querySelectorAll('[data-rifle]').forEach(b => b.onclick = () => { Campaign.toggleRifle(run, +b.dataset.rifle); again(); });
+    const C = $('company');
+    C.querySelectorAll('[data-man]').forEach(b => b.onclick = () => { const id = +b.dataset.man; if (UI._open.has(id)) UI._open.delete(id); else UI._open.add(id); UI.company(run, back); });
+    C.querySelectorAll('[data-promote]').forEach(b => b.onclick = () => { Campaign.promote(run, +b.dataset.promote); again(); });
+    C.querySelectorAll('[data-demote]').forEach(b => b.onclick = () => { Campaign.demote(run, +b.dataset.demote); again(); });
+    C.querySelectorAll('[data-rifle]').forEach(b => b.onclick = () => { Campaign.toggleRifle(run, +b.dataset.rifle); again(); });
     if ($('btn-issue')) $('btn-issue').onclick = () => { Campaign.issueRifles(run); again(); };
-    $('company').querySelectorAll('[data-party]').forEach(sl => sl.onchange = () => { Campaign.setParty(run, +sl.dataset.party, sl.value === '' ? null : +sl.value); again(); });
-    $('company').querySelectorAll('[data-rename]').forEach(inp => inp.onchange = () => { Campaign.rename(run, +inp.dataset.rename, inp.value); again(); });
+    C.querySelectorAll('[data-party]').forEach(sl => sl.onchange = () => { Campaign.setParty(run, +sl.dataset.party, sl.value === '' ? null : +sl.value); again(); });
+    C.querySelectorAll('[data-rename]').forEach(inp => inp.onchange = () => { Campaign.rename(run, +inp.dataset.rename, inp.value); again(); });
     $('btn-company-back').onclick = back;
     showScreen('screen-company');
   },
 
   // grey out orders the company has not learned (the order bar; the wheel checks for itself)
   markLocked(B) {
-    document.querySelectorAll('#hud-orders .order').forEach(b => b.classList.toggle('locked', !knowsDrill(B.player, b.dataset.cmd)));
+    const u = Detach.commanded(B);
+    document.querySelectorAll('#hud-orders .order').forEach(b => {
+      b.classList.toggle('locked', !knowsDrill(u, b.dataset.cmd));
+      b.classList.toggle('hide', !armAllows(u, b.dataset.cmd));
+    });
   },
 
   // ── before a battle ──
@@ -267,6 +293,7 @@ const UI = {
     const key = mine.map(u => u.id + Unit.moraleWord(u) + u.formed + glyph(u) + sent(u)).join() + sel.id + parties + (B.runnersOut || 0);
     if (!force && key === UI._stripKey) return;
     UI._stripKey = key;
+    UI.markLocked(B);
     const short = u => Detach.tag(B, u);
     const runners = B.runners != null ? B.runners : CFG.RUNNERS;
     $('unit-strip').innerHTML = (mine.length > 1 ? mine.map(u => `<button data-unit="${u.id}" class="chip ${u === sel ? 'sel' : ''}"><i style="background:${UI.moraleCol(u)}"></i>${esc(short(u))} <small>${u.formed}</small>${glyph(u) ? ` <b>${glyph(u)}</b>` : ''}${sent(u) ? ' <span title="an order is on its way">🏃</span>' : ''}</button>`).join('') : '')
@@ -302,7 +329,7 @@ const UI = {
       <div class="bar"><i style="width:${u.morale}%;background:${UI.moraleCol(u)}"></i><span>${word}</span></div>
       <div class="row"><b>${u.formed}<small>/${u.startSize}</small></b><span>loaded ${loaded}</span>${fireShort ? `<span>${fireShort}</span>` : ''}</div>
       <div class="row wide"><span>${gunWord || horseWord || orderWord}${cover && u.arm === 'foot' ? ` · ${cover}` : ''}</span></div>
-      <div class="kit">${kit} <span>${reach}</span>${u.wind < 0.7 ? ` <span class="${u.wind < 0.35 ? 'warn' : ''}">· ${windWord.toLowerCase()}</span>` : ''}${c.rallyCd > B.t ? ` <span>· rally ${Math.ceil(c.rallyCd - B.t)}s</span>` : ''}${c.run || c.sprint ? ' <span>· sprinting</span>' : ''}</div>
+      <div class="kit">${kit} <span>${reach}</span>${u.wind < 0.7 ? ` <span class="${u.wind < 0.35 ? 'warn' : ''}">· ${windWord.toLowerCase()}</span>` : ''}${c.rallyCd > B.t ? ` <span>· rally ${Math.ceil(c.rallyCd - B.t)}s</span>` : ''}${c.run || c.sprint ? ' <span>· sprinting</span>' : ''}${c.attach && B.units.includes(c.attach) ? ` <span>· with ${esc(Detach.tag(B, c.attach).toLowerCase())}</span>` : ''}</div>
       ${open ? `<div class="more">
         <div class="row wide"><span>${fireWord}</span></div>
         ${UI.coverLine(B, u)}
@@ -315,7 +342,7 @@ const UI = {
     $('btn-leavefield').classList.toggle('show', onRoad);
     $('tb-run').classList.toggle('on', !!c.sprint);
     const wa = B.wind.a * 180 / Math.PI;
-    const clock = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : App.speed + '×'}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`;
+    const clock = `<b>${Battle.clockText(B)}</b> <span class="speed">${App.paused ? 'PAUSED' : UI.speedLabel()}</span> <span class="wind" title="wind"><i style="transform:rotate(${wa}deg)">➜</i></span>`;
     if (clock !== UI._clock) { UI._clock = clock; ($('clock-text') || $('hud-clock')).innerHTML = clock; }
     const ob = $('btn-orders'), wet = !!B.weather;
     if (ob && ob.classList.contains('wet') !== wet) { ob.classList.toggle('wet', wet); ob.textContent = wet ? '📜 ☂' : '📜'; }
@@ -380,7 +407,8 @@ const UI = {
   },
   toggleHelp() { $('help').classList.toggle('show'); },
   toggleMute() { Sound.setMuted(!Sound.muted); $('btn-mute').textContent = Sound.muted ? 'Sound: off' : 'Sound: on'; },
-  cycleSpeed() { App.speed = App.speed === 1 ? 2 : App.speed === 2 ? 4 : 1; },
+  cycleSpeed() { App.speed = App.speed === 1 ? 2 : App.speed === 2 ? 4 : 1; if ($('tb-speed')) $('tb-speed').textContent = UI.speedLabel(); },
+  speedLabel() { return ({ 1: '½', 2: '1', 4: '2' }[App.speed] || App.speed / 2) + '×'; },
 
   battleOver(B, onContinue) {
     const R = B.result;
@@ -443,8 +471,14 @@ const UI = {
 
   shop(run, onDone) {
     const draw = () => {
+      // by shelf; what you cannot buy (owned, no room) is left off rather than greyed, so the list stays short
+      const items = Campaign.shopItems(run).filter(it => it.ok);
+      const shelves = Object.entries(Campaign.SHELVES).map(([k, title]) => {
+        const its = items.filter(it => it.cat === k);
+        return its.length ? `<h3 class="shelf">${esc(title)}</h3>` + its.map(it => `<button class="item" data-k="${it.key}" ${run.renown < it.cost ? 'disabled' : ''}><b>${esc(it.name)}</b><span>${esc(it.desc)}</span><em>${it.cost}</em></button>`).join('') : '';
+      }).join('');
       $('camp').innerHTML = `<h1>The Quartermaster</h1><p class="blurb">Renown buys favours. You have <b>${run.renown}</b>.</p>
-        <div class="shop">${Campaign.shopItems(run).map(it => `<button class="item" data-k="${it.key}" ${!it.ok || run.renown < it.cost ? 'disabled' : ''}><b>${esc(it.name)}</b><span>${esc(it.desc)}</span><em>${it.cost}</em></button>`).join('')}</div>
+        <div class="shop">${shelves}</div>
         <p class="note">${run.company.soldiers.length} / ${Campaign.capacity(run)} men</p>
         <button id="btn-leave" class="big">March on</button>`;
       $('camp').querySelectorAll('.item').forEach(b => b.onclick = () => { Campaign.buy(run, b.dataset.k); draw(); });

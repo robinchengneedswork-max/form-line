@@ -14,14 +14,14 @@
 //      to the enemy. Placing a party somewhere (a drag) always needs a runner
 //      or your voice — a bugle cannot say "there".
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const BUGLE_CALLS = new Set(['advance', 'halt', 'charge', 'skirmish', 'close', 'line', 'square', 'rejoin', 'retire', 'fallback', 'atwill', 'cease', 'ready', 'fire']);
+const BUGLE_CALLS = new Set(['advance', 'halt', 'charge', 'skirmish', 'close', 'line', 'square', 'rejoin', 'follow', 'retire', 'fallback', 'atwill', 'cease', 'ready', 'fire']);
 
 const Detach = {
   // the unit your orders go to
   commanded(B) { const s = B.selected; return s && B.units.includes(s) ? s : B.player; },
   mine(B) { return B.units.filter(u => u === B.player || u.isDetachment || (u.attached && !u.routed)); },
   // what to call a unit of yours on the rail and the map
-  tag(B, u) { return u === B.player ? 'Company' : u.attached === 'guns' ? 'Your guns' : u.attached === 'troop' ? (u.cav ? u.cav.short : 'Horse') : u.name.replace(/\u2019s party$/, ''); },
+  tag(B, u) { return u === B.player ? 'Company' : u.attached === 'guns' ? 'Your guns' : u.attached === 'troop' ? (u.cav ? u.cav.short : 'Horse') : u.attached === 'coy' ? u.tag : u.name.replace(/\u2019s party$/, ''); },
   // which of your units has a man within r metres of (x, y) — a tap on your own men selects them
   at(B, x, y, r) {
     let best = null, bd = r * r;
@@ -66,7 +66,7 @@ const Detach = {
       let cx = 0, cy = 0; for (const m of all) { cx += m.x; cy += m.y; } cx /= all.length; cy /= all.length;
       const surname = (sgt.name || 'Sergeant').split(' ').slice(-1)[0];
       const d = makeUnit({ team: TEAM_PLAYER, faction: 'british', name: `Sgt ${surname}’s party`, x: cx, y: cy, facing: P.form.facing, size: 0,
-        drill: P.drill, drills: P.drills, ctype: P.ctype, colours: false, drummer: false, fifer: false, doctrine: 'hold' }, B.rng);
+        drill: P.drill, drills: P.drills, ctype: P.ctype, traits: P.traits, colours: false, drummer: false, fifer: false, doctrine: 'hold' }, B.rng);
       d.men = []; d.leader = null;
       P.men = P.men.filter(m => !all.includes(m));
       for (const m of all) { m.unit = d; m.foe = null; m.volleyAt = 0; d.men.push(m); }
@@ -74,7 +74,7 @@ const Detach = {
       Object.assign(d, { isDetachment: true, parent: P, commanded: true, morale: P.morale, nerveBonus: P.nerveBonus, melee: P.melee, fire: 'atwill' });
       d.startSize = men.length; P.startSize = Math.max(1, P.startSize - men.length);
       // riflemen and light companies go out in skirmish order; others in a little line
-      const loose = P.ctype === 'light' || men.filter(m => m.weapon === 'rifle').length > men.length / 2;
+      const loose = P.traits.light || men.filter(m => m.weapon === 'rifle').length > men.length / 2;
       const fx = Math.cos(P.form.facing), fy = Math.sin(P.form.facing);
       Unit.setForm(d, loose ? 'skirmish' : 'line', cx + fx * 12, cy + fy * 12, P.form.facing);
       Unit.survey(d);
@@ -82,6 +82,8 @@ const Detach = {
       Battle.log(B, `${sgt.name || 'A sergeant'} takes his party out — ${men.length} men.`);
       last = d;
     }
+    const piper = P.men.find(m => m.role === 'piper' && m.state === 'formed'), first = B.units.find(u => u.isDetachment && u.parent === P);
+    if (piper && first) { P.men.splice(P.men.indexOf(piper), 1); piper.unit = first; first.men.push(piper); }
     Unit.assignSlots(P); Unit.survey(P);
     B.selected = last;
     return true;
@@ -90,7 +92,7 @@ const Detach = {
   // march a party back to the company
   rejoin(B, d) {
     if (!d.isDetachment) return;
-    d.rejoining = true; d.fire = 'hold';
+    d.rejoining = true; d.fire = 'hold'; d.followCmd = false;
     if (!d.leader || d.leader.state !== 'formed') AI.promote(B, d);
     if (!d.leader) return Detach.merge(B, d);
     d.order = 'follow';
@@ -133,12 +135,13 @@ const Detach = {
     }
     const lost = B.rng() < Math.min(0.8, risk), at = lost ? B.rng.range(0.3, 0.8) : 1;
     B.runnersOut++;
+    opts = Object.assign({}, opts);
     B.fx.push({ kind: 'runner', x0: c.x, y0: c.y, x1: u.cx, y1: u.cy, t: B.t, dur, stop: at });
     B.timers = B.timers || [];
     if (lost) {
       B.timers.push({ at: B.t + dur * at, kind: 'lost', name: u.name });
     } else {
-      B.pending.push({ at: B.t + dur, unit: u, cmd, opts });
+      B.pending.push({ at: B.t + dur, unit: u, cmd, opts, you: true });
       B.timers.push({ at: B.t + dur * 2, kind: 'back' });
     }
     Battle.log(B, `A runner goes to ${u.name} (${Math.round(dur)} s).`);
@@ -156,6 +159,13 @@ const Detach = {
         B.runners = (B.runners != null ? B.runners : CFG.RUNNERS) - 1;
         Battle.log(B, `Your runner to ${t.name} is shot down — the order never arrives.`, 'bad');
       }
+    }
+    // "follow me": a party or another company comes after you in column, its own officer leading, a few paces behind
+    for (const u of B.units) {
+      if (!u.followCmd || u.order !== 'follow' || !u.leader || u.leader === B.cmd || u.arm !== 'foot') continue;
+      const c = B.cmd, bx = c.x - Math.cos(c.facing) * 5, by = c.y - Math.sin(c.facing) * 5;
+      u.ai.dest = dist2(u.leader.x, u.leader.y, bx, by) > 9 ? { x: bx, y: by } : null;
+      u.ai.route = [];
     }
     for (const d of B.units.filter(u => u.isDetachment)) {
       if (!d.leader || d.leader.state !== 'formed') { d.leader = null; if (d.formed) AI.promote(B, d); }
