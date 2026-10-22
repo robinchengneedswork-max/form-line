@@ -326,7 +326,7 @@ const UI = {
     // rewritten only when it changes: iOS drops a tap whose element is replaced under the finger
     const card = `
       <div class="name"><span>${esc(UI.cardName(u))}</span><span class="hp">${'♥'.repeat(Math.max(0, c.hp))}${'♡'.repeat(Math.max(0, c.maxHp - c.hp))}</span></div>
-      <div class="bar"><i style="width:${u.morale}%;background:${UI.moraleCol(u)}"></i><span>${word}</span></div>
+      <div class="bar"><i style="width:${u.morale}%;background:${UI.moraleCol(u)}"></i><span>${word}${u.disorder > 0.25 ? ` · ${u.disorder > 0.6 ? 'in disorder' : 'ragged'}` : ''}</span></div>
       <div class="row"><b>${u.formed}<small>/${u.startSize}</small></b><span>loaded ${loaded}</span>${fireShort ? `<span>${fireShort}</span>` : ''}</div>
       <div class="row wide"><span>${gunWord || horseWord || orderWord}${cover && u.arm === 'foot' ? ` · ${cover}` : ''}</span></div>
       <div class="kit">${kit} <span>${reach}</span>${u.wind < 0.7 ? ` <span class="${u.wind < 0.35 ? 'warn' : ''}">· ${windWord.toLowerCase()}</span>` : ''}${c.rallyCd > B.t ? ` <span>· rally ${Math.ceil(c.rallyCd - B.t)}s</span>` : ''}${c.run || c.sprint ? ' <span>· sprinting</span>' : ''}${c.attach && B.units.includes(c.attach) ? ` <span>· with ${esc(Detach.tag(B, c.attach).toLowerCase())}</span>` : ''}</div>

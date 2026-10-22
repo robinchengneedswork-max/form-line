@@ -10,7 +10,7 @@ const ORDER_TEXT = {
   follow: 'Follow me!', line: 'Form line!', advance: 'Advance!', halt: 'Halt!',
   ready: 'Make ready!', fire: 'Present — FIRE!', atwill: 'Fire at will!', cease: 'Cease fire!',
   charge: 'Fix bayonets — CHARGE!', fallback: 'Fall back!', skirmish: 'Extend — skirmish order!',
-  close: 'Close order!', rally: 'Rally! Rally on me!', detach: 'Sergeants — take your parties out!', recall: 'Sound the recall!', rejoin: 'Rejoin the company!',
+  close: 'Close order!', screen: 'Skirmishers — cover the front!', rally: 'Rally! Rally on me!', detach: 'Sergeants — take your parties out!', recall: 'Sound the recall!', rejoin: 'Rejoin the company!',
   byrank: 'Fire by rank!', attackcol: 'Column of attack!', square: 'Form square! Prepare to receive cavalry!', ride: 'Trot!', retire: 'Retire! To the rear!', reform: 'Re-form! Re-form on the colours!',
 };
 
@@ -26,7 +26,7 @@ const ARM_ORDERS = {
   cav: new Set(['follow', 'line', 'close', 'halt', 'charge', 'reform', 'retire', 'rally']),
   gun: new Set(['follow', 'line', 'close', 'halt', 'ready', 'fire', 'atwill', 'cease', 'retire']),
 };
-const armAllows = (u, cmd) => !u || !ARM_ORDERS[u.arm] || ARM_ORDERS[u.arm].has(cmd) || cmd === 'detach' || cmd === 'recall';
+const armAllows = (u, cmd) => cmd === 'screen' ? !!u && u.arm === 'foot' && (u.isDetachment || u.attached === 'coy') : !u || !ARM_ORDERS[u.arm] || ARM_ORDERS[u.arm].has(cmd) || cmd === 'detach' || cmd === 'recall';
 
 const Orders = {
   // the player shouts. Returns false if nobody could hear.
@@ -39,7 +39,7 @@ const Orders = {
     if (cmd === 'detach') return Detach.split(B);
     if (cmd === 'recall') { if (B.bugle) B.events.push({ type: 'bugle', x: c.x, y: c.y }); return Detach.recallAll(B); }
     // a party of yours: your voice, the bugle, or a runner
-    if (!armAllows(u, cmd)) return false;
+    if (!armAllows(u, cmd)) { if (cmd === 'screen') Battle.log(B, 'A screen is for a sergeant’s party or another company — pick one on the rail.', 'bad'); return false; }
     if (u.isDetachment || u.attached) return Orders.toParty(B, u, cmd, opts);
     if (!u || u.routed && cmd !== 'rally') { Battle.log(B, 'They are running — get among them and rally them (R).', 'bad'); return false; }
     if (!knowsDrill(u, cmd)) { Battle.log(B, `Your company has never learned ${LEARNED_DRILLS[cmd].toLowerCase()} — drill it in camp.`, 'bad'); return false; }
@@ -153,6 +153,8 @@ const Orders = {
     // a dragged stroke said how wide (unit.js grid turns that into a depth)
     if (o && o.files && PLACE_KINDS[cmd]) u.frontage[PLACE_KINDS[cmd]] = o.files;
     if (u.followCmd && cmd !== 'follow') u.followCmd = false;
+    // a screen stays out until it is told something else (firing orders do not count)
+    if (u.screen && !['screen', 'ready', 'fire', 'atwill', 'cease', 'byrank'].includes(cmd)) u.screen = null;
     const toLine = (x, y, facing) => Unit.setForm(u, 'line', x, y, facing);
     switch (cmd) {
       case 'follow':
@@ -246,7 +248,7 @@ const Orders = {
         // on the spot, around the company's middle; every face presents outward and fires at will
         u.order = 'hold';
         if (u.fire === 'hold' || u.fire === 'byrank') u.fire = 'ready';
-        if (f.kind !== 'square') u.squareT = B.t;
+        if (f.kind !== 'square') { u.squareT = B.t; u.squareMul = (CFG.SQUARE_FROM[f.kind] || 1) * (1 + 1.5 * (u.disorder || 0)); }
         Unit.setForm(u, 'square', u.cx, u.cy, o.facing != null ? o.facing : f.facing);
         break;
       case 'ride': {
@@ -257,6 +259,10 @@ const Orders = {
         break;
       }
       case 'rejoin': Detach.rejoin(B, u); break;
+      case 'screen':
+        u.screen = { back: false, t: 0 }; u.followCmd = false; u.rejoining = false;
+        Detach.screenStep(B, u, true);
+        break;
       case 'close':
         u.order = 'hold';
         toLine(o.x != null ? o.x : u.cx, o.y != null ? o.y : u.cy, o.facing != null ? o.facing : f.facing);

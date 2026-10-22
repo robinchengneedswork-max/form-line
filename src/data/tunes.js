@@ -94,6 +94,7 @@ const DRUM_CALLS = {
   byrank:   ['X', 'x', '.', 'X', 'x', '.'],
   attackcol: ['f', 'x', 'f', 'x', 'X', 'X'],
   rally:    ['r', 'X', 'r', 'X', 'r', 'X'],
+  screen:   ['x', 'x', 'X', 'x', 'x', 'X', '.', 'X'],
 };
 
 const NOTE_INDEX = { C: -9, 'C#': -8, D: -7, 'D#': -6, E: -5, F: -4, 'F#': -3, G: -2, 'G#': -1, A: 0, 'A#': 1, B: 2 };

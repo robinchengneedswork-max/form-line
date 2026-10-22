@@ -23,7 +23,7 @@ const WHEEL_GROUPS = [
   { name: 'Fire', angle: -Math.PI / 2, opts: [
     { cmd: 'ready', label: 'Ready', at: -1 }, { cmd: 'fire', label: 'FIRE!', hot: true, at: 0 }, { cmd: 'atwill', label: 'At will', at: 1 }, { cmd: 'cease', label: 'Cease', at: 2 }, { cmd: 'byrank', label: 'By rank', at: -2 }] },
   { name: 'Bayonet', angle: 0, opts: [
-    { cmd: 'charge', label: 'Charge!', hot: true, at: 0 }, { cmd: 'rally', label: 'Rally', at: 1 }, { cmd: 'reform', label: 'Re-form', at: -1 }] },
+    { cmd: 'charge', label: 'Charge!', hot: true, at: 0 }, { cmd: 'rally', label: 'Rally', at: 1 }, { cmd: 'reform', label: 'Re-form', at: -1 }, { cmd: 'screen', label: 'Screen', at: 2 }] },
   { name: 'Form', angle: Math.PI / 2, opts: [
     { cmd: 'close', label: 'Close up', at: -1 }, { cmd: 'line', label: 'Line', at: 0 }, { cmd: 'skirmish', label: 'Skirmish', at: 1 }, { cmd: 'attackcol', label: 'Column', at: -2 }, { cmd: 'square', label: 'Square', at: 2 }] },
   { name: 'Move', angle: Math.PI, opts: [

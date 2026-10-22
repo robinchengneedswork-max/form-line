@@ -14,7 +14,7 @@
 //      to the enemy. Placing a party somewhere (a drag) always needs a runner
 //      or your voice — a bugle cannot say "there".
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const BUGLE_CALLS = new Set(['advance', 'halt', 'charge', 'skirmish', 'close', 'line', 'square', 'rejoin', 'follow', 'retire', 'fallback', 'atwill', 'cease', 'ready', 'fire']);
+const BUGLE_CALLS = new Set(['screen', 'advance', 'halt', 'charge', 'skirmish', 'close', 'line', 'square', 'rejoin', 'follow', 'retire', 'fallback', 'atwill', 'cease', 'ready', 'fire']);
 
 const Detach = {
   // the unit your orders go to
@@ -148,6 +148,40 @@ const Detach = {
     return true;
   },
 
+  // SCREEN: a party (or another company) in skirmish order SCREEN_AHEAD in front of your company — "in front" is the
+  // way your company faces (its line of march when it follows you) — as wide as it is. It moves when the company
+  // moves, fires at will, and falls back behind the company when foot come close or horse are about; out again
+  // once they have gone. Re-thought once a second
+  screenStep(B, u, now) {
+    if (!now && B.t < (u.screen.t || 0)) return;
+    u.screen.t = B.t + 1;
+    if (u.routed || !u.formed) return;
+    const P = B.player.routed || !B.player.formed ? null : B.player;
+    const ox = P ? P.cx : B.cmd.x, oy = P ? P.cy : B.cmd.y, face = P ? P.form.facing : B.cmd.facing;
+    const fx = Math.cos(face), fy = Math.sin(face);
+    let near = Infinity, horse = false;
+    for (const e of B.units) {
+      if (e.team === u.team || e.routed || !e.formed || !(B.seen[u.team].has(e.id) || B.heard[u.team].has(e.id))) continue;
+      const d = dist(u.cx, u.cy, e.cx, e.cy), ds = dist(ox + fx * CFG.SCREEN_AHEAD, oy + fy * CFG.SCREEN_AHEAD, e.cx, e.cy);
+      if (e.arm === 'cav') { if (d < CFG.CAV_CLOSE + 40 || e.order === 'charge') horse = true; }
+      else near = Math.min(near, d, ds);
+    }
+    const S = u.screen, was = S.back;
+    if (horse || near < CFG.SCREEN_FALL) S.back = true;
+    else if (near > CFG.SCREEN_CLEAR) S.back = false;
+    if (S.back && !was) Battle.log(B, `${Detach.tag(B, u)} falls back behind the company.`);
+    if (!S.back && was) Battle.log(B, `${Detach.tag(B, u)} goes out in front again.`);
+    const k = S.back ? -18 : CFG.SCREEN_AHEAD;
+    const st = Builder.open(B.field, { x: clamp(ox + fx * k, 6, B.field.w - 6), y: clamp(oy + fy * k, 6, B.field.h - 6) });
+    const width = P ? Unit.grid(P, Math.max(1, P.formed)).files * CFG.FILE_GAP + 24 : 40;
+    u.frontage.skirmish = Math.max(2, Math.round(width / CFG.SKIRMISH_GAP) + 1);
+    if (now || u.form.kind !== 'skirmish' || dist(u.form.x, u.form.y, st.x, st.y) > 10 || Math.abs(angDiff(u.form.facing, face)) > 0.35) Unit.setForm(u, 'skirmish', st.x, st.y, face);
+    u.order = 'hold';
+    // they run back without stopping to fire; out in front again, they fire at will
+    if (S.back && !was) { u.fire = 'hold'; for (const m of u.men) m.volleyAt = 0; }
+    if (!S.back && (was || u.fire === 'hold')) u.fire = 'atwill';
+  },
+
   step(B) {
     if (B.timers) for (let i = B.timers.length - 1; i >= 0; i--) {
       const t = B.timers[i];
@@ -167,6 +201,7 @@ const Detach = {
       u.ai.dest = dist2(u.leader.x, u.leader.y, bx, by) > 9 ? { x: bx, y: by } : null;
       u.ai.route = [];
     }
+    for (const u of B.units) if (u.screen) Detach.screenStep(B, u);
     for (const d of B.units.filter(u => u.isDetachment)) {
       if (!d.leader || d.leader.state !== 'formed') { d.leader = null; if (d.formed) AI.promote(B, d); }
       if (d.rejoining) {

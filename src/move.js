@@ -42,7 +42,7 @@ const Move = {
       // cohesion: a line waits for its stragglers rather than leaving them behind
       // (a column of attack goes at quick time and, being deep and narrow, keeps its order far better)
       const col = f.kind === 'attack' && sign > 0;
-      const coh = clamp(u.inSlot * 1.4 - 0.25, col ? 0.6 : 0.2, 1);
+      const coh = clamp(u.inSlot * 1.4 - 0.25, col ? 0.6 : 0.2, 1) * (1 - CFG.DIS_PACE * (u.disorder || 0));
       const pace = (col ? CFG.ATTACK_PACE : CFG.WALK) * (sign < 0 ? 0.8 : 1) * Field.speedAt(B.field, f.x, f.y, fx, fy) * coh;
       const nx = f.x + fx * pace * dt, ny = f.y + fy * pace * dt;
       const ahead = 8;
@@ -51,7 +51,49 @@ const Move = {
         Battle.say(B, u, 'Halt!');
       } else { f.x = nx; f.y = ny; }
     }
+    Move.disorder(B, u, dt);
     Unit.layout(u);
+  },
+
+  // rough ground breaks a line's dressing (CFG.DIS_*). Sampled twice a second
+  disorder(B, u, dt) {
+    u.disT = (u.disT || 0) - dt;
+    if (u.disT > 0) return;
+    const step = 0.5 + (u.disT || 0); u.disT = 0.5;
+    if (u.arm !== 'foot' || u.routed) { u.disorder = 0; return; }
+    let n = 0, rough = 0, moving = 0;
+    for (const m of u.men) {
+      if (m.role !== 'line' || m.state !== 'formed') continue;
+      n++;
+      if (m.moving > 0.3) moving++;
+      const t = Field.typeAt(B.field, m.x, m.y);
+      if (t === T.WOODS || t === T.ORCHARD || t === T.MARSH || t === T.WALL || t === T.FORD) rough++;
+    }
+    if (!n) return;
+    const kind = CFG.DIS_KIND[u.form.kind] != null ? CFG.DIS_KIND[u.form.kind] : 1;
+    const wide = u.form.kind === 'line' ? clamp(Unit.grid(u, n).files / 10, 0.5, 2.5) : 1;
+    const mov = moving / n, r = rough / n;
+    if (mov > 0.3 && r > 0.05) u.disorder += CFG.DIS_RATE * r * kind * wide * (1.2 - u.drill * 0.4) * step;
+    else if (mov < 0.3 && r < 0.25) u.disorder -= CFG.DIS_RECOVER * (1 + u.drill) * step;
+    else if (mov < 0.3) u.disorder -= CFG.DIS_RECOVER * 0.25 * step;
+    if (kind === 0) u.disorder -= CFG.DIS_RECOVER * 2 * step;     // loose order has no dressing to lose
+    u.disorder = clamp(u.disorder, 0, 1);
+    if (u.isPlayer && u.disorder > 0.4 && !u.disWarned) { u.disWarned = true; Battle.log(B, 'The line is losing its dressing in the rough ground — halt on open ground to re-form, or go through in column.', 'bad'); }
+    if (u.disorder < 0.15) u.disWarned = false;
+  },
+
+  // where to walk to get to (tx, ty): straight there, or — when a river or a house is in the way — the first leg
+  // of a path round it (by a ford or a bridge). Men used to walk straight at their places and stick on the bank
+  // (the user, twice). Looked at once a second per man; at most a few new searches a step
+  via(B, a, tx, ty) {
+    if (B.t >= (a.viaT || 0)) {
+      a.viaT = B.t + 0.8 + (a.id % 7) * 0.05;
+      if (Path.clear(B.field, a.x, a.y, tx, ty)) a.via = null;
+      else if ((B.pathBudget = (B.pathBudget || 0) + 1) <= 8) { const w = Path.find(B.field, a.x, a.y, tx, ty)[0]; a.via = w && dist2(w.x, w.y, tx, ty) > 1 ? { x: w.x, y: w.y } : null; }
+      else a.viaT = B.t + 0.1;                 // over budget this step: ask again shortly
+    }
+    if (a.via && dist2(a.x, a.y, a.via.x, a.via.y) < 2.5 * 2.5) { a.viaT = 0; return { x: tx, y: ty }; }
+    return a.via || { x: tx, y: ty };
   },
 
   // the player's commander: right-click destination or WASD
@@ -69,7 +111,7 @@ const Move = {
     if (!vx && !vy && c.dest) {
       const d = dist(c.x, c.y, c.dest.x, c.dest.y);
       if (d < 0.6) c.dest = null;
-      else { vx = (c.dest.x - c.x) / d; vy = (c.dest.y - c.y) / d; }
+      else { const w = Move.via(B, c, c.dest.x, c.dest.y), dw = Math.max(0.01, dist(c.x, c.y, w.x, w.y)); vx = (w.x - c.x) / dw; vy = (w.y - c.y) / dw; }
     }
     const len = Math.hypot(vx, vy);
     if (len > 0) {
@@ -99,6 +141,7 @@ const Move = {
 
   // every man in the battle
   men(B, dt) {
+    B.pathBudget = 0;
     for (const u of B.units) { u.rushing = 0; u.mo = 0; u.moN = 0; }
     for (const u of B.units) {
       const fleeDir = u.team === TEAM_PLAYER ? 1 : -1;
@@ -107,6 +150,8 @@ const Move = {
         let tx, ty, max;
         if (m.state === 'fleeing') {
           tx = m.x + m.jx * 4; ty = m.y + fleeDir * 20; max = m.horse ? CFG.CAV_FLEE : CFG.FLEE;
+          // running for the edge of the field — round a river by the crossing, not into the bank
+          if (!Field.passable(B.field, m.x + (tx - m.x) * 0.4, m.y + (ty - m.y) * 0.4) || m.via) { const w = Move.via(B, m, m.x, fleeDir > 0 ? B.field.h - 1 : 1); tx = w.x; ty = w.y; }
           // an officer among them, grabbing collars, slows them down
           const L = u.isPlayer ? B.cmd : u.leader;
           if (L && L.state === 'formed' && dist2(L.x, L.y, m.x, m.y) < CFG.COMMANDER_AURA * CFG.COMMANDER_AURA) max *= CFG.RALLY_HOLD;
@@ -140,6 +185,7 @@ const Move = {
           if (dist2(m.x, m.y, tx, ty) < 4) { u.ai.dest = u.ai.route && u.ai.route.length ? u.ai.route.shift() : null; }
         } else {
           tx = m.sx; ty = m.sy;
+          if (dist2(m.x, m.y, tx, ty) > 16) { const w = Move.via(B, m, tx, ty); tx = w.x; ty = w.y; } else m.via = null;
           const d = dist(m.x, m.y, tx, ty);
           max = m.horse ? (d > 5 || u.order === 'ride' ? CFG.CAV_TROT * 1.15 : CFG.CAV_WALK)
             : d > 5 ? CFG.CATCH_UP : (u.order === 'advance' || u.order === 'fallback' || u.order === 'follow') ? CFG.QUICK : CFG.WALK;

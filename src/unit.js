@@ -60,7 +60,7 @@ function makeUnit(spec, rng) {
     trail: [], slotOrder: [], reslot: 0,
     frontage: {},                 // files you drew for a formation (place.js), by kind; none = the drill-book default
     lossLog: [], lastHit: -99, flanked: 0, beingCharged: 0, chargeT: 0,
-    colours: null, coloursLost: false, wind: 1, hasColours: spec.colours !== false && !cav && !gun,
+    colours: null, coloursLost: false, wind: 1, disorder: 0, hasColours: spec.colours !== false && !cav && !gun,
     rallyCd: 0, ai: { next: 0, phase: 'deploy', route: null },
     cx: spec.x, cy: spec.y, formed: 0, visible: spec.team === TEAM_PLAYER,
     lastSeen: null, stats: { shots: 0, hits: 0, down: 0, fled: 0 },
@@ -234,6 +234,7 @@ const Unit = {
       const off = (file - (files - 1) / 2 + (loose && rank % 2 ? 0.5 : 0)) * gap;
       let sx = f.x + rx * off - fx * rank * rg, sy = f.y + ry * off - fy * rank * rg;
       if (f.kind === 'skirmish') { sx += rx * m.jx + fx * m.jy * 2; sy += ry * m.jx + fy * m.jy * 2; }
+      else if (u.disorder > 0.05) { const k = u.disorder * 1.6; sx += rx * m.jx * k * 0.5 + fx * m.jy * k; sy += ry * m.jx * k * 0.5 + fy * m.jy * k; }
       m.sx = sx; m.sy = sy; m.rank = rank; m.slotFacing = f.facing;
     });
     back = ranks * rg;

@@ -26,7 +26,7 @@ const AI = {
       if (u.attached === 'troop' && !B.autoPlayer) { AI.troop(B, u); continue; }
       if ((u.isPlayer || u.commanded) && !B.autoPlayer) continue;
       // another regiment's company you have just given an order to: it carries it out before thinking for itself
-      if (u.attached === 'coy' && B.t < (u.obeyUntil || 0) && !B.autoPlayer) continue;
+      if (u.attached === 'coy' && (B.t < (u.obeyUntil || 0) || u.screen) && !B.autoPlayer) continue;
       if (B.t < u.ai.next) continue;
       u.ai.next = B.t + 1 + B.rng() * 0.3;
       AI.think(B, u);
@@ -265,7 +265,7 @@ const AI = {
     if (AI.inCover(B, e) || Field.typeAt(B.field, e.cx, e.cy) === T.WOODS || Field.typeAt(B.field, e.cx, e.cy) === T.ORCHARD) return 0.1;
     let s;
     if (e.form.kind === 'square') s = Combat.squareFormed(e, B) ? (e.morale < CFG.SHAKEN ? 0.75 : 0.05) : 1.2;
-    else s = e.form.kind === 'skirmish' ? 1.15 : e.form.kind === 'column' ? 1.05 : e.form.kind === 'attack' ? 0.65 : 0.55;
+    else s = (e.form.kind === 'skirmish' ? 1.15 : e.form.kind === 'column' ? 1.05 : e.form.kind === 'attack' ? 0.65 : 0.55) + 0.5 * (e.disorder || 0);
     if (e.form.kind !== 'square') {
       // taken in the flank or the rear
       if (Math.abs(angDiff(e.form.facing, Math.atan2(u.cy - e.cy, u.cx - e.cx))) > Math.PI / 3) s += 0.45;

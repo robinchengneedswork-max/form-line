@@ -27,6 +27,7 @@ const ORDER_KEYS = [
   { code: 'KeyE', key: 'E', cmd: 'square', label: 'Form square' },
   { code: 'KeyY', key: 'Y', cmd: 'detach', label: 'Detach parties' },
   { code: 'KeyU', key: 'U', cmd: 'recall', label: 'Recall parties' },
+  { code: 'KeyG', key: 'G', cmd: 'screen', label: 'Screen ahead' },
 ];
 
 const Input = {

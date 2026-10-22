@@ -13,7 +13,7 @@ infantryman; morale, aiming skill and terrain modelled.**
 ## Run / test
 
 ```bash
-node test/headless.js        # 270 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
+node test/headless.js        # 283 checks: musket, ground, orders+drum, morale+colours, campaign, page boots
 node test/tune.js            # every scenario x 6 seeds, AI driving YOUR company too: length, losses, rds/man/min
 node test/tune.js ford 20    # one scenario, more seeds, per-battle lines
 ```
@@ -232,6 +232,28 @@ What was built (round 12):
   every one the company knows in turn (`u.tunes`); a **piper** (`co.piper`, role 'piper', `isMusician`) plays
   "Scotland the Brave" (anachronistic, flagged) over drones and marches out with the first sergeant's party. Melodies
   are by ear.
+
+## Round 13b (same day): disorder, the square, the screen, rivers, a little harder
+
+The user: "ordering people around in lines is just kinda OP — nerfing square / ability to advance in order esp through
+rough terrain is a good balance tweak"; "can we order skirmishers to screen in front of us?"; "people still get stuck on
+rivers sometimes"; "battles generally feel slightly too easy". (The miss-wide/overshoot model for columns was offered
+and declined as too costly.)
+
+- **Disorder** `u.disorder` 0..1 (`Move.disorder`, twice a second): builds while men MOVE over woods/orchard/marsh/wall/ford,
+  × `DIS_KIND` (line 1, attack 0.25, column 0.08, skirmish 0) × width (files/10, 0.5..2.5) × (1.2 − 0.4·drill); recovers
+  halted on open ground. Effects: advance pace × (1 − DIS_PACE·d), hit chance × (1 − DIS_AIM·d), nerve-test defence ×
+  (1 − DIS_NERVE·d), square dress time × (1 + 1.5·d), horse mark + 0.5·d; men drawn out of dressing; card says ragged / in
+  disorder; a log line at 0.4.
+- **Square**: dress time × `SQUARE_FROM[kind it formed from]` (line 1.35, attack 0.6, column 0.55, skirmish 1.7) — `u.squareMul`.
+- **Screen** (`screen`, G, Bayonet ring; only for a party or an allied company — `armAllows`): `u.screen`, run by
+  `Detach.screenStep` once a second: skirmish order SCREEN_AHEAD in front of your company's facing, as wide as it plus 24 m;
+  falls back 18 m behind it (fire held, running) when enemy foot are within SCREEN_FALL or horse close/charging; out again
+  past SCREEN_CLEAR. Any order but a firing one ends it. AI skips a screening ally.
+- **Rivers**: `Move.via` — anyone (a man to his slot, a fugitive to the edge, you to your tap) whose straight line is
+  blocked by water or a house takes `Path.find`'s first leg; checked ~once a second each, ≤8 new searches a step. A
+  company sent to the far bank used to stand on the near bank for ever (headless checks it now).
+- **A little harder**: `enemyStrength` 24+17L men (was 22+16L), drill +0.03, nerve 3+9L (was 8L); FR_RESERVE_LV 1.5 (was 1.2).
 
 ## Great battles (round 10 — the user picked "more set-piece maps")
 

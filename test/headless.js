@@ -651,7 +651,7 @@ console.log('§13 the guns');
   {
     const loss = form => {
       let n = 0;
-      for (let k = 0; k < 6; k++) {
+      for (let k = 0; k < 10; k++) {
         const { B, P } = range(1810 + k, 380);
         if (form !== 'line') Orders.apply(B, P, form, {});
         run(B, 8);
@@ -659,7 +659,7 @@ console.log('§13 the guns');
         for (let i = 0; i < 30 * 100; i++) { Battle.step(B, CFG.STEP); B.events.length = 0; P.lastHit = -99; }
         n += n0 - P.formed;
       }
-      return n / 6;
+      return n / 10;
     };
     const line = loss('line'), sq = loss('square'), col = loss('attackcol'), sk = loss('skirmish');
     chk('roundshot: a square or a column loses far more than a line; skirmishers hardly any', sq > line * 1.4 && col > line * 1.3 && sk < line * 0.5, `line ${line.toFixed(1)} square ${sq.toFixed(1)} column ${col.toFixed(1)} skirmish ${sk.toFixed(1)}`);
@@ -765,7 +765,7 @@ console.log('§14 volley and charge; your horse');
     c.morale = 80; d.morale = 55; c.impetus = 1;
     let broke = 0;
     for (let k = 0; k < 20; k++) {
-      d.routed = false; d.morale = 55; d.order = 'hold';
+      d.routed = false; d.morale = 55; d.order = 'hold'; c.morale = 80;
       for (const m of d.men) if (m.state === 'fleeing') m.state = 'formed';
       Orders.apply(b, c, 'charge', {}); Combat.nerve(b, c, d, 1.4);
       if (d.routed) broke++;
@@ -1077,7 +1077,8 @@ console.log('§18 the great battles: each act its own');
   const M = fresh('sp_maya', 504);
   const n0 = M.units.length, due = M.arrivals[0].arrive;
   chk('Maya: the relief is not on the field at first', M.arrivals.length === 2 && !M.units.some(x => /82nd/.test(x.name)));
-  run(M, due + 1);
+  // (straight to its hour: an idle captain may have lost the pass before then)
+  M.t = due + 1; Battle.arrive(M);
   chk('…and marches on when its hour comes', M.units.length > n0 && M.units.some(x => /82nd/.test(x.name)) && M.messages.some(x => /Barnes/.test(x.text)));
   // Quatre Bras: tall rye hides a man at 80 m that ordinary wheat would not
   const Q = fresh('sp_quatrebras', 505), f = Q.field;
@@ -1308,6 +1309,100 @@ console.log('§21 round 13: names, valour, the drag, follow me, the other regime
   Orders.shout(M, 'detach'); run(M, 1);
   const pp = M.units.find(x => x.isDetachment);
   chk('…and he marches out with the first sergeant\u2019s party', pp && pp.men.some(m => m.role === 'piper') && !M.player.men.some(m => m.role === 'piper'));
+}
+
+console.log('§22 order and disorder; the square; the screen');
+{
+  const { Detach } = X;
+  // a wood, somewhere on the Woods map
+  const probe = fresh('woods', 3);
+  let wx = null, wy = null;
+  for (let y = 20; y < probe.field.h - 20 && wx == null; y += 4) for (let x = 60; x < probe.field.w - 60; x += 4) {
+    let ok = true;
+    for (let dx = -24; dx <= 24 && ok; dx += 4) for (let dy = -30; dy <= 10 && ok; dy += 4) if (Field.typeAt(probe.field, x + dx, y + dy) !== T.WOODS) ok = false;
+    if (ok) { wx = x; wy = y; break; }
+  }
+  chk('(the Woods map has a wood big enough to march a company through)', wx != null);
+  const through = kind => {
+    const B = fresh('woods', 3), u = B.player;
+    for (const e of B.units) if (e.team === TEAM_ENEMY) { e.ai.next = Infinity; for (const m of e.men) { m.y = Math.max(2, m.y - 150); m.sy = m.y; } Unit.survey(e); }
+    Unit.setForm(u, kind, wx, wy + 8, -Math.PI / 2); Unit.layout(u);
+    for (const m of u.men) { m.x = m.sx; m.y = m.sy; }
+    Unit.survey(u);
+    u.order = 'advance';
+    run(B, 14);
+    return u.disorder;
+  };
+  const dl = through('line'), dc = through('attack');
+  chk('a line marched through a wood falls into disorder', dl > 0.3, dl.toFixed(2));
+  chk('…a column of attack hardly at all', dc < dl * 0.4, dc.toFixed(2));
+  const R = fresh('plain', 3), ru = R.player;
+  for (const e of R.units) if (e.team === TEAM_ENEMY) { e.ai.next = Infinity; for (const m of e.men) { m.y = Math.max(2, m.y - 150); m.sy = m.y; } Unit.survey(e); }
+  ru.disorder = 0.7; run(R, 15);
+  chk('…and halted on open ground it dresses its ranks again', ru.disorder < 0.15, ru.disorder.toFixed(2));
+  // a disordered line shoots worse and stands a charge worse
+  const D = fresh('plain', 4), du = D.player, E = D.units.find(x => x.team === TEAM_ENEMY);
+  const pNerve = dis => { du.disorder = dis; let won = 0; for (let i = 0; i < 400; i++) { const m0 = du.morale; Combat.nerve(D, E, du, 0.45); won += du.morale < m0 ? 1 : 0; du.morale = m0; du.routed = false; } return won / 400; };
+  const p0 = pNerve(0), p1 = pNerve(1);
+  chk('…a disordered line is far easier to charge home on', p1 > p0 + 0.1, p0.toFixed(2) + ' → ' + p1.toFixed(2));
+  // the square: quick from a column, slow from a line
+  const S1 = fresh('plain', 5), S2 = fresh('plain', 5);
+  Orders.apply(S2, S2.player, 'attackcol', { x: S2.player.cx, y: S2.player.cy, facing: -Math.PI / 2 }); run(S2, 10);
+  Orders.apply(S1, S1.player, 'square', {}); Orders.apply(S2, S2.player, 'square', {});
+  let t1 = null, t2 = null;
+  for (let i = 0; i < 40 / CFG.STEP; i++) {
+    Battle.step(S1, CFG.STEP); Battle.step(S2, CFG.STEP); S1.events.length = S2.events.length = 0;
+    if (t1 == null && Combat.squareFormed(S1.player, S1)) t1 = S1.t;
+    if (t2 == null && Combat.squareFormed(S2.player, S2)) t2 = S2.t - 10;
+  }
+  chk('square forms quicker from a column than from a line', t1 != null && t2 != null && t2 < t1 - 2, (t2 && t2.toFixed(1)) + ' s vs ' + (t1 && t1.toFixed(1)) + ' s');
+  // the screen: a party out in front of the company, as wide as it is, and back behind it when they come close
+  const F = fresh('plain', 46, { company: Campaign.quickCompany(46, { size: 40, type: 'light' }) }), P = F.player;
+  for (const e of F.units) if (e.team === TEAM_ENEMY) { e.ai.next = Infinity; for (const m of e.men) { m.y = Math.max(2, m.y - 150); m.sy = m.y; } Unit.survey(e); }
+  Orders.shout(F, 'detach'); run(F, 2);
+  const party = F.units.find(x => x.isDetachment);
+  F.selected = party; F.cmd.x = party.cx; F.cmd.y = party.cy + 3;
+  chk('Screen is not an order for the company itself', (F.selected = P, !Orders.shout(F, 'screen')));
+  F.selected = party;
+  Orders.shout(F, 'screen'); run(F, 35);
+  const ahead = (party.cx - P.cx) * Math.cos(P.form.facing) + (party.cy - P.cy) * Math.sin(P.form.facing);
+  chk('Screen: the party goes out in skirmish order in front of the company', party.screen && party.form.kind === 'skirmish' && ahead > CFG.SCREEN_AHEAD - 15, ahead.toFixed(0) + ' m');
+  // the company marches; the screen keeps ahead of it
+  Orders.apply(F, P, 'advance', {}); run(F, 30); Orders.apply(F, P, 'halt', {}); run(F, 25);
+  const ahead2 = (party.cx - P.cx) * Math.cos(P.form.facing) + (party.cy - P.cy) * Math.sin(P.form.facing);
+  chk('…and keeps in front of it as it advances', ahead2 > CFG.SCREEN_AHEAD - 15, ahead2.toFixed(0) + ' m');
+  // French come close: back behind the line
+  const G = fresh('plain', 46, { company: Campaign.quickCompany(46, { size: 40, type: 'light' }) }), GP = G.player;
+  Orders.shout(G, 'detach'); run(G, 2);
+  const gp = G.units.find(x => x.isDetachment);
+  G.selected = gp; G.cmd.x = gp.cx; G.cmd.y = gp.cy + 3; Orders.shout(G, 'screen'); run(G, 30);
+  const GE = G.units.find(x => x.team === TEAM_ENEMY);
+  for (const m of GE.men) { m.x += gp.cx - GE.cx; m.y += gp.cy - 45 - GE.cy; } Unit.survey(GE); GE.form.x = GE.cx; GE.form.y = GE.cy;
+  GE.ai.next = 1e9; G.seen[TEAM_PLAYER].add(GE.id);
+  run(G, 35);
+  const behind = (gp.cx - GP.cx) * Math.cos(GP.form.facing) + (gp.cy - GP.cy) * Math.sin(GP.form.facing);
+  chk('…and falls back behind the company when enemy foot come close', gp.screen && gp.screen.back && behind < 5, behind.toFixed(0) + ' m');
+}
+
+{
+  // rivers: a man whose place is across the water goes round by the ford instead of standing on the bank (the user: still stuck sometimes)
+  const B = fresh('ford', 5), u = B.player;
+  for (const e of B.units) if (e.team === TEAM_ENEMY) e.ai.next = Infinity;
+  let spot = null;
+  for (let x = 80; x < B.field.w - 80 && !spot; x += 8) {
+    let wet = null;
+    for (let y = 40; y < B.field.h - 40; y += 2) if (Field.typeAt(B.field, x, y) === T.WATER) { wet = y; break; }
+    if (wet == null) continue;
+    let ok = true;
+    for (let dx = -20; dx <= 20; dx += 4) for (let y = wet - 30; y < wet + 40; y += 2) { const t = Field.typeAt(B.field, x + dx, y); if (t === T.FORD || t === T.BRIDGE) ok = false; }
+    if (ok) spot = { x, wet };
+  }
+  let dry = spot.wet; while (Field.typeAt(B.field, spot.x, dry) === T.WATER) dry += 2;
+  for (const m of u.men) { m.x = spot.x + (m.x - u.cx) * 0.5; m.y = dry + 12 + (m.y - u.cy) * 0.5; }
+  Unit.survey(u); Unit.setForm(u, 'line', spot.x, spot.wet - 25, -Math.PI / 2);
+  run(B, 180); Unit.layout(u);
+  const men = u.men.filter(m => m.role === 'line' && m.state === 'formed'), there = men.filter(m => dist(m.x, m.y, m.sx, m.sy) < 6).length;
+  chk('a company sent to the far bank goes round by the ford instead of sticking on the bank', there >= men.length * 0.8, there + '/' + men.length);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -20,6 +20,19 @@ const CFG = {
   ATTACK_NERVE: 0.7,       // morale cost per man lost while in column of attack (it takes ATTACK_EXPOSED more hits)
   ATTACK_SHOCK: 1.25,      // charge shock from a column of attack
   ATTACK_EXPOSED: 1.4,     // hits on a column of attack (a ball that misses the front rank finds the next)
+  // ── order: a line that walks through woods, orchards, marsh, a wall or a ford comes apart (the user: "ordering
+  // people around in lines is just kinda OP"). Disorder (u.disorder 0..1) builds while it moves over rough ground —
+  // faster the wider the line — and goes only when it halts on open ground and dresses its ranks
+  DIS_RATE: 0.07,          // /s with every man in rough ground, for a line ten files wide (× files/10, 0.5..2.5)
+  DIS_KIND: { line: 1, attack: 0.25, column: 0.08, skirmish: 0, square: 0.5, battery: 0 },
+  DIS_RECOVER: 0.05,       // /s halted on open ground (+ DIS_RECOVER × drill)
+  DIS_PACE: 0.5,           // a fully disordered line advances this much slower…
+  DIS_AIM: 0.4,            // …fires this much worse (ragged, masked files)…
+  DIS_NERVE: 0.4,          // …and stands a charge this much worse
+  SQUARE_FROM: { line: 1.35, attack: 0.6, column: 0.55, skirmish: 1.7 },  // × the time to dress a square, by what it was formed from
+  SCREEN_AHEAD: 60,        // m: your skirmish screen keeps this far in front of your company…
+  SCREEN_FALL: 55,         // …falls back behind it when enemy foot come this close (horse: CAV_CLOSE)…
+  SCREEN_CLEAR: 110,       // …and goes out again once they are this far off
   ATTACK_PACE: 1.75,       // …but it advances at quick time and keeps its order over broken ground (a line walks, 1.3,
                            //    and waits for its stragglers): it is how you cross ground under fire to get to the bayonet
   BYRANK_GAP: 5,           // fire by rank: seconds between one rank's volley and the next
@@ -222,7 +235,7 @@ const CFG = {
   // the French have more behind the hill (the user: "lots of these maps we win if I do nothing"): as their
   // companies break, fresh ones come up — a pool per battle of BASE + LV × level (+1 in a great battle)
   FR_RESERVE_BASE: 1,
-  FR_RESERVE_LV: 1.2,      // (2 made Act III 0-for-N for the autoplayer on top of everything else)
+  FR_RESERVE_LV: 1.5,      // (1.2 until round 13, "slightly too easy"; 2 made Act III 0-for-N for the autoplayer)
   FR_RESERVE_DELAY: 70,    // seconds after a company breaks before its replacement marches on (±25%)
   FR_RESERVE_SIZE: 0.8,    // × a fresh company's usual strength
   // a routed AI company rallies on a steady, well-drilled company of its own side that its men run past

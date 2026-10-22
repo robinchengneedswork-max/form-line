@@ -64,10 +64,11 @@ function escalate(dep, f, rng, lv, sc = {}) {
   if (add.length) dep.note = (dep.note ? dep.note + ' ' : '') + (add.length === 2 ? 'French horse and guns are with them.' : add[0].arm === 'cav' ? 'French horse is with them.' : 'French guns are with them.');
 }
 
+// (round 13, the user: "battles generally feel slightly too easy": +2 men, a little steadier and better drilled)
 const enemyStrength = (level, rng) => ({
-  size: Math.round(22 + level * 16 + rng.int(-2, 3)),
-  drill: clamp(0.25 + level * 0.5 + rng.range(-0.08, 0.08), 0.1, 0.95),
-  nerve: Math.round(level * 8),
+  size: Math.round(24 + level * 17 + rng.int(-2, 3)),
+  drill: clamp(0.28 + level * 0.5 + rng.range(-0.08, 0.08), 0.1, 0.95),
+  nerve: Math.round(3 + level * 9),
 });
 
 const SCENARIOS = {

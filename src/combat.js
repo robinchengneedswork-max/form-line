@@ -156,6 +156,7 @@ const Combat = {
     p *= Field.coverFor(B.field, t.x, t.y, m.x, m.y);
     p *= Math.exp(-CFG.SMOKE_K * Smoke.along(B, m.x, m.y, t.x, t.y));
     if (volley) p *= u.traits.line ? CFG.VOLLEY_BONUS + 0.1 : CFG.VOLLEY_BONUS;
+    p *= 1 - CFG.DIS_AIM * (u.disorder || 0);
     if (!m.fired) { p *= CFG.FIRST_FIRE; m.fired = true; }
     if (tu.form.kind === 'skirmish') p *= tu.traits.light ? 0.42 : 0.55;
     else if (tu.form.kind === 'attack') p *= CFG.ATTACK_EXPOSED;
@@ -352,7 +353,8 @@ const Combat = {
   squareReady(u, B) {
     if (u.form.kind !== 'square') return 0;
     const placed = clamp((u.inSlot - 0.3) / (CFG.SQUARE_FORMED - 0.3), 0, 1);
-    const dressed = clamp((B.t - (u.squareT || 0)) / (CFG.SQUARE_DRESS * Math.max(0.3, 1.25 - u.drill)), 0, 1);
+    // quick from a column (it only has to face outward), slow from a line, slower still from a broken one
+    const dressed = clamp((B.t - (u.squareT || 0)) / (CFG.SQUARE_DRESS * Math.max(0.3, 1.25 - u.drill) * (u.squareMul || 1)), 0, 1);
     return Math.min(placed, dressed);
   },
 
@@ -389,7 +391,8 @@ const Combat = {
       if (d.form.kind === 'skirmish') vsHorse *= 0.65;
     }
     // a company charging too meets you with its own momentum, not its muskets
-    const def = d.order === 'charge' ? d.morale * Combat.momentum(B, d, c) : d.morale * (0.65 + 0.7 * loaded) * cover * vsHorse * (d.form.kind === 'skirmish' ? 0.6 : 1);
+    const def = (d.order === 'charge' ? d.morale * Combat.momentum(B, d, c) : d.morale * (0.65 + 0.7 * loaded) * cover * vsHorse * (d.form.kind === 'skirmish' ? 0.6 : 1))
+      * (1 - CFG.DIS_NERVE * (d.disorder || 0));
     const p = att * att / (att * att + def * def);
     c.lastNerve = { p, imp: c.impetus || 0, loaded, dh: Field.heightAt(B.field, c.cx, c.cy) - Field.heightAt(B.field, d.cx, d.cy) };
     if (B.rng() < p) {
