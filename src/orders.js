@@ -186,7 +186,12 @@ const Orders = {
         u.order = 'fallback';
         break;
       case 'ready': u.fire = 'ready'; break;
-      case 'byrank': u.fire = 'byrank'; u.rankTurn = 0; u.rankNext = B.t + 1; break;
+      case 'byrank':
+        // yours: every order is one rank's volley (they wait presented for it); a fresh order starts at the front rank
+        if (u.fire !== 'byrank') { u.rankTurn = 0; u.rankCalls = 0; u.rankNext = B.t + 1; }
+        u.fire = 'byrank';
+        if (Combat.manualRanks(B, u)) { u.rankCalls = Math.min(2, (u.rankCalls || 0) + 1); u.rankCallT = B.t; }
+        break;
       case 'attackcol':
         u.order = 'hold';
         Unit.setForm(u, 'attack', o.x != null ? o.x : u.cx, o.y != null ? o.y : u.cy, o.facing != null ? o.facing : f.facing);

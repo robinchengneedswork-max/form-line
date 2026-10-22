@@ -31,19 +31,37 @@ const Combat = {
     return m.rank < CFG.FIRING_RANKS && dist2(m.x, m.y, m.sx, m.sy) < CFG.SLOT_FORMED * CFG.SLOT_FORMED;
   },
 
-  // fire by rank: the front rank lets go, then the next, so part of the company is always loaded
+  // fire by rank: the front rank lets go, then the next, so part of the company is always loaded.
+  // AI companies ripple on by themselves every BYRANK_GAP. YOUR men (company and parties) fire ONE rank for each
+  // "By rank!" you give and otherwise stand presented — the user: "if I wanted autofire I would do at will; I want to
+  // control the 2nd shot". The orders queue in u.rankCalls
+  manualRanks(B, u) { return (u.isPlayer || u.isDetachment) && !B.autoPlayer; },
   rankFire(B, u) {
     if (u.fire !== 'byrank' || u.arm !== 'foot' || B.t < (u.rankNext || 0)) return;
+    const manual = Combat.manualRanks(B, u);
+    if (manual && u.rankCalls > 0 && B.t - (u.rankCallT || 0) > 15) u.rankCalls = 0;   // an order nobody could carry out is forgotten
+    if (manual && !(u.rankCalls > 0)) return;
     const nr = Math.min(CFG.FIRING_RANKS, Unit.grid(u, Math.max(1, u.formed)).ranks);
-    const r = (u.rankTurn || 0) % nr;
-    let tot = 0;
-    const pres = [];
-    for (const m of u.men) if (m.role === 'line' && m.state === 'formed' && m.rank === r) { tot++; if (m.m === 'present') pres.push(m); }
-    if (!tot) { u.rankTurn = r + 1; return; }
-    if (pres.length >= tot * 0.6 && Combat.pickTarget(B, pres[0], CFG.RANGE_MAX)) {
-      for (const m of pres) m.volleyAt = B.t + B.rng() * CFG.VOLLEY_RIPPLE;
-      u.rankTurn = r + 1; u.rankNext = B.t + CFG.BYRANK_GAP;
+    const ranks = [];
+    for (let k = 0; k < nr; k++) {
+      const r = ((u.rankTurn || 0) + k) % nr;
+      let tot = 0; const pres = [];
+      for (const m of u.men) if (m.role === 'line' && m.state === 'formed' && m.rank === r) { tot++; if (m.m === 'present') pres.push(m); }
+      ranks.push({ r, tot, pres });
     }
+    // the rank whose turn it is; on your order, if it is still loading, the next one that is ready
+    let pick = null;
+    for (const R of ranks) {
+      if (!R.tot) continue;
+      if (R.pres.length >= R.tot * 0.6) { pick = R; break; }
+      // its turn and nearly ready: wait for it. (Only a rank still reloading is passed over for the next)
+      if (!manual || R.tot - u.men.filter(m => m.role === 'line' && m.state === 'formed' && m.rank === R.r && m.m === 'reloading').length >= R.tot * 0.6) return;
+    }
+    if (!pick) return;
+    if (!manual && !Combat.pickTarget(B, pick.pres[0], CFG.RANGE_MAX)) return;
+    for (const m of pick.pres) m.volleyAt = B.t + B.rng() * CFG.VOLLEY_RIPPLE;
+    u.rankTurn = pick.r + 1;
+    if (manual) { u.rankCalls--; u.rankNext = B.t + 0.8; } else u.rankNext = B.t + CFG.BYRANK_GAP;
   },
 
   muskets(B, dt) {

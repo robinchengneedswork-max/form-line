@@ -69,7 +69,7 @@ export line). A headless check asserts that index.html's script order matches.
 
 ## Drill the user asked for (round 2)
 
-- **Fire by rank** (`byrank`): the front rank fires, then the next after `BYRANK_GAP` — part of the company is always loaded.
+- **Fire by rank** (`byrank`): the front rank fires, then the next. AI companies ripple on every `BYRANK_GAP`; **yours (company + parties, `Combat.manualRanks`) fire ONE rank per By rank! order** (`u.rankCalls`, max 2 queued, forgotten after 15 s) and otherwise stand presented — the user (round 13): "if I wanted autofire I would do at will; I want to control the 2nd shot".
 - **Column of attack** (`attack` formation): `ATTACK_FILES` wide, deep; advances like a line, only its front two ranks fire,
   takes `ATTACK_EXPOSED`× hits, charges with `ATTACK_SHOCK`× shock. French AI captains attack in it (a third prefer to deploy into line).
   **Tuned so a holding line beats a column ~60% when it holds its volley to ~60 m** (`$TEMP/fl/duel.js`-style duel) — line vs column is the period's core matchup.

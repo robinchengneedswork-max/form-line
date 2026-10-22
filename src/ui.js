@@ -316,8 +316,8 @@ const UI = {
     const gunWord = u.arm === 'gun' ? (u.limber ? { limber: 'Limbering up', move: 'On the move', unlimber: 'Unlimbering' }[u.limber.phase] : u.holdFire ? 'Holding fire' : `In action — ${Artillery.live(u).length} gun${Artillery.live(u).length === 1 ? '' : 's'}`) : null;
     const horseWord = u.arm === 'cav' ? (u.order === 'charge' ? 'CHARGING' : u.order === 'ride' ? 'Riding' : u.routed ? 'ROUTING' : 'Waiting for your call') : null;
     const windWord = u.wind > 0.7 ? 'Fresh' : u.wind > 0.35 ? 'Puffing' : u.wind > 0.1 ? 'Winded' : 'Blown';
-    const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will', byrank: 'Firing by rank' }[u.fire];
-    const fireShort = u.fire === 'ready' ? (pres ? `<b class="gold">${pres} presented — FIRE!</b>` : 'making ready') : u.fire === 'atwill' ? 'at will' : u.fire === 'byrank' ? 'by rank' : '';
+    const fireWord = { hold: 'Shouldered', ready: pres ? `Presented (${pres}) — awaiting FIRE` : 'Making ready', atwill: 'Firing at will', byrank: `By rank — presented (${pres}); each By rank! fires one rank` }[u.fire];
+    const fireShort = u.fire === 'ready' ? (pres ? `<b class="gold">${pres} presented — FIRE!</b>` : 'making ready') : u.fire === 'atwill' ? 'at will' : u.fire === 'byrank' ? (u.rankCalls > 0 ? '<b class="gold">by rank — firing</b>' : `by rank · ${pres} presented`) : '';
     const dist0 = Math.round(dist(c.x, c.y, u.cx, u.cy));
     const reach = dist0 > CFG.VOICE_RANGE ? (Unit.hasRole(u, 'drummer') ? '<span class="warn">by drum</span>' : '<span class="bad">out of earshot</span>') : 'in earshot';
     const cover = UI.coverWord(B, u);

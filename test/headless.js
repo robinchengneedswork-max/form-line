@@ -190,8 +190,20 @@ console.log('§9 drill & the company');
   run(B, 4.5);
   const fired = r => u.men.filter(m => m.role === 'line' && m.rank === r && m.m === 'reloading').length;
   chk('fire by rank: the front rank fires first…', fired(0) > 3 && fired(1) === 0, fired(0) + '/' + fired(1));
-  run(B, CFG.BYRANK_GAP + 1);
-  chk('…then the rank behind it', fired(1) > 3, fired(1));
+  run(B, CFG.BYRANK_GAP + 3);
+  chk('…and YOUR rear rank waits, presented, for the next order (it does not ripple on by itself)', fired(1) === 0 && u.men.filter(m => m.role === 'line' && m.rank === 1 && m.m === 'present').length > 3, fired(1));
+  Orders.apply(B, u, 'byrank', {});
+  run(B, 2);
+  chk('…the next By rank! fires the rank behind', fired(1) > 3, fired(1));
+  // an AI company (here: yours, driven by the autoplayer) still ripples on by itself
+  const A = fresh('plain', 41, { autoPlayer: true }), au = A.player;
+  for (const m of au.men) { m.x = m.sx; m.y = m.sy; }
+  Orders.apply(A, au, 'byrank', {});
+  const AE = A.units[1]; for (const m of AE.men) { m.y += 250; m.sy = m.y; } Unit.survey(AE);
+  const afired = r => au.men.filter(m => m.role === 'line' && m.rank === r && m.m === 'reloading').length;
+  let both = false;
+  for (let i = 0; i < (CFG.BYRANK_GAP * 3 + 8) / CFG.STEP && !A.over; i++) { au.ai.next = A.t + 99; Battle.step(A, CFG.STEP); A.events.length = 0; if (afired(0) > 2 && afired(1) > 2) { both = true; break; } }
+  chk('…while an AI company fires its ranks in turn by itself', both, afired(0) + '/' + afired(1));
 }
 {
   const B = fresh('plain', 42), u = B.player;
